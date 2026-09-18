@@ -20,11 +20,11 @@ def prompt_path():
 
 
 def main():
-    # Get current directory
+    # 获取当前目录
     assets_path = os.getcwd()
     print_color(f"Current path: {assets_path}", BLUE)
 
-    # Check ./assets/embodiments
+    # 检查 ./assets/embodiments
     if not os.path.isdir(os.path.join(assets_path, 'assets', 'embodiments')):
         print_color("Warning: ./assets/embodiments directory not found", YELLOW)
         parent = os.path.abspath(os.path.join(assets_path, '..'))
@@ -43,14 +43,14 @@ def main():
             os.chdir(assets_path)
             print_color(f"Switched to: {assets_path}", BLUE)
 
-    # Export environment variable
+    # 导出环境变量
     os.environ['ASSETS_PATH'] = assets_path
     print_color(f"Setting environment variable: ASSETS_PATH={assets_path}", BLUE)
 
-    # Counters
+    # 计数器
     count_total = count_updated = count_error = 0
 
-    # Find *_tmp.yml files
+    # 查找 *_tmp.yml 文件
     print_color("Searching for configuration template files...", BLUE)
     pattern = os.path.join(assets_path, 'assets', 'embodiments', '**', '*_tmp.yml')
     config_files = glob.glob(pattern, recursive=True)
@@ -87,7 +87,7 @@ def main():
             print_color(f"  ✗ Replacement failed: {e}", YELLOW)
             count_error += 1
 
-    # Summary
+    # 汇总
     print()
     print_color("Processing complete!", BLUE)
     print(f"Total processed: {count_total} files")
@@ -98,7 +98,7 @@ def main():
     print()
     print_color("All template files have been processed!", GREEN)
     
-    # Process _embodiment_config.yml file
+    # 处理 _embodiment_config.yml 文件
     print()
     print_color("Processing _embodiment_config.yml file...", BLUE)
     embodiment_config_path = os.path.join(assets_path, 'task_config', '_embodiment_config.yml')
@@ -108,7 +108,7 @@ def main():
             with open(embodiment_config_path, 'r') as f:
                 content = f.read()
             
-            # Replace ${ASSETS_PATH} with actual path
+            # 将 ${ASSETS_PATH} 替换为实际路径
             original_content = content
             content = content.replace('${ASSETS_PATH}', assets_path)
             content = content.replace('$ASSETS_PATH', assets_path)
@@ -120,7 +120,7 @@ def main():
                 print_color(f"  ✓ Successfully updated _embodiment_config.yml", GREEN)
                 print_color(f"  ✓ Replaced ${{ASSETS_PATH}} -> {assets_path}", GREEN)
                 
-                # Show which embodiments were updated
+                # 显示哪些 embodiment 被更新了
                 embodiments = ['aloha-agilex', 'piper', 'franka-panda', 'ARX-X5', 'ur5-wsg']
                 for embodiment in embodiments:
                     if embodiment in content:

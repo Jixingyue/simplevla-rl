@@ -63,15 +63,15 @@ class place_shoe(Base_Task):
         shoe_pose = self.shoe.get_pose().p
         arm_tag = ArmTag("left" if shoe_pose[0] < 0 else "right")
 
-        # Grasp the shoe with specified pre-grasp distance and gripper position
+        # 用指定的预抓取距离和夹爪位置抓取鞋子
         self.move(self.grasp_actor(self.shoe, arm_tag=arm_tag, pre_grasp_dis=0.1, gripper_pos=0))
 
-        # Lift the shoe up by 0.07 meters in z-direction
+        # 沿 z 方向将鞋子抬起 0.07 米
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.07))
 
-        # Get target's functional point as target pose
+        # 获取目标的功能点作为目标位姿
         target_pose = self.target.get_functional_point(0)
-        # Place the shoe on the target with alignment constraint and specified pre-placement distance
+        # 以对齐约束和指定的预放置距离将鞋子放置到目标上
         self.move(
             self.place_actor(
                 self.shoe,
@@ -81,7 +81,7 @@ class place_shoe(Base_Task):
                 pre_dis=0.12,
                 constrain="align",
             ))
-        # Open the gripper to release the shoe
+        # 打开夹爪以松开鞋子
         self.move(self.open_gripper(arm_tag=arm_tag))
 
         self.info["info"] = {"{A}": f"041_shoe/base{self.shoe_id}", "{a}": str(arm_tag)}

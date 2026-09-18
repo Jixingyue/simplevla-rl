@@ -60,16 +60,16 @@ class stack_blocks_two(Base_Task):
         self.block1_target_pose = [0, -0.13, 0.75 + self.table_z_bias, 0, 1, 0, 0]
 
     def play_once(self):
-        # Initialize tracking variables for gripper and actor
+        # 初始化夹爪和对象的跟踪变量
         self.last_gripper = None
         self.last_actor = None
 
-        # Pick and place the first block (block1) and get its arm tag
+        # 抓取并放置第一个方块（block1），获取其手臂标签
         arm_tag1 = self.pick_and_place_block(self.block1)
-        # Pick and place the second block (block2) and get its arm tag
+        # 抓取并放置第二个方块（block2），获取其手臂标签
         arm_tag2 = self.pick_and_place_block(self.block2)
 
-        # Store information about the blocks and their associated arms
+        # 存储方块及其对应手臂的信息
         self.info["info"] = {
             "{A}": "red block",
             "{B}": "green block",

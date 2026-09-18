@@ -71,35 +71,35 @@ class put_bottles_dustbin(Base_Task):
         self.right_middle_pose = [0, 0.0, 0.88, 0, 1, 0, 0]
 
     def play_once(self):
-        # Sort bottles based on their x and y coordinates
+        # 根据瓶子的 x 和 y 坐标排序
         bottle_lst = sorted(self.bottles, key=lambda x: [x.get_pose().p[0] > 0, x.get_pose().p[1]])
 
         for i in range(self.bottle_num):
             bottle = bottle_lst[i]
-            # Determine which arm to use based on bottle's x position
+            # 根据瓶子的 x 位置决定使用哪只手臂
             arm_tag = ArmTag("left" if bottle.get_pose().p[0] < 0 else "right")
 
             delta_dis = 0.06
 
-            # Define end position for left arm
+            # 定义左臂的终点位置
             left_end_action = Action("left", "move", [-0.35, -0.1, 0.93, 0.65, -0.25, 0.25, 0.65])
 
             if arm_tag == "left":
-                # Grasp the bottle with left arm
+                # 用左臂抓取瓶子
                 self.move(self.grasp_actor(bottle, arm_tag=arm_tag, pre_grasp_dis=0.1))
-                # Move left arm up
+                # 抬起左臂
                 self.move(self.move_by_displacement(arm_tag, z=0.1))
-                # Move left arm to end position
+                # 将左臂移动到终点位置
                 self.move((ArmTag("left"), [left_end_action]))
             else:
-                # Grasp the bottle with right arm while moving left arm to origin
+                # 用右臂抓取瓶子，同时左臂返回原点
                 right_action = self.grasp_actor(bottle, arm_tag=arm_tag, pre_grasp_dis=0.1)
                 right_action[1][0].target_pose[2] += delta_dis
                 right_action[1][1].target_pose[2] += delta_dis
                 self.move(right_action, self.back_to_origin("left"))
-                # Move right arm up
+                # 抬起右臂
                 self.move(self.move_by_displacement(arm_tag, z=0.1))
-                # Place the bottle at middle position with right arm
+                # 用右臂将瓶子放到中间位置
                 self.move(
                     self.place_actor(
                         bottle,
@@ -111,16 +111,16 @@ class put_bottles_dustbin(Base_Task):
                         is_open=False,
                         constrain="align",
                     ))
-                # Grasp the bottle with left arm (adjusted height)
+                # 用左臂抓取瓶子（调整高度）
                 left_action = self.grasp_actor(bottle, arm_tag="left", pre_grasp_dis=0.1)
                 left_action[1][0].target_pose[2] -= delta_dis
                 left_action[1][1].target_pose[2] -= delta_dis
                 self.move(left_action)
-                # Open right gripper
+                # 打开右夹爪
                 self.move(self.open_gripper(ArmTag("right")))
-                # Move left arm to end position while moving right arm to origin
+                # 将左臂移动到终点位置，同时右臂返回原点
                 self.move((ArmTag("left"), [left_end_action]), self.back_to_origin("right"))
-            # Open left gripper
+            # 打开左夹爪
             self.move(self.open_gripper("left"))
 
         self.info["info"] = {

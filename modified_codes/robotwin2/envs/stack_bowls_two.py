@@ -90,15 +90,15 @@ class stack_bowls_two(Base_Task):
         return arm_tag
 
     def play_once(self):
-        # Initialize last arm used to None
+        # 初始化上次使用的手臂为 None
         self.las_arm = None
 
-        # Move bowl1 to position [0, -0.1, 0.76]
+        # 将 bowl1 移动到位置 [0, -0.1, 0.76]
         arm_tag1 = self.move_bowl(self.bowl1, self.bowl1_target_pose)
-        # Move bowl2 to be 0.05m above bowl1's position
+        # 将 bowl2 移动到 bowl1 位置上方 0.05m 处
         arm_tag2 = self.move_bowl(self.bowl2, self.bowl1.get_pose().p + [0, 0, 0.05])
 
-        # Store information about the bowls and arms used in the info dictionary
+        # 在 info 字典中存储碗和使用的手臂信息
         self.info["info"] = {
             "{A}": f"002_bowl/base3",
             "{B}": f"002_bowl/base3",
@@ -114,7 +114,7 @@ class stack_bowls_two(Base_Task):
         actor_pose = self.bowl1.get_pose().p
         arm_tag1 = ArmTag("left" if actor_pose[0] < 0 else "right")
         
-        # Move bowl2 to be 0.05m above bowl1's position
+        # 将 bowl2 移动到 bowl1 位置上方 0.05m 处
         #arm_tag2 = self.move_bowl(self.bowl2, self.bowl1.get_pose().p + [0, 0, 0.05])
         
         actor_pose = self.bowl2.get_pose().p

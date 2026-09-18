@@ -83,20 +83,20 @@ class place_mouse_pad(Base_Task):
         )
         self.add_prohibit_area(self.target, padding=0.12)
         self.add_prohibit_area(self.mouse, padding=0.03)
-        # Construct target pose with position from target object and identity orientation
+        # 构建目标位姿，使用目标对象的位置和单位姿态
         self.target_pose = self.target.get_pose().p.tolist() + [0, 0, 0, 1]
 
     def play_once(self):
-        # Determine which arm to use based on mouse position (right if on right side, left otherwise)
+        # 根据鼠标的位置决定使用哪只手臂（在右侧用右臂，否则用左臂）
         arm_tag = ArmTag("right" if self.mouse.get_pose().p[0] > 0 else "left")
 
-        # Grasp the mouse with the selected arm
+        # 用选定的手臂抓取鼠标
         self.move(self.grasp_actor(self.mouse, arm_tag=arm_tag, pre_grasp_dis=0.1))
 
-        # Lift the mouse upward by 0.1 meters in z-direction
+        # 沿 z 方向将鼠标向上抬起 0.1 米
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.1))
 
-        # Place the mouse at the target location with alignment constraint
+        # 以对齐约束将鼠标放置到目标位置
         self.move(
             self.place_actor(
                 self.mouse,
@@ -107,7 +107,7 @@ class place_mouse_pad(Base_Task):
                 dis=0.005,
             ))
 
-        # Record information about the objects and arm used in the task
+        # 记录任务中使用的对象和手臂信息
         self.info["info"] = {
             "{A}": f"047_mouse/base{self.mouse_id}",
             "{B}": f"{self.color_name}",

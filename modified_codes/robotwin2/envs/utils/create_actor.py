@@ -19,14 +19,14 @@ class UnStableError(Exception):
 
 
 def preprocess(scene, pose: sapien.Pose) -> tuple[sapien.Scene, sapien.Pose]:
-    """Add entity to scene. Add bias to z axis if scene is not sapien.Scene."""
+    """将实体添加到场景。如果 scene 不是 sapien.Scene，则在 z 轴上添加偏移量。"""
     if isinstance(scene, sapien.Scene):
         return scene, pose
     else:
         return scene.scene, sapien.Pose([pose.p[0], pose.p[1], pose.p[2] + scene.table_z_bias], pose.q)
 
 
-# create box
+# 创建盒子
 def create_entity_box(
     scene,
     pose: sapien.Pose,
@@ -42,19 +42,19 @@ def create_entity_box(
     entity.set_name(name)
     entity.set_pose(pose)
 
-    # create PhysX dynamic rigid body
+    # 创建 PhysX 动态刚体
     rigid_component = (sapien.physx.PhysxRigidDynamicComponent()
                        if not is_static else sapien.physx.PhysxRigidStaticComponent())
     rigid_component.attach(
         sapien.physx.PhysxCollisionShapeBox(half_size=half_size, material=scene.default_physical_material))
 
-    # Add texture
+    # 添加纹理
     if texture_id is not None:
-        # Use ROOT_PATH for texture path
+        # 使用 ROOT_PATH 作为纹理路径
         texturepath = os.path.join(ROOT_PATH, f"assets/background_texture/{texture_id}.png")
         
-        # create texture from file
-        texture2d = sapien.render.RenderTexture2D(texturepath)
+        # 从文件创建纹理
+    texture2d = sapien.render.RenderTexture2D(texturepath)
         material = sapien.render.RenderMaterial()
         material.set_base_color_texture(texture2d)
         material.base_color = [1, 1, 1, 1]
@@ -63,17 +63,17 @@ def create_entity_box(
     else:
         material = sapien.render.RenderMaterial(base_color=[*color[:3], 1])
 
-    # create render body for visualization
+    # 创建用于可视化的渲染体
     render_component = sapien.render.RenderBodyComponent()
     render_component.attach(
-        # add a box visual shape with given size and rendering material
+        # 添加指定大小和渲染材质的盒子视觉形状
         sapien.render.RenderShapeBox(half_size, material))
 
     entity.add_component(rigid_component)
     entity.add_component(render_component)
     entity.set_pose(pose)
 
-    # in general, entity should only be added to scene after it is fully built
+    # 通常，实体应在完全构建后再添加到场景
     scene.add_entity(entity)
     return entity
 
@@ -194,7 +194,7 @@ def create_box(
     return Actor(entity, data)
 
 
-# create spere
+# 创建球体
 def create_sphere(
     scene,
     pose: sapien.Pose,
@@ -209,18 +209,18 @@ def create_sphere(
     entity.set_name(name)
     entity.set_pose(pose)
 
-    # create PhysX dynamic rigid body
+    # 创建 PhysX 动态刚体
     rigid_component = (sapien.physx.PhysxRigidDynamicComponent()
                        if not is_static else sapien.physx.PhysxRigidStaticComponent())
     rigid_component.attach(
         sapien.physx.PhysxCollisionShapeSphere(radius=radius, material=scene.default_physical_material))
 
-    # Add texture
+    # 添加纹理
     if texture_id is not None:
-        # Use ROOT_PATH for texture path
+        # 使用 ROOT_PATH 作为纹理路径
         texturepath = os.path.join(ROOT_PATH, f"assets/textures/{texture_id}.png")
-        # create texture from file
-        texture2d = sapien.render.RenderTexture2D(texturepath)
+        # 从文件创建纹理
+    texture2d = sapien.render.RenderTexture2D(texturepath)
         material = sapien.render.RenderMaterial()
         material.set_base_color_texture(texture2d)
         material.base_color = [1, 1, 1, 1]
@@ -229,22 +229,22 @@ def create_sphere(
     else:
         material = sapien.render.RenderMaterial(base_color=[*color[:3], 1])
 
-    # create render body for visualization
+    # 创建用于可视化的渲染体
     render_component = sapien.render.RenderBodyComponent()
     render_component.attach(
-        # add a box visual shape with given size and rendering material
+        # 添加指定大小和渲染材质的盒子视觉形状
         sapien.render.RenderShapeSphere(radius=radius, material=material))
 
     entity.add_component(rigid_component)
     entity.add_component(render_component)
     entity.set_pose(pose)
 
-    # in general, entity should only be added to scene after it is fully built
+    # 通常，实体应在完全构建后再添加到场景
     scene.add_entity(entity)
     return entity
 
 
-# create cylinder
+# 创建圆柱体
 def create_cylinder(
     scene,
     pose: sapien.Pose,
@@ -259,7 +259,7 @@ def create_cylinder(
     entity.set_name(name)
     entity.set_pose(pose)
 
-    # create PhysX dynamic rigid body
+    # 创建 PhysX 动态刚体
     rigid_component = sapien.physx.PhysxRigidDynamicComponent()
     rigid_component.attach(
         sapien.physx.PhysxCollisionShapeCylinder(
@@ -268,10 +268,10 @@ def create_cylinder(
             material=scene.default_physical_material,
         ))
 
-    # create render body for visualization
+    # 创建用于可视化的渲染体
     render_component = sapien.render.RenderBodyComponent()
     render_component.attach(
-        # add a box visual shape with given size and rendering material
+        # 添加指定大小和渲染材质的盒子视觉形状
         sapien.render.RenderShapeCylinder(
             radius=radius,
             half_length=half_length,
@@ -282,12 +282,12 @@ def create_cylinder(
     entity.add_component(render_component)
     entity.set_pose(pose)
 
-    # in general, entity should only be added to scene after it is fully built
+    # 通常，实体应在完全构建后再添加到场景
     scene.add_entity(entity)
     return entity
 
 
-# create box
+# 创建盒子
 def create_visual_box(
     scene,
     pose: sapien.Pose,
@@ -301,16 +301,16 @@ def create_visual_box(
     entity.set_name(name)
     entity.set_pose(pose)
 
-    # create render body for visualization
+    # 创建用于可视化的渲染体
     render_component = sapien.render.RenderBodyComponent()
     render_component.attach(
-        # add a box visual shape with given size and rendering material
+        # 添加指定大小和渲染材质的盒子视觉形状
         sapien.render.RenderShapeBox(half_size, sapien.render.RenderMaterial(base_color=[*color[:3], 1])))
 
     entity.add_component(render_component)
     entity.set_pose(pose)
 
-    # in general, entity should only be added to scene after it is fully built
+    # 通常，实体应在完全构建后再添加到场景
     scene.add_entity(entity)
     return entity
 
@@ -336,7 +336,7 @@ def create_table(
     else:
         builder.set_physx_body_type("dynamic")
 
-    # Tabletop
+    # 桌面
     tabletop_pose = sapien.Pose([0.0, 0.0, -thickness / 2])  # Center the tabletop at z=0
     tabletop_half_size = [length / 2, width / 2, thickness / 2]
     builder.add_box_collision(
@@ -345,13 +345,13 @@ def create_table(
         material=scene.default_physical_material,
     )
 
-    # Add texture
+    # 添加纹理
     if texture_id is not None:
-        # Use ROOT_PATH for texture path
+        # 使用 ROOT_PATH 作为纹理路径
         texturepath = os.path.join(ROOT_PATH, f"assets/background_texture/{texture_id}.png")
         
-        # create texture from file
-        texture2d = sapien.render.RenderTexture2D(texturepath)
+        # 从文件创建纹理
+    texture2d = sapien.render.RenderTexture2D(texturepath)
         material = sapien.render.RenderMaterial()
         material.set_base_color_texture(texture2d)
         material.base_color = [1, 1, 1, 1]
@@ -365,7 +365,7 @@ def create_table(
             material=color,
         )
 
-    # Table legs (x4)
+    # 桌腿 (x4)
     leg_spacing = 0.1
     for i in [-1, 1]:
         for j in [-1, 1]:
@@ -381,7 +381,7 @@ def create_table(
     return table
 
 
-# create obj model
+# 创建 OBJ 模型
 def create_obj(
         scene,
         pose: sapien.Pose,
@@ -394,7 +394,7 @@ def create_obj(
 ) -> Actor:
     scene, pose = preprocess(scene, pose)
 
-    # Use ROOT_PATH for model directory
+    # 使用 ROOT_PATH 作为模型目录
     modeldir = Path(ROOT_PATH) / "assets" / "objects" / modelname
     if model_id is None:
         file_name = modeldir / "textured.obj"
@@ -429,7 +429,7 @@ def create_obj(
     return Actor(mesh, model_data)
 
 
-# create glb model
+# 创建 GLB 模型
 def create_glb(
         scene,
         pose: sapien.Pose,
@@ -441,7 +441,7 @@ def create_glb(
 ) -> Actor:
     scene, pose = preprocess(scene, pose)
 
-    # Use ROOT_PATH for model directory
+    # 使用 ROOT_PATH 作为模型目录
     modeldir = Path(ROOT_PATH) / "assets" / "objects" / modelname
     
     if model_id is None:
@@ -503,7 +503,7 @@ def create_actor(
         model_id=0,
 ) -> Actor:
     scene, pose = preprocess(scene, pose)
-    # Use ROOT_PATH for model directory
+    # 使用 ROOT_PATH 作为模型目录
     modeldir = Path(ROOT_PATH) / "assets" / "objects" / modelname
 
     if model_id is None:
@@ -555,11 +555,11 @@ def create_actor(
     return Actor(mesh, model_data)
 
 
-# create urdf model
+# 创建 URDF 模型
 def create_urdf_obj(scene, pose: sapien.Pose, modelname: str, scale=1.0, fix_root_link=True) -> ArticulationActor:
     scene, pose = preprocess(scene, pose)
 
-    # Use ROOT_PATH for model directory
+    # 使用 ROOT_PATH 作为模型目录
     modeldir = Path(ROOT_PATH) / "assets" / "objects" / modelname
     
     json_file_path = modeldir / "model_data.json"
@@ -592,7 +592,7 @@ def create_sapien_urdf_obj(
 ) -> ArticulationActor:
     scene, pose = preprocess(scene, pose)
 
-    # Use ROOT_PATH for model directory
+    # 使用 ROOT_PATH 作为模型目录
     modeldir = Path(ROOT_PATH) / "assets" / "objects" / modelname
     if modelid is not None:
         model_list = [model for model in modeldir.iterdir() if model.is_dir() and model.name != "visual"]

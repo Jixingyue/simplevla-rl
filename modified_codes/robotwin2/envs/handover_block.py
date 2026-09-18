@@ -47,12 +47,12 @@ class handover_block(Base_Task):
         self.block_middle_pose = [0, 0.0, 0.9, 0, 1, 0, 0]
 
     def play_once(self):
-        # Determine which arm to use for grasping based on box position
+        # 根据盒子位置决定使用哪只手臂抓取
         grasp_arm_tag = ArmTag("left" if self.box.get_pose().p[0] < 0 else "right")
-        # The other arm will be used for placing
+        # 另一只手臂用于放置
         place_arm_tag = grasp_arm_tag.opposite
 
-        # Grasp the box with the selected arm
+        # 用选定的手臂抓取盒子
         self.move(
             self.grasp_actor(
                 self.box,
@@ -61,9 +61,9 @@ class handover_block(Base_Task):
                 grasp_dis=0.0,
                 contact_point_id=[0, 1, 2, 3],
             ))
-        # Lift the box up
+        # 将盒子抬起
         self.move(self.move_by_displacement(grasp_arm_tag, z=0.1))
-        # Place the box at initial position [0, 0., 0.9, 0, 1, 0, 0]
+        # 将盒子放置到初始位置 [0, 0., 0.9, 0, 1, 0, 0]
         self.move(
             self.place_actor(
                 self.box,
@@ -76,7 +76,7 @@ class handover_block(Base_Task):
                 constrain="free",
             ))
 
-        # Grasp the box again with the other arm (for repositioning)
+        # 用另一只手臂再次抓取盒子（用于重新定位）
         self.move(
             self.grasp_actor(
                 self.box,
@@ -85,13 +85,13 @@ class handover_block(Base_Task):
                 grasp_dis=0.0,
                 contact_point_id=[4, 5, 6, 7],
             ))
-        # Open the original grasping arm's gripper
+        # 打开原先抓取手臂的夹爪
         self.move(self.open_gripper(grasp_arm_tag))
-        # Move the original arm up to release the box
+        # 将原先的手臂上移以松开盒子
         self.move(self.move_by_displacement(grasp_arm_tag, z=0.1, move_axis="arm"))
-        # Perform two actions simultaneously:
-        # 1. Return the original arm to its origin position
-        # 2. Place the box at the target's functional point with precise alignment
+        # 同时执行两个动作：
+        # 1. 将原先的手臂返回原点位置
+        # 2. 将盒子精确对齐放置到目标的功能点
         self.move(
             self.back_to_origin(grasp_arm_tag),
             self.place_actor(

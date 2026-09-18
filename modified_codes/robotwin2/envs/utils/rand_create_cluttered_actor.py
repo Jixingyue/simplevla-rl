@@ -15,7 +15,7 @@ def get_all_cluttered_objects():
     cluttered_objects_info = {}
     cluttered_objects_name = []
 
-    # load from cluttered_objects
+    # 从 cluttered_objects 加载
     #cluttered_objects_config = json.load(open(Path("./assets/objects/objaverse/list.json"), "r", encoding="utf-8"))
     cluttered_objects_config = json.load(open(os.path.join(ROOT_PATH, "assets/objects/objaverse/list.json"), "r", encoding="utf-8"))
     cluttered_objects_name += cluttered_objects_config["item_names"]
@@ -35,7 +35,7 @@ def get_all_cluttered_objects():
             }
         cluttered_objects_info[model_name]["params"] = params
 
-    # load from objects
+    # 从 objects 加载
     #objects_dir = Path("./assets/objects")
     objects_dir = Path(ROOT_PATH) / "assets/objects"
     for model_dir in objects_dir.iterdir():
@@ -49,14 +49,14 @@ def get_all_cluttered_objects():
             if model_cfg.is_dir() or model_cfg.suffix != ".json":
                 continue
 
-            # get model id
+            # 获取模型 id
             model_id = re.search(r"model_data(\d+)", model_cfg.name)
             if not model_id:
                 continue
             model_id = model_id.group(1)
 
             try:
-                # get model params
+                # 获取模型参数
                 model_config: dict = json.load(open(model_cfg, "r", encoding="utf-8"))
                 if "center" not in model_config or "extents" not in model_config:
                     continue

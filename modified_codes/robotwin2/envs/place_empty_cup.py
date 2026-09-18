@@ -52,14 +52,14 @@ class place_empty_cup(Base_Task):
         cup_pose = self.cup.get_pose().p
 
     def play_once(self):
-        # Get the current pose of the cup
+        # 获取杯子的当前位姿
         cup_pose = self.cup.get_pose().p
-        # Determine which arm to use based on cup's x position (right if positive, left if negative)
+        # 根据杯子的 x 位置决定使用哪只手臂（正值用右臂，负值用左臂）
         arm_tag = ArmTag("right" if cup_pose[0] > 0 else "left")
 
-        # Close the gripper to prepare for grasping
+        # 闭合夹爪以准备抓取
         self.move(self.close_gripper(arm_tag, pos=0.6))
-        # Grasp the cup using the selected arm
+        # 用选定的手臂抓取杯子
         self.move(
             self.grasp_actor(
                 self.cup,
@@ -67,12 +67,12 @@ class place_empty_cup(Base_Task):
                 pre_grasp_dis=0.1,
                 contact_point_id=[0, 2][int(arm_tag == "left")],
             ))
-        # Lift the cup up by 0.08 meters along z-axis
+        # 沿 z 轴将杯子抬起 0.08 米
         self.move(self.move_by_displacement(arm_tag, z=0.08, move_axis="arm"))
 
-        # Get coaster's functional point as target pose
+        # 获取杯垫的功能点作为目标位姿
         target_pose = self.coaster.get_functional_point(0)
-        # Place the cup onto the coaster
+        # 将杯子放置到杯垫上
         self.move(self.place_actor(
             self.cup,
             arm_tag,
@@ -80,7 +80,7 @@ class place_empty_cup(Base_Task):
             functional_point_id=0,
             pre_dis=0.05,
         ))
-        # Lift the arm slightly (0.05m) after placing to avoid collision
+        # 放置后将手臂稍微抬起（0.05m）以避免碰撞
         self.move(self.move_by_displacement(arm_tag, z=0.05, move_axis="arm"))
 
         self.info["info"] = {"{A}": "021_cup/base0", "{B}": "019_coaster/base0"}

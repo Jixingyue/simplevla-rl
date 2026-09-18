@@ -40,37 +40,37 @@ class shake_bottle(Base_Task):
         self.add_prohibit_area(self.bottle, padding=0.05)
 
     def play_once(self):
-        # Determine which arm to use based on bottle position
+        # 根据瓶子位置决定使用哪只手臂
         arm_tag = ArmTag("right" if self.bottle.get_pose().p[0] > 0 else "left")
 
-        # Grasp the bottle with specified pre-grasp distance
+        # 用指定的预抓取距离抓取瓶子
         self.move(self.grasp_actor(self.bottle, arm_tag=arm_tag, pre_grasp_dis=0.1))
 
-        # Lift the bottle up by 0.2m while rotating to target orientation
+        # 将瓶子抬起 0.2m，同时旋转到目标姿态
         target_quat = [0.707, 0, 0, 0.707]
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.1, quat=target_quat))
 
-        # Prepare two shaking orientations by rotating around y-axis
+        # 通过绕 y 轴旋转准备两种摇晃姿态
         quat1 = deepcopy(target_quat)
         quat2 = deepcopy(target_quat)
-        # First shake rotation (7π/8 around y-axis)
+        # 第一次摇晃旋转（绕 y 轴 7π/8）
         y_rotation = t3d.euler.euler2quat(0, (np.pi / 8) * 7, 0)
         rotated_q = t3d.quaternions.qmult(y_rotation, quat1)
         quat1 = [-rotated_q[1], rotated_q[0], rotated_q[3], -rotated_q[2]]
 
-        # Second shake rotation (-7π/8 around y-axis)
+        # 第二次摇晃旋转（绕 y 轴 -7π/8）
         y_rotation = t3d.euler.euler2quat(0, -7 * (np.pi / 8), 0)
         rotated_q = t3d.quaternions.qmult(y_rotation, quat2)
         quat2 = [-rotated_q[1], rotated_q[0], rotated_q[3], -rotated_q[2]]
 
-        # Perform shaking motion three times (alternating between two orientations)
+        # 执行三次摇晃动作（在两种姿态之间交替）
         for _ in range(3):
-            # Move up with first shaking orientation
+            # 以第一种摇晃姿态向上移动
             self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.05, quat=quat1))
-            # Move down with second shaking orientation
+            # 以第二种摇晃姿态向下移动
             self.move(self.move_by_displacement(arm_tag=arm_tag, z=-0.05, quat=quat2))
 
-        # Return to original grasp orientation
+        # 返回到原始抓取姿态
         self.move(self.move_by_displacement(arm_tag=arm_tag, quat=target_quat))
 
         self.info["info"] = {

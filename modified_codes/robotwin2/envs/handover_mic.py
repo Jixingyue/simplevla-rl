@@ -38,12 +38,12 @@ class handover_mic(Base_Task):
         self.handover_arm_tag = self.grasp_arm_tag.opposite
 
     def play_once(self):
-        # Determine the arm to grasp the microphone based on its position
+        # 根据麦克风的位置决定用哪只手臂抓取
         grasp_arm_tag = ArmTag("right" if self.microphone.get_pose().p[0] > 0 else "left")
-        # The opposite arm will be used for the handover
+        # 另一只手臂用于交接
         handover_arm_tag = grasp_arm_tag.opposite
 
-        # Move the grasping arm to the microphone's position and grasp it
+        # 将抓取手臂移动到麦克风位置并抓取
         self.move(
             self.grasp_actor(
                 self.microphone,
@@ -51,7 +51,7 @@ class handover_mic(Base_Task):
                 contact_point_id=[1, 9, 10, 11, 12, 13, 14, 15],
                 pre_grasp_dis=0.1,
             ))
-        # Move the handover arm to a position suitable for handing over the microphone
+        # 将交接手臂移动到适合交接麦克风的位置
         self.move(
             self.move_by_displacement(
                 grasp_arm_tag,
@@ -61,7 +61,7 @@ class handover_mic(Base_Task):
                 move_axis="arm",
             ))
         
-        # Move the handover arm to the middle position for handover
+        # 将交接手臂移动到中间位置进行交接
         self.move(
             self.place_actor(
                 self.microphone,
@@ -73,7 +73,7 @@ class handover_mic(Base_Task):
                 is_open=False,
                 constrain="free",
             ))
-        # Move the handover arm to grasp the microphone from the grasping arm
+        # 移动交接手臂从抓取手臂接过麦克风
         self.move(
             self.grasp_actor(
                 self.microphone,
@@ -81,9 +81,9 @@ class handover_mic(Base_Task):
                 contact_point_id=[0, 2, 3, 4, 5, 6, 7, 8],
                 pre_grasp_dis=0.1,
             ))
-        # Move the grasping arm to open the gripper and lift the microphone
+        # 移动抓取手臂打开夹爪并抬起麦克风
         self.move(self.open_gripper(grasp_arm_tag))
-        # Move the handover arm to lift the microphone to a height of 0.98
+        # 移动交接手臂将麦克风抬到 0.98 的高度
         self.move(
             self.move_by_displacement(grasp_arm_tag, z=0.07, move_axis="arm"),
             self.move_by_displacement(handover_arm_tag, x=0.05 if handover_arm_tag == "right" else -0.05),
@@ -98,7 +98,7 @@ class handover_mic(Base_Task):
     
     def get_info(self):
         grasp_arm_tag = ArmTag("right" if self.microphone.get_pose().p[0] > 0 else "left")
-        # The opposite arm will be used for the handover
+        # 另一只手臂用于交接
         handover_arm_tag = grasp_arm_tag.opposite
         info =  {
             "{A}": f"018_microphone/base{self.microphone_id}",

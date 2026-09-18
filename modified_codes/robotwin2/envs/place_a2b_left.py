@@ -122,22 +122,22 @@ class place_a2b_left(Base_Task):
         self.add_prohibit_area(self.target_object, padding=0.1)
 
     def play_once(self):
-        # Determine which arm to use based on object's x position
+        # 根据对象的 x 位置决定使用哪只手臂
         arm_tag = ArmTag("right" if self.object.get_pose().p[0] > 0 else "left")
 
-        # Grasp the object with specified arm
+        # 用指定的手臂抓取对象
         self.move(self.grasp_actor(self.object, arm_tag=arm_tag, pre_grasp_dis=0.1))
-        # Lift the object upward by 0.1 meters along z-axis using arm movement
+        # 使用手臂运动沿 z 轴将对象向上抬起 0.1 米
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.1, move_axis="arm"))
 
-        # Get target pose and adjust x position to place object to the left of target
+        # 获取目标位姿并调整 x 位置，将对象放置到目标左侧
         target_pose = self.target_object.get_pose().p.tolist()
         target_pose[0] -= 0.13
 
-        # Place the object at the adjusted target position
+        # 将对象放置到调整后的目标位置
         self.move(self.place_actor(self.object, arm_tag=arm_tag, target_pose=target_pose))
 
-        # Record task information including object IDs and used arm
+        # 记录任务信息，包括对象 ID 和使用的手臂
         self.info["info"] = {
             "{A}": f"{self.selected_modelname_A}/base{self.selected_model_id_A}",
             "{B}": f"{self.selected_modelname_B}/base{self.selected_model_id_B}",

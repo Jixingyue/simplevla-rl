@@ -20,7 +20,7 @@ class Robot:
 
     def __init__(self, scene, need_topp=False, **kwargs):
         super().__init__()
-        ta.setup_logging("CRITICAL")  # hide logging
+        ta.setup_logging("CRITICAL")  # 隐藏日志输出
         self._init_robot_(scene, need_topp, **kwargs)
 
     def _init_robot_(self, scene, need_topp=False, **kwargs):
@@ -194,7 +194,7 @@ class Robot:
         for g in self.right_gripper:
             self.gripper_name.append(g[0].child_link.get_name())
 
-        # camera link id
+        # 相机 link id
         self.left_camera = self.left_entity.find_link_by_name("left_camera")
         if self.left_camera is None:
             self.left_camera = self.left_entity.find_link_by_name("camera")
@@ -490,7 +490,7 @@ class Robot:
                 arms_tag="right",
             )
 
-    # The data of gripper has been normalized
+    # 夹爪数据已归一化
     def get_left_arm_jointState(self) -> list:
         jointState_list = []
         for joint in self.left_arm_joints:
@@ -553,14 +553,14 @@ class Robot:
     def is_right_gripper_close(self):
         return self.right_gripper_val < 0.2
 
-    # get move group joint pose
+    # 获取 move group 关节位姿
     def get_left_ee_pose(self):
         return self._trans_endpose(arm_tag="left", is_endpose=False)
 
     def get_right_ee_pose(self):
         return self._trans_endpose(arm_tag="right", is_endpose=False)
 
-    # get gripper centor pose
+    # 获取夹爪中心位姿
     def get_left_tcp_pose(self):
         return self._trans_endpose(arm_tag="left", is_endpose=True)
 
@@ -625,7 +625,7 @@ class Robot:
         normal_right_gripper_val = np.clip(normal_right_gripper_val, 0, 1)
         return [normal_left_gripper_val, normal_right_gripper_val]
 
-    def set_gripper(self, gripper_val, arm_tag, gripper_eps=0.1):  # gripper_val in [0,1]
+    def set_gripper(self, gripper_val, arm_tag, gripper_eps=0.1):  # gripper_val 取值范围 [0,1]
         self._entity_qf(self.left_entity)
         self._entity_qf(self.right_entity)
         gripper_val = np.clip(gripper_val, 0, 1)

@@ -13,7 +13,7 @@ import sapien
 
 # ********************** MplibPlanner **********************
 class MplibPlanner:
-    # links=None, joints=None
+    # links=None, joints=None  # 链接和关节列表
     def __init__(
         self,
         urdf_path,
@@ -25,7 +25,7 @@ class MplibPlanner:
         scene=None,
     ):
         super().__init__()
-        ta.setup_logging("CRITICAL")  # hide logging
+        ta.setup_logging("CRITICAL")  # 隐藏日志输出
 
         links = [link.get_name() for link in robot_entity.get_links()]
         joints = [joint.get_name() for joint in robot_entity.get_active_joints()]
@@ -103,8 +103,8 @@ class MplibPlanner:
         log=False,
     ):
         """
-        Interpolative planning with screw motion.
-        Will not avoid collision and will fail if the path contains collision.
+        基于螺旋运动的插值规划。
+        不会避障，如果路径中包含碰撞则会失败。
         """
         result = self.planner.plan_screw(
             goal_pose=target_pose,
@@ -115,14 +115,14 @@ class MplibPlanner:
             # use_attach=use_attach,
         )
 
-        # plan fail
+        # 规划失败
         if result["status"] != "Success":
             if log:
                 print(f"\n {arms_tag} arm planning failed ({result['status']}) !")
             # return result
         else:
             n_step = result["position"].shape[0]
-            # plan step lim
+            # 规划步数上限
             if n_step > self.plan_step_lim:
                 if log:
                     print(f"\n {arms_tag} arm planning wrong! (step = {n_step})")
@@ -140,8 +140,8 @@ class MplibPlanner:
         log=True,
     ):
         """
-        Interpolative planning with screw motion.
-        Will not avoid collision and will fail if the path contains collision.
+        基于螺旋运动的插值规划。
+        不会避障，如果路径中包含碰撞则会失败。
         """
         if self.planner_type == "mplib_RRT":
             result = self.plan_pose(
@@ -165,7 +165,7 @@ class MplibPlanner:
         res = {}
         vals = np.linspace(now_val, target_val, num_step)
         res["num_step"] = num_step
-        res["per_step"] = per_step  # dis per step
+        res["per_step"] = per_step  # 每步的位移
         res["result"] = vals
         return res
 
@@ -197,7 +197,7 @@ try:
             self.active_joints_name = active_joints_name
             self.all_joints = all_joints
             
-            # Read frame bias from yml if provided
+            # 从 yml 文件读取 frame bias（如果提供的话）
             self.frame_bias = [0, 0, 0]
             assert  yml_path and os.path.exists(yml_path)
             if yml_path and os.path.exists(yml_path):
@@ -208,14 +208,14 @@ try:
                 except:
                     raise
             
-            # Store additional info needed for mplib planner
+            # 存储 mplib 规划器所需的额外信息
             self.mplib_planner = None
             self._initialized = False
             
         def initialize_mplib(self, urdf_path, srdf_path, move_group, robot_entity, scene=None):
             """
-            Initialize the internal mplib planner with additional required information
-            This should be called after the CuroboPlanner is created
+            使用额外的必要信息初始化内部 mplib 规划器
+            应在创建 CuroboPlanner 之后调用
             """
             self.mplib_planner = MplibPlanner(
                 urdf_path=urdf_path,
@@ -284,7 +284,7 @@ try:
         
         
         def plan_path(self, curr_joint_pos, target_gripper_pose, constraint_pose=None, arms_tag=None):
-            """Plan a single path"""
+            """规划单条路径"""
             
             if not self._initialized or self.mplib_planner is None:
                 raise ValueError("mplib planner not initialized")
@@ -294,14 +294,14 @@ try:
             pose_list = list(target_gripper_pose.p) + list(target_gripper_pose.q)
             pose_obj = mplib.pymp.Pose(pose_list[:3], pose_list[3:])
             
-            # Get joint positions for active joints only
+            # 仅获取活动关节的位置
             joint_indices = [self.all_joints.index(name) for name in self.active_joints_name 
                             if name in self.all_joints]
             joint_angles = [curr_joint_pos[index] for index in joint_indices]
-            joint_angles = [round(angle, 5) for angle in joint_angles]  # avoid precision problems
+            joint_angles = [round(angle, 5) for angle in joint_angles]  # 避免精度问题
             joint_angles_array = np.array(joint_angles)
             
-            # Call mplib planner with world coordinate pose
+            # 使用世界坐标系位姿调用 mplib 规划器
             result = self.mplib_planner.plan_path(
                 now_qpos=joint_angles_array,
                 target_pose=pose_obj,
@@ -311,7 +311,7 @@ try:
                 log=False
             )
             
-            # Ensure result format matches CuroboPlanner output
+            # 确保结果格式与 CuroboPlanner 输出一致
             if result.get("status") == "Success":
                 if not isinstance(result.get("position"), np.ndarray):
                     result["position"] = np.array(result["position"])
@@ -395,7 +395,7 @@ try:
         
         #test !!!
         def plan_batch(self, curr_joint_pos, target_gripper_pose_list, constraint_pose=None, arms_tag=None):
-            """Plan multiple paths - matching CuroboPlanner's interface"""
+            """规划多条路径 - 匹配 CuroboPlanner 的接口"""
             #print(f"\n[DEBUG] ========== plan_batch for {arms_tag} ==========")
             
             num_poses = len(target_gripper_pose_list)
@@ -435,7 +435,7 @@ try:
             #         base_target_pose_list[2] += self.frame_bias[2]
             #         poses_list.append(base_target_pose_list)
             
-            # Get joint angles for active joints
+            # 获取活动关节的角度
             joint_indices = [self.all_joints.index(name) for name in self.active_joints_name 
                             if name in self.all_joints]
             joint_angles = [curr_joint_pos[index] for index in joint_indices]
@@ -445,7 +445,7 @@ try:
             # print(f"[DEBUG] joint_indices: {joint_indices}")
             # print(f"[DEBUG] joint_angles: {joint_angles}")
             
-            # Plan for each pose
+            # 为每个位姿进行规划
             results = {
                 "status": [],
                 "position": [],
@@ -500,7 +500,7 @@ try:
                     results["position"].append(np.array([]))
                     results["velocity"].append(np.array([]))
             
-            # Convert to proper format
+            # 转换为正确的格式
             results["status"] = np.array(results["status"], dtype=object)
             results["position"] = np.array(results["position"], dtype=object)
             results["velocity"] = np.array(results["velocity"], dtype=object)
@@ -509,7 +509,7 @@ try:
         
         
         def plan_grippers(self, now_val, target_val):
-            """Plan gripper motion - simple linear interpolation"""
+            """规划夹爪运动 - 简单的线性插值"""
             num_step = 200
             dis_val = target_val - now_val
             per_step = dis_val / num_step
@@ -521,13 +521,13 @@ try:
             return res
         
         def update_point_cloud(self, pcd, resolution=0.02):
-            """Update point cloud for collision checking"""
-            # mplib doesn't support dynamic point cloud updates in the same way
-            # This is a placeholder
+            """更新点云用于碰撞检测"""
+            # mplib 不支持同样的动态点云更新方式
+            # 这里只是占位
             pass
         
         def _trans_from_world_to_base(self, base_pose, target_pose):
-            """Transform from world frame to base frame"""
+            """将目标位姿从世界坐标系转换到基坐标系"""
             base_p, base_q = base_pose[0:3], base_pose[3:]
             target_p, target_q = target_pose[0:3], target_pose[3:]
             rel_p = target_p - base_p

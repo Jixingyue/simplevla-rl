@@ -53,12 +53,12 @@ class place_container_plate(Base_Task):
         self.add_prohibit_area(self.plate, padding=0.1)
 
     def play_once(self):
-        # Get container's position to determine which arm to use
+        # 获取容器的位置以决定使用哪只手臂
         container_pose = self.container.get_pose().p
-        # Select arm based on container's x position (right if positive, left if negative)
+        # 根据容器的 x 位置选择手臂（正值用右臂，负值用左臂）
         arm_tag = ArmTag("right" if container_pose[0] > 0 else "left")
 
-        # Grasp the container using selected arm with specific contact point
+        # 使用选定的手臂和特定接触点抓取容器
         self.move(
             self.grasp_actor(
                 self.container,
@@ -66,10 +66,10 @@ class place_container_plate(Base_Task):
                 contact_point_id=[0, 2][int(arm_tag == "left")],
                 pre_grasp_dis=0.1,
             ))
-        # Lift the container up by 0.1m along z-axis
+        # 沿 z 轴将容器抬起 0.1m
         self.move(self.move_by_displacement(arm_tag, z=0.1, move_axis="arm"))
 
-        # Place the container onto the plate's functional point
+        # 将容器放置到盘子的功能点上
         self.move(
             self.place_actor(
                 self.container,
@@ -79,10 +79,10 @@ class place_container_plate(Base_Task):
                 pre_dis=0.12,
                 dis=0.03,
             ))
-        # Move the arm up by 0.1m after placing
+        # 放置后将手臂上移 0.1m
         self.move(self.move_by_displacement(arm_tag, z=0.08, move_axis="arm"))
 
-        # Record information about the objects and arm used
+        # 记录使用的对象和手臂信息
         self.info["info"] = {
             "{A}": f"003_plate/base{self.plate_id}",
             "{B}": f"{self.actor_name}/base{self.container_id}",

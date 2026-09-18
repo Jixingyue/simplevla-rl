@@ -54,17 +54,17 @@ class beat_block_hammer(Base_Task):
         ])
 
     def play_once(self):
-        # Get the position of the block's functional point
+        # 获取方块功能点的位置
         block_pose = self.block.get_functional_point(0, "pose").p
-        # Determine which arm to use based on block position (left if block is on left side, else right)
+        # 根据方块位置决定使用哪只手臂（在左侧用左臂，否则用右臂）
         arm_tag = ArmTag("left" if block_pose[0] < 0 else "right")
 
-        # Grasp the hammer with the selected arm
+        # 用选定的手臂抓取锤子
         self.move(self.grasp_actor(self.hammer, arm_tag=arm_tag, pre_grasp_dis=0.12, grasp_dis=0.01))
-        # Move the hammer upwards
+        # 将锤子向上移动
         self.move(self.move_by_displacement(arm_tag, z=0.07, move_axis="arm"))
 
-        # Place the hammer on the block's functional point (position 1)
+        # 将锤子放置到方块的功能点（位置 1）上
         self.move(
             self.place_actor(
                 self.hammer,

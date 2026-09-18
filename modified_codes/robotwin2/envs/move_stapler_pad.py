@@ -80,19 +80,19 @@ class move_stapler_pad(Base_Task):
         self.add_prohibit_area(self.stapler, padding=0.1)
         self.add_prohibit_area(self.pad, padding=0.15)
 
-        # Create target pose by combining target position with default quaternion orientation
+        # 通过组合目标位置和默认四元数姿态创建目标位姿
         self.pad_pose = self.pad.get_pose().p.tolist() + [0.707, 0, 0, 0.707]
 
     def play_once(self):
-        # Determine which arm to use based on stapler's position (right if on positive x, left otherwise)
+        # 根据订书机的位置决定使用哪只手臂（x 为正用右臂，否则用左臂）
         arm_tag = ArmTag("right" if self.stapler.get_pose().p[0] > 0 else "left")
 
-        # Grasp the stapler with specified arm
+        # 用指定的手臂抓取订书机
         self.move(self.grasp_actor(self.stapler, arm_tag=arm_tag, pre_grasp_dis=0.1))
-        # Move the arm upward by 0.1 meters along z-axis
+        # 沿 z 轴将手臂向上移动 0.1 米
         self.move(self.move_by_displacement(arm_tag, z=0.1, move_axis="arm"))
 
-        # Place the stapler at target pose with alignment constraint
+        # 以对齐约束将订书机放置到目标位姿
         self.move(
             self.place_actor(
                 self.stapler,

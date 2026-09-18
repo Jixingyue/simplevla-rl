@@ -48,23 +48,23 @@ class pick_dual_bottles(Base_Task):
         self.right_target_pose = [0.06, -0.105, 1, 0, 1, 0, 0]
 
     def play_once(self):
-        # Determine which arm to use for each bottle based on their x-coordinate position
+        # 根据每个瓶子的 x 坐标位置决定使用哪只手臂
         bottle1_arm_tag = ArmTag("left")
         bottle2_arm_tag = ArmTag("right")
 
-        # Simultaneously grasp both bottles with their respective arms
+        # 用各自的手臂同时抓取两个瓶子
         self.move(
             self.grasp_actor(self.bottle1, arm_tag=bottle1_arm_tag, pre_grasp_dis=0.08),
             self.grasp_actor(self.bottle2, arm_tag=bottle2_arm_tag, pre_grasp_dis=0.08),
         )
 
-        # Simultaneously lift both bottles up by 0.1 meters
+        # 同时将两个瓶子抬起 0.1 米
         self.move(
             self.move_by_displacement(arm_tag=bottle1_arm_tag, z=0.1),
             self.move_by_displacement(arm_tag=bottle2_arm_tag, z=0.1),
         )
 
-        # Simultaneously place both bottles at their target positions
+        # 同时将两个瓶子放置到各自的目标位置
         self.move(
             self.place_actor(
                 self.bottle1,

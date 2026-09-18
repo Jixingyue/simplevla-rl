@@ -83,10 +83,10 @@ class blocks_ranking_rgb(Base_Task):
 
         self.prohibited_area.append([-0.17, -0.22, 0.17, -0.12])
 
-        # Generate random y position for all blocks
+        # 为所有方块生成随机 y 位置
         y_pose = np.random.uniform(-0.2, -0.1)
 
-        # Define target poses for each block with random x positions
+        # 为每个方块定义具有随机 x 位置的目标位姿
         self.block1_target_pose = [
             np.random.uniform(-0.09, -0.08),
             y_pose,
@@ -104,15 +104,15 @@ class blocks_ranking_rgb(Base_Task):
         ] + [0, 1, 0, 0]
 
     def play_once(self):
-        # Initialize last gripper state
+        # 初始化上一个夹爪状态
         self.last_gripper = None
 
-        # Pick and place each block to their target positions
+        # 将每个方块抓取并放置到各自的目标位置
         arm_tag1 = self.pick_and_place_block(self.block1, self.block1_target_pose)
         arm_tag2 = self.pick_and_place_block(self.block2, self.block2_target_pose)
         arm_tag3 = self.pick_and_place_block(self.block3, self.block3_target_pose)
 
-        # Store information about the blocks and which arms were used
+        # 存储方块信息和使用了哪只手臂
         self.info["info"] = {
             "{A}": "red block",
             "{B}": "green block",

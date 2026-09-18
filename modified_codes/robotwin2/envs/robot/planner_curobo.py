@@ -37,7 +37,7 @@ try:
             yml_path=None,
         ):
             super().__init__()
-            ta.setup_logging("CRITICAL")  # hide logging
+            ta.setup_logging("CRITICAL")  # 隐藏日志输出
             logger.setup_logger(level="error", logger_name="'curobo")
 
             if yml_path != None:
@@ -48,12 +48,12 @@ try:
             self.active_joints_name = active_joints_name
             self.all_joints = all_joints
 
-            # translate from baselink to arm's base
+            # 从基座 link 转换到机械臂基座
             with open(self.yml_path, "r") as f:
                 yml_data = yaml.safe_load(f)
             self.frame_bias = yml_data["planner"]["frame_bias"]
 
-            # motion generation
+            # 运动生成
             if True:
                 world_config = {
                     "cuboid": {
@@ -107,7 +107,7 @@ try:
                 target_pose_p[0] += self.frame_bias[0]
                 target_pose_p[1] += self.frame_bias[1]
                 target_pose_p[2] += self.frame_bias[2]
-            else: # patch for aloha-agilex
+            else: # aloha-agilex 的补丁
                 T_target = t3d.affines.compose(target_pose_p, t3d.quaternions.quat2mat(target_pose_q), [1, 1, 1])
                 T_bias = t3d.affines.compose(self.frame_bias, np.eye(3), [1, 1, 1])
 
@@ -126,12 +126,12 @@ try:
             goal_pose_of_ee = CuroboPose.from_list(list(target_pose_p) + list(target_pose_q))
             joint_indices = [self.all_joints.index(name) for name in self.active_joints_name if name in self.all_joints]
             joint_angles = [curr_joint_pos[index] for index in joint_indices]
-            joint_angles = [round(angle, 5) for angle in joint_angles]  # avoid the precision problem
+            joint_angles = [round(angle, 5) for angle in joint_angles]  # 避免精度问题
             start_joint_states = JointState.from_position(
                 torch.tensor(joint_angles).cuda().reshape(1, -1),
                 joint_names=self.active_joints_name,
             )
-            # plan
+            # 规划
             plan_config = MotionGenPlanConfig(max_attempts=10)
             if constraint_pose is not None:
                 pose_cost_metric = PoseCostMetric(
@@ -142,7 +142,7 @@ try:
 
             result = self.motion_gen.plan_single(start_joint_states, goal_pose_of_ee, plan_config)
 
-            # output
+            # 输出
             res_result = dict()
             if result.success.item() == False:
                 res_result["status"] = "Fail"
@@ -161,21 +161,21 @@ try:
             arms_tag=None,
         ):
             """
-            Plan a batch of trajectories for multiple target poses.
+            为多个目标位姿规划一批轨迹。
 
-            Input:
-                - curr_joint_pos: List of current joint angles (1 x n)
-                - target_gripper_pose_list: List of target poses [sapien.Pose, sapien.Pose, ...]
+            输入：
+                - curr_joint_pos：当前关节角度列表 (1 x n)
+                - target_gripper_pose_list：目标位姿列表 [sapien.Pose, sapien.Pose, ...]
 
-            Output:
-                - result['status']: numpy array of string values indicating "Success"/"Fail" for each pose
-                - result['position']: numpy array of joint positions with shape (n x m x l)
-                  where n is number of target poses, m is number of waypoints, l is number of joints
-                - result['velocity']: numpy array of joint velocities with same shape as position
+            输出：
+                - result['status']：字符串值的 numpy 数组，指示每个位姿的 "Success"/"Fail"
+                - result['position']：关节位置的 numpy 数组，形状为 (n x m x l)
+                  其中 n 是目标位姿数量，m 是路点数，l 是关节数
+                - result['velocity']：关节速度的 numpy 数组，形状与 position 相同
             """
 
             num_poses = len(target_gripper_pose_list)
-            # transformation from world to arm's base
+            # 从世界坐标系转换到机械臂基座坐标系
             world_base_pose = np.concatenate([
                 np.array(self.robot_origion_pose.p),
                 np.array(self.robot_origion_pose.q),
@@ -189,7 +189,7 @@ try:
                     base_target_pose_p[0] += self.frame_bias[0]
                     base_target_pose_p[1] += self.frame_bias[1]
                     base_target_pose_p[2] += self.frame_bias[2]
-                else: # patch for aloha-agilex
+                else: # aloha-agilex 的补丁
                     T_target = t3d.affines.compose(base_target_pose_p, t3d.quaternions.quat2mat(base_target_pose_q), [1, 1, 1])
                     T_bias = t3d.affines.compose(self.frame_bias, np.eye(3), [1, 1, 1])
 
@@ -212,11 +212,11 @@ try:
             goal_pose_of_ee = CuroboPose(poses_cuda[:, :3], poses_cuda[:, 3:])
             joint_indices = [self.all_joints.index(name) for name in self.active_joints_name if name in self.all_joints]
             joint_angles = [curr_joint_pos[index] for index in joint_indices]
-            joint_angles = [round(angle, 5) for angle in joint_angles]  # avoid the precision problem
+            joint_angles = [round(angle, 5) for angle in joint_angles]  # 避免精度问题
             joint_angles_cuda = (torch.tensor(joint_angles, dtype=torch.float32).cuda().reshape(1, -1))
             joint_angles_cuda = torch.cat([joint_angles_cuda] * num_poses, dim=0)
             start_joint_states = JointState.from_position(joint_angles_cuda, joint_names=self.active_joints_name)
-            # plan
+            # 规划
             plan_config = MotionGenPlanConfig(max_attempts=10)
             if constraint_pose is not None:
                 pose_cost_metric = PoseCostMetric(
@@ -230,9 +230,9 @@ try:
             except Exception as e:
                 return {"status": ["Failure" for i in range(10)]}
 
-            # output
+            # 输出
             res_result = dict()
-            # Convert boolean success values to "Success"/"Failure" strings
+            # 将布尔成功值转换为 "Success"/"Failure" 字符串
             success_array = result.success.cpu().numpy()
             status_array = np.array(["Success" if s else "Failure" for s in success_array], dtype=object)
             res_result["status"] = status_array
@@ -257,7 +257,7 @@ try:
 
         def _trans_from_world_to_base(self, base_pose, target_pose):
             '''
-                transform target pose from world frame to base frame
+                将目标位姿从世界坐标系转换到基坐标系
                 base_pose: np.array([x, y, z, qw, qx, qy, qz])
                 target_pose: np.array([x, y, z, qw, qx, qy, qz])
             '''
@@ -278,7 +278,7 @@ except Exception as e:
 
 # ********************** MplibPlanner **********************
 class MplibPlanner:
-    # links=None, joints=None
+    # links=None, joints=None  # 链接和关节列表
     def __init__(
         self,
         urdf_path,
@@ -290,7 +290,7 @@ class MplibPlanner:
         scene=None,
     ):
         super().__init__()
-        ta.setup_logging("CRITICAL")  # hide logging
+        ta.setup_logging("CRITICAL")  # 隐藏日志输出
 
         links = [link.get_name() for link in robot_entity.get_links()]
         joints = [joint.get_name() for joint in robot_entity.get_active_joints()]
@@ -341,7 +341,7 @@ class MplibPlanner:
                 # =================== mplib 0.1.1 ===================
                 # use_point_cloud=use_point_cloud,
                 # use_attach=use_attach,
-                # planner_name="RRTConnect"
+                # 规划ner_name="RRTConnect"
             )
             now_try_times += 1
 
@@ -367,8 +367,8 @@ class MplibPlanner:
         log=False,
     ):
         """
-        Interpolative planning with screw motion.
-        Will not avoid collision and will fail if the path contains collision.
+        使用螺旋运动进行插值规划。
+        不会避障，如果路径包含碰撞则会失败。
         """
         result = self.planner.plan_screw(
             goal_pose=target_pose,
@@ -379,14 +379,14 @@ class MplibPlanner:
             # use_attach=use_attach,
         )
 
-        # plan fail
+        # 规划失败
         if result["status"] != "Success":
             if log:
                 print(f"\n {arms_tag} arm planning failed ({result['status']}) !")
             # return result
         else:
             n_step = result["position"].shape[0]
-            # plan step lim
+            # 规划 step lim
             if n_step > self.plan_step_lim:
                 if log:
                     print(f"\n {arms_tag} arm planning wrong! (step = {n_step})")
@@ -404,8 +404,8 @@ class MplibPlanner:
         log=True,
     ):
         """
-        Interpolative planning with screw motion.
-        Will not avoid collision and will fail if the path contains collision.
+        使用螺旋运动进行插值规划。
+        不会避障，如果路径包含碰撞则会失败。
         """
         if self.planner_type == "mplib_RRT":
             result = self.plan_pose(
@@ -429,6 +429,6 @@ class MplibPlanner:
         res = {}
         vals = np.linspace(now_val, target_val, num_step)
         res["num_step"] = num_step
-        res["per_step"] = per_step  # dis per step
+        res["per_step"] = per_step  # 每步的位移
         res["result"] = vals
         return res

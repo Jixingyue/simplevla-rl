@@ -72,7 +72,7 @@ class Base_Task(gym.Env):
 
         self.need_topp = True  # TODO
 
-        # Random
+        # 随机化设置
         random_setting = kwags.get("domain_randomization")
         self.random_background = random_setting.get("random_background", False)
         self.cluttered_table = random_setting.get("cluttered_table", False)
@@ -148,7 +148,7 @@ class Base_Task(gym.Env):
                     print(f"{self.task_name} not in step limit file, set to 1000")
                     self.step_lim = 1000
 
-        # info
+        # 信息字典
         self.info = dict()
         self.info["cluttered_table_info"] = self.record_cluttered_objects
         self.info["texture_info"] = {
@@ -200,16 +200,16 @@ class Base_Task(gym.Env):
 
     def setup_scene(self, **kwargs):
         """
-        Set the scene
-            - Set up the basic scene: light source, viewer.
+        设置场景
+            - 设置基本场景：光源、查看器。
         """
         self.engine = sapien.Engine()
-        # declare sapien renderer
+        # 声明 sapien 渲染器
         from sapien.render import set_global_config
 
         set_global_config(max_num_materials=50000, max_num_textures=50000)
         self.renderer = sapien.SapienRenderer()
-        # give renderer to sapien sim
+        # 将渲染器交给 sapien 仿真器
         self.engine.set_renderer(self.renderer)
 
         sapien.render.set_camera_shader_dir("rt")
@@ -217,24 +217,24 @@ class Base_Task(gym.Env):
         sapien.render.set_ray_tracing_path_depth(8)
         sapien.render.set_ray_tracing_denoiser("oidn")
 
-        # declare sapien scene
+        # 声明 sapien 场景
         scene_config = sapien.SceneConfig()
         self.scene = self.engine.create_scene(scene_config)
-        # set simulation timestep
+        # 设置仿真时间步长
         self.scene.set_timestep(kwargs.get("timestep", 1 / 250))
-        # add ground to scene
+        # 向场景中添加地面
         self.scene.add_ground(kwargs.get("ground_height", 0))
-        # set default physical material
+        # 设置默认物理材质
         self.scene.default_physical_material = self.scene.create_physical_material(
             kwargs.get("static_friction", 0.5),
             kwargs.get("dynamic_friction", 0.5),
             kwargs.get("restitution", 0),
         )
-        # give some white ambient light of moderate intensity
+        # 添加中等强度的白色环境光
         self.scene.set_ambient_light(kwargs.get("ambient_light", [0.5, 0.5, 0.5]))
-        # default enable shadow unless specified otherwise
+        # 默认启用阴影，除非另有指定
         shadow = kwargs.get("shadow", True)
-        # default spotlight angle and intensity
+        # 默认聚光灯角度和强度
         direction_lights = kwargs.get("direction_lights", [[[0, 0.5, -1], [0.5, 0.5, 0.5]]])
         self.direction_light_lst = []
         for direction_light in direction_lights:
@@ -246,7 +246,7 @@ class Base_Task(gym.Env):
                 ]
             self.direction_light_lst.append(
                 self.scene.add_directional_light(direction_light[0], direction_light[1], shadow=shadow))
-        # default point lights position and intensity
+        # 默认点光源位置和强度
         point_lights = kwargs.get("point_lights", [[[1, 0, 1.8], [1, 1, 1]], [[-1, 0, 1.8], [1, 1, 1]]])
         self.point_light_lst = []
         for point_light in point_lights:
@@ -254,7 +254,7 @@ class Base_Task(gym.Env):
                 point_light[1] = [np.random.rand(), np.random.rand(), np.random.rand()]
             self.point_light_lst.append(self.scene.add_point_light(point_light[0], point_light[1], shadow=shadow))
 
-        # initialize viewer with camera position and orientation
+        # 使用相机位置和朝向初始化查看器
         if self.render_freq:
             self.viewer = Viewer(self.renderer)
             self.viewer.set_scene(self.scene)
@@ -403,8 +403,8 @@ class Base_Task(gym.Env):
 
     def load_camera(self, **kwags):
         """
-        Add cameras and set camera parameters
-            - Including four cameras: left, right, front, head.
+        添加相机并设置相机参数
+            - 包括四个相机：左、右、前、头部。
         """
 
         self.cameras = Camera(
@@ -420,8 +420,8 @@ class Base_Task(gym.Env):
 
     def _update_render(self):
         """
-        Update rendering to refresh the camera's RGBD information
-        (rendering must be updated even when disabled, otherwise data cannot be collected).
+        更新渲染以刷新相机的 RGBD 信息
+        （即使禁用渲染也必须更新，否则无法采集数据）。
         """
         if self.crazy_random_light:
             for renderColor in self.point_light_lst:
@@ -447,7 +447,7 @@ class Base_Task(gym.Env):
         }
         
         pkl_dic["observation"] = self.cameras.get_config()
-        # rgb
+        # rgb 图像
         if self.data_type.get("rgb", False):
             rgb = self.cameras.get_rgb()
             for camera_name in rgb.keys():
@@ -456,22 +456,22 @@ class Base_Task(gym.Env):
         if self.data_type.get("third_view", False):
             third_view_rgb = self.cameras.get_observer_rgb()
             pkl_dic["third_view_rgb"] = third_view_rgb
-        # mesh_segmentation
+        # 网格分割
         if self.data_type.get("mesh_segmentation", False):
             mesh_segmentation = self.cameras.get_segmentation(level="mesh")
             for camera_name in mesh_segmentation.keys():
                 pkl_dic["observation"][camera_name].update(mesh_segmentation[camera_name])
-        # actor_segmentation
+        # actor 分割
         if self.data_type.get("actor_segmentation", False):
             actor_segmentation = self.cameras.get_segmentation(level="actor")
             for camera_name in actor_segmentation.keys():
                 pkl_dic["observation"][camera_name].update(actor_segmentation[camera_name])
-        # depth
+        # 深度图
         if self.data_type.get("depth", False):
             depth = self.cameras.get_depth()
             for camera_name in depth.keys():
                 pkl_dic["observation"][camera_name].update(depth[camera_name])
-        # endpose
+        # 末端位姿
         if self.data_type.get("endpose", False):
             norm_gripper_val = [
                 self.robot.get_left_gripper_val(),
@@ -483,7 +483,7 @@ class Base_Task(gym.Env):
             pkl_dic["endpose"]["left_gripper"] = norm_gripper_val[0]
             pkl_dic["endpose"]["right_endpose"] = right_endpose
             pkl_dic["endpose"]["right_gripper"] = norm_gripper_val[1]
-        # qpos
+        # 关节位置
         if self.data_type.get("qpos", False):
 
             left_jointstate = self.robot.get_left_arm_jointState()
@@ -494,7 +494,7 @@ class Base_Task(gym.Env):
             pkl_dic["joint_action"]["right_arm"] = right_jointstate[:-1]
             pkl_dic["joint_action"]["right_gripper"] = right_jointstate[-1]
             pkl_dic["joint_action"]["vector"] = np.array(left_jointstate + right_jointstate)
-        # pointcloud
+        # 点云
         if self.data_type.get("pointcloud", False):
             pkl_dic["pointcloud"] = self.cameras.get_pcd(self.data_type.get("conbine", False))
 
@@ -607,10 +607,10 @@ class Base_Task(gym.Env):
 
     def set_gripper(self, set_tag="together", left_pos=None, right_pos=None):
         """
-        Set gripper posture
-        - `left_pos`: Left gripper pose
-        - `right_pos`: Right gripper pose
-        - `set_tag`: "left" to set the left gripper, "right" to set the right gripper, "together" to set both grippers simultaneously.
+        设置夹爪姿态
+        - `left_pos`：左夹爪姿态
+        - `right_pos`：右夹爪姿态
+        - `set_tag`："left" 设置左夹爪，"right" 设置右夹爪，"together" 同时设置两个夹爪。
         """
         alpha = 0.5
 
@@ -736,8 +736,8 @@ class Base_Task(gym.Env):
         save_freq=-1,
     ):
         """
-        Interpolative planning with screw motion.
-        Will not avoid collision and will fail if the path contains collision.
+        使用螺旋运动进行插值规划。
+        不会避障，如果路径包含碰撞则会失败。
         """
         if not self.plan_success:
             return
@@ -769,8 +769,8 @@ class Base_Task(gym.Env):
         save_freq=-1,
     ):
         """
-        Interpolative planning with screw motion.
-        Will not avoid collision and will fail if the path contains collision.
+        使用螺旋运动进行插值规划。
+        不会避障，如果路径包含碰撞则会失败。
         """
         if not self.plan_success:
             return
@@ -804,8 +804,8 @@ class Base_Task(gym.Env):
         save_freq=-1,
     ):
         """
-        Interpolative planning with screw motion.
-        Will not avoid collision and will fail if the path contains collision.
+        使用螺旋运动进行插值规划。
+        不会避障，如果路径包含碰撞则会失败。
         """
         if not self.plan_success:
             return
@@ -850,8 +850,8 @@ class Base_Task(gym.Env):
         right_n_step = right_result["position"].shape[0] if right_success else 0
 
         while now_left_id < left_n_step or now_right_id < right_n_step:
-            # set the joint positions and velocities for move group joints only.
-            # The others are not the responsibility of the planner
+        # 仅设置 move group 关节的关节位置和速度。
+        # 其他关节不在规划器的职责范围内
             if (left_success and now_left_id < left_n_step
                     and (not right_success or now_left_id / left_n_step <= now_right_id / right_n_step)):
                 self.robot.set_arm_joints(
@@ -890,7 +890,7 @@ class Base_Task(gym.Env):
         save_freq=-1,
     ):
         """
-        Take action for the robot.
+        为机器人执行动作。
         """
 
         def get_actions(actions, arm_tag: ArmTag) -> list[Action]:
@@ -983,9 +983,9 @@ class Base_Task(gym.Env):
 
     def check_actors_contact(self, actor1, actor2):
         """
-        Check if two actors are in contact.
-        - actor1: The first actor.
-        - actor2: The second actor.
+        检查两个 actor 是否接触。
+        - actor1：第一个 actor。
+        - actor2：第二个 actor。
         """
         contacts = self.scene.get_contacts()
         for contact in contacts:
@@ -1004,8 +1004,8 @@ class Base_Task(gym.Env):
 
     def choose_best_pose(self, res_pose, center_pose, arm_tag: ArmTag = None):
         """
-        Choose the best pose from the list of target poses.
-        - target_lst: List of target poses.
+        从目标位姿列表中选择最佳位姿。
+        - target_lst：目标位姿列表。
         """
         if not self.plan_success:
             return [-1, -1, -1, -1, -1, -1, -1]
@@ -1025,7 +1025,7 @@ class Base_Task(gym.Env):
                 now_pose = target_lst[i]
         return now_pose
 
-    # test grasp pose of all contact points
+    # 测试所有接触点的抓取位姿
     def _print_all_grasp_pose_of_contact_points(self, actor: Actor, pre_dis: float = 0.1):
         for i in range(len(actor.config["contact_points_pose"])):
             print(i, self.get_grasp_pose(actor, pre_dis=pre_dis, contact_point_id=i))
@@ -1038,11 +1038,11 @@ class Base_Task(gym.Env):
         pre_dis: float = 0.0,
     ) -> list:
         """
-        Obtain the grasp pose through the marked grasp point.
-        - actor: The instance of the object to be grasped.
-        - arm_tag: The arm to be used, either "left" or "right".
-        - pre_dis: The distance in front of the grasp point.
-        - contact_point_id: The index of the grasp point.
+        通过标记的抓取点获取抓取位姿。
+        - actor：待抓取对象的实例。
+        - arm_tag：使用的手臂，"left" 或 "right"。
+        - pre_dis：抓取点前方的距离。
+        - contact_point_id：抓取点的索引。
         """
         if not self.plan_success:
             return [-1, -1, -1, -1, -1, -1, -1]
@@ -1062,10 +1062,10 @@ class Base_Task(gym.Env):
 
     def _default_choose_grasp_pose(self, actor: Actor, arm_tag: ArmTag, pre_dis: float) -> list:
         """
-        Default grasp pose function.
-        - actor: The target actor to be grasped.
-        - arm_tag: The arm to be used for grasping, either "left" or "right".
-        - pre_dis: The distance in front of the grasp point, default is 0.1.
+        默认抓取位姿函数。
+        - actor：待抓取的目标 actor。
+        - arm_tag：用于抓取的手臂，"left" 或 "right"。
+        - pre_dis：抓取点前方的距离，默认为 0.1。
         """
         id = -1
         score = -1
@@ -1088,10 +1088,10 @@ class Base_Task(gym.Env):
         contact_point_id: list | float = None,
     ) -> list:
         """
-        Test the grasp pose function.
-        - actor: The actor to be grasped.
-        - arm_tag: The arm to be used for grasping, either "left" or "right".
-        - pre_dis: The distance in front of the grasp point, default is 0.1.
+        测试抓取位姿函数。
+        - actor：待抓取的 actor。
+        - arm_tag：用于抓取的手臂，"left" 或 "right"。
+        - pre_dis：抓取点前方的距离，默认为 0.1。
         """
         if not self.plan_success:
             return
@@ -1847,24 +1847,24 @@ class Base_Task(gym.Env):
 
     def save_camera_images(self, task_name, step_name, generate_num_id, save_dir="./camera_images"):
         """
-        Save camera images - patched version to ensure consistent episode numbering across all steps.
+        保存相机图像 - 补丁版本，确保所有步骤使用一致的回合编号。
 
-        Args:
-            task_name (str): Name of the task.
-            step_name (str): Name of the step.
-            generate_num_id (int): Generated ID used to create subfolders under the task directory.
-            save_dir (str): Base directory to save images, default is './camera_images'.
+        参数：
+            task_name (str)：任务名称。
+            step_name (str)：步骤名称。
+            generate_num_id (int)：用于在任务目录下创建子文件夹的生成 ID。
+            save_dir (str)：保存图像的基础目录，默认为 './camera_images'。
 
-        Returns:
-            dict: A dictionary containing image data from each camera.
+        返回：
+            dict：包含每个相机图像数据的字典。
         """
         # print(f"Received generate_num_id in save_camera_images: {generate_num_id}")
 
-        # Create a subdirectory specific to the task
+        # 创建任务专属的子目录
         task_dir = os.path.join(save_dir, task_name)
         os.makedirs(task_dir, exist_ok=True)
         
-        # Create a subdirectory for the given generate_num_id
+        # 为指定的 generate_num_id 创建子目录
         generate_dir = os.path.join(task_dir, generate_num_id)
         os.makedirs(generate_dir, exist_ok=True)
         
@@ -1872,7 +1872,7 @@ class Base_Task(gym.Env):
         cam_obs = obs["observation"]
         image_data = {}
 
-        # Extract step number and description from step_name using regex
+        # 使用正则表达式从 step_name 中提取步骤编号和描述
         match = re.match(r'(step[_]?\d+)(?:_(.*))?', step_name)
         if match:
             step_num = match.group(1)
@@ -1881,17 +1881,17 @@ class Base_Task(gym.Env):
             step_num = None
             step_description = step_name
 
-        # Only process head_camera
+        # 仅处理 head_camera
         cam_name = "head_camera"
         if cam_name in cam_obs:
             rgb = cam_obs[cam_name]["rgb"]
             if rgb.dtype != np.uint8:
                 rgb = (rgb * 255).clip(0, 255).astype(np.uint8)
             
-            # Use the instance's ep_num as the episode number
+            # 使用实例的 ep_num 作为回合编号
             episode_num = getattr(self, 'ep_num', 0)
             
-            # Save image to the subdirectory for the specific generate_num_id
+            # 将图像保存到指定 generate_num_id 的子目录中
             filename = f"episode{episode_num}_{step_num}_{step_description}.png"
             filepath = os.path.join(generate_dir, filename)
             imageio.imwrite(filepath, rgb)

@@ -37,12 +37,12 @@ class click_bell(Base_Task):
         self.check_arm_function = self.is_left_gripper_close if self.bell.get_pose().p[0] < 0 else self.is_right_gripper_close
     
     def play_once(self):
-        # Choose the arm to use: right arm if the bell is on the right side (positive x), left otherwise
+        # 选择使用的手臂：如果铃铛在右侧（x 为正）用右臂，否则用左臂
         arm_tag = ArmTag("right" if self.bell.get_pose().p[0] > 0 else "left")
     
-        # Move the gripper above the top center of the bell and close the gripper to simulate a click
-        # Note: grasp_actor here is not used to grasp the bell, but to simulate a touch/click action
-        # You must use the same pre_grasp_dis and grasp_dis values as in the click_bell task
+        # 将夹爪移动到铃铛顶部中心上方并闭合夹爪以模拟点击
+        # 注意：这里的 grasp_actor 不是用来抓取铃铛，而是模拟触摸/点击动作
+        # 必须使用与 click_bell 任务中相同的 pre_grasp_dis 和 grasp_dis 值
         self.move(self.grasp_actor(
             self.bell,
             arm_tag=arm_tag,
@@ -51,19 +51,19 @@ class click_bell(Base_Task):
             contact_point_id=0,  # Targeting the bell's top center
         ))
     
-        # Move the gripper downward to touch the top center of the bell
+        # 将夹爪向下移动以触碰铃铛顶部中心
         self.move(self.move_by_displacement(arm_tag, z=-0.045))
     
-        # Check whether the simulated click action was successful
+        # 检查模拟的点击动作是否成功
         self.check_success()
     
-        # Move the gripper back up to the original position (no need to lift or grasp the bell)
+        # 将夹爪移回原始位置（无需抬起或抓取铃铛）
         self.move(self.move_by_displacement(arm_tag, z=0.045))
     
-        # Check success again if needed (optional, based on your task logic)
+        # 如需再次检查成功（可选，根据任务逻辑决定）
         self.check_success()
     
-        # Record which bell and arm were used in the info dictionary
+        # 在 info 字典中记录使用了哪个铃铛和哪只手臂
         self.info["info"] = {"{A}": f"050_bell/base{self.bell_id}", "{a}": str(arm_tag)}
         return self.info
 

@@ -123,22 +123,22 @@ class place_a2b_right(Base_Task):
         self.add_prohibit_area(self.target_object, padding=0.1)
 
     def play_once(self):
-        # Determine which arm to use based on object's x position (right if positive, left if negative)
+        # 根据对象的 x 位置决定使用哪只手臂（正值用右臂，负值用左臂）
         arm_tag = ArmTag("right" if self.object.get_pose().p[0] > 0 else "left")
 
-        # Grasp the object with specified arm using pre-grasp distance of 0.1
+        # 用指定的手臂抓取对象，预抓取距离为 0.1
         self.move(self.grasp_actor(self.object, arm_tag=arm_tag, pre_grasp_dis=0.1))
-        # Lift the object upward by 0.1 units along z-axis using arm movement
+        # 使用手臂运动沿 z 轴将对象向上抬起 0.1 个单位
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.1, move_axis="arm"))
 
-        # Calculate the target place pose by offsetting target's x position by +0.13
+        # 通过将目标的 x 位置偏移 +0.13 来计算放置目标位姿
         target_pose = self.target_object.get_pose().p.tolist()
         target_pose[0] += 0.13
 
-        # Place the object at the calculated target pose
+        # 将对象放置到计算出的目标位姿
         self.move(self.place_actor(self.object, arm_tag=arm_tag, target_pose=target_pose))
 
-        # Store information about the objects and arm used in the info dictionary
+        # 在 info 字典中存储使用的对象和手臂信息
         self.info["info"] = {
             "{A}": f"{self.selected_modelname_A}/base{self.selected_model_id_A}",
             "{B}": f"{self.selected_modelname_B}/base{self.selected_model_id_B}",

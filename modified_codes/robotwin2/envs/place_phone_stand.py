@@ -69,16 +69,16 @@ class place_phone_stand(Base_Task):
         self.add_prohibit_area(self.stand, padding=0.15)
 
     def play_once(self):
-        # Determine which arm to use based on phone's position (left if phone is on left side, else right)
+        # 根据手机的位置决定使用哪只手臂（在左侧用左臂，否则用右臂）
         arm_tag = ArmTag("left" if self.phone.get_pose().p[0] < 0 else "right")
 
-        # Grasp the phone with specified arm
+        # 用指定的手臂抓取手机
         self.move(self.grasp_actor(self.phone, arm_tag=arm_tag, pre_grasp_dis=0.08))
 
-        # Get stand's functional point as target for placement
+        # 获取支架的功能点作为放置目标
         stand_func_pose = self.stand.get_functional_point(0)
 
-        # Place the phone onto the stand's functional point with alignment constraint
+        # 以对齐约束将手机放置到支架的功能点上
         self.move(
             self.place_actor(
                 self.phone,

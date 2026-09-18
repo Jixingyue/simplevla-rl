@@ -28,17 +28,17 @@ class lift_pot(Base_Task):
     def play_once(self):
         left_arm_tag = ArmTag("left")
         right_arm_tag = ArmTag("right")
-        # Close both left and right grippers to half position
+        # 将左右夹爪都闭合到一半位置
         self.move(
             self.close_gripper(left_arm_tag, pos=0.5),
             self.close_gripper(right_arm_tag, pos=0.5),
         )
-        # Grasp the pot with both arms at specified contact points
+        # 用双臂在指定接触点抓取锅
         self.move(
             self.grasp_actor(self.pot, left_arm_tag, pre_grasp_dis=0.035, contact_point_id=0),
             self.grasp_actor(self.pot, right_arm_tag, pre_grasp_dis=0.035, contact_point_id=1),
         )
-        # Lift the pot by moving both arms upward to target height (0.88)
+        # 通过将双臂向上移动到目标高度（0.88）来抬起锅
         self.move(
             self.move_by_displacement(left_arm_tag, z=0.88 - self.pot.get_pose().p[2]),
             self.move_by_displacement(right_arm_tag, z=0.88 - self.pot.get_pose().p[2]),

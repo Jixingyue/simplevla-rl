@@ -58,7 +58,7 @@ class move_can_pot(Base_Task):
             self.prohibited_area.append([pot_x, pot_y - 0.1, pot_x + 0.15, pot_y + 0.1])
         self.orig_z = self.pot.get_pose().p[2]
 
-        # Get pot's current pose and calculate target pose for placing the can
+        # 获取锅的当前位姿并计算放置罐子的目标位姿
         pot_pose = self.pot.get_pose()
         self.target_pose = sapien.Pose(
             [
@@ -71,12 +71,12 @@ class move_can_pot(Base_Task):
 
     def play_once(self):
         arm_tag = self.arm_tag
-        # Grasp the can with specified pre-grasp distance
+        # 用指定的预抓取距离抓取罐子
         self.move(self.grasp_actor(self.can, arm_tag=arm_tag, pre_grasp_dis=0.05))
-        # Move the can backward and upward
+        # 将罐子向后上方移动
         self.move(self.move_by_displacement(arm_tag, y=-0.1, z=0.1))
 
-        # Place the can near the pot at calculated target pose
+        # 将罐子放置到锅附近计算出的目标位姿
         self.move(self.place_actor(
             self.can,
             target_pose=self.target_pose,

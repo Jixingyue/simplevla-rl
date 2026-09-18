@@ -66,18 +66,18 @@ class move_pillbottle_pad(Base_Task):
         self.add_prohibit_area(self.target, padding=0.1)
 
     def play_once(self):
-        # Determine which arm to use based on pillbottle's position (right if on right side, left otherwise)
+        # 根据药瓶的位置决定使用哪只手臂（在右侧用右臂，否则用左臂）
         arm_tag = ArmTag("right" if self.pillbottle.get_pose().p[0] > 0 else "left")
 
-        # Grasp the pillbottle
+        # 抓取药瓶
         self.move(self.grasp_actor(self.pillbottle, arm_tag=arm_tag, pre_grasp_dis=0.06, gripper_pos=0))
 
-        # Lift up the pillbottle by 0.1 meters in z-axis
+        # 沿 z 轴将药瓶抬起 0.1 米
         self.move(self.move_by_displacement(arm_tag=arm_tag, z=0.05))
 
-        # Get the target pose for placing the pillbottle
+        # 获取放置药瓶的目标位姿
         target_pose = self.target.get_functional_point(1)
-        # Place the pillbottle at the target pose
+        # 将药瓶放置到目标位姿
         self.move(
             self.place_actor(self.pillbottle,
                              arm_tag=arm_tag,
