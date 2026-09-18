@@ -31,6 +31,7 @@ import verl.utils.torch_functional as verl_F
 import json
 
 try:
+    import libero
     from libero.libero import benchmark
 except ImportError as e:
     print(f"Warning : can't import libero: {e}")

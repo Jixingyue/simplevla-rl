@@ -11,25 +11,32 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import contextlib
+
+'''
+VLA rollout implementation: environment creation, multi-environment parallel rendering,
+VLA action generation, environment interaction, video saving, trajectory and 0/1 reward collection
+'''
+
 import os
-import torch
-import torch.distributed
-from tensordict import TensorDict
-from torch import nn
-from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.nn.utils.rnn import pad_sequence
 import sys
+import torch
 import importlib
-
-from verl import DataProto
-from verl.utils.torch_functional import get_eos_mask
-import verl.utils.torch_functional as verl_F
-from .base import BaseRollout
-
+import contextlib
+from tensordict import TensorDict
 from transformers import GenerationConfig, AutoProcessor
 
+from torch import nn
+import torch.distributed
+from torch.nn.utils.rnn import pad_sequence
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
+from verl import DataProto
+import verl.utils.torch_functional as verl_F
+from verl.utils.torch_functional import get_eos_mask
 from verl.utils.libero_utils import save_rollout_video
+from .base import BaseRollout
+
+# import Libero package
 try:
     from verl.utils.libero_utils import (
         get_libero_env, get_libero_dummy_action, get_libero_image, 
@@ -43,14 +50,16 @@ from verl.utils.vla_utils.openvla_oft.constants import (
     ACTION_DIM,
     ACTION_PROPRIO_NORMALIZATION_TYPE,
 )
+
+import yaml
+import random
 import numpy as np
 from PIL import Image
 import tensorflow as tf
-from collections import deque
-import random
-import yaml
 from pathlib import Path
+from collections import deque
 
+# 并发与资源管理工具：线程、队列、GC、traceback
 import threading
 import queue
 import gc
@@ -76,9 +85,8 @@ OPENVLA_V01_SYSTEM_PROMPT = (
 
 def crop_and_resize(image, crop_scale, batch_size):
     """
-    Center-crops an image to have area `crop_scale` * (original image area), and then resizes back
-    to original size. We use the same logic seen in the `dlimp` RLDS datasets wrapper to avoid
-    distribution shift at test time.
+    图像预处理（数据增强）: center crop + resize
+    把输入图像"中心裁剪"到原面积的crop_scale，再resize回目标分辨率(224,224)
     """
     assert image.shape.ndims == 3 or image.shape.ndims == 4
     expanded_dims = False
@@ -109,6 +117,9 @@ def crop_and_resize(image, crop_scale, batch_size):
     return image
 
 def center_crop_image(image):
+    """
+    以 crop_scale=0.9 执行一次中心裁剪，再回到 RGB PIL Image type
+    """
     batch_size = 1
     crop_scale = 0.9
 
@@ -124,10 +135,14 @@ def center_crop_image(image):
     image = image.convert("RGB")
     return image
 
-# ================ Robotwin-specific functions ================
-
+# ============================================================
+#              Robotwin-specific functions
+# ============================================================
 def normalize_proprio(proprio, norm_stats):
-    """Normalize proprioception data for Robotwin."""
+    """
+    用训练阶段统计的 min/max 或 q01/q99 将
+    Robotwin 的 proprio（关节/末端状态等）归一化到 [-1,1]
+    """
     if ACTION_PROPRIO_NORMALIZATION_TYPE == "bounds":
         mask = norm_stats.get("mask", np.ones_like(norm_stats["min"], dtype=bool))
         proprio_high, proprio_low = np.array(norm_stats["max"]), np.array(norm_stats["min"])
@@ -148,14 +163,16 @@ def normalize_proprio(proprio, norm_stats):
     )
     return normalized_proprio
 
-
-
 def get_robotwin2_task(task_name, config):
-    """Get robotwin 2.0 task"""
+    """
+    return:
+    - env_instance：Robotwin2.0的任务类实例
+    - args：加载的超参数（task_config/embodiment/camera）
+    """
     robotwin2_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'envs', 'robotwin2')
     if robotwin2_path not in sys.path:
         sys.path.append(robotwin2_path)
-        
+
     robotwin2_utils_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'envs', 'robotwin2', "description", "utils")
     if robotwin2_utils_path not in sys.path:
         sys.path.append(robotwin2_utils_path)
@@ -227,11 +244,14 @@ def get_robotwin2_task(task_name, config):
     return env_instance, args
 
 def encode_obs(observation):
-    """Post-Process Observation for robotwin 2.0"""
+    """Post-Process Observation for Robotwin 2.0"""
     return observation
 
 class RobotwinEnvWrapper:
-    """Thread-safe wrapper for Robotwin environment (supports both 1.0 and 2.0)"""
+    """
+    Thread-safe wrapper for Robotwin environment (supports both 1.0 and 2.0)
+    统一封装 initialize/get_obs/step/close functions
+    """
     def __init__(self, task_name, trial_id, trial_seed, config, version="1.0"):
         self.task_name = task_name
         self.trial_id = trial_id
@@ -266,7 +286,6 @@ class RobotwinEnvWrapper:
                     self.env.setup_demo(now_ep_num=self.trial_id, seed=self.trial_seed, is_test=True, **self.args)
                     episode_info_list = [self.env.get_info()]
                 
-                
                 from generate_episode_instructions import generate_episode_descriptions
                 results = generate_episode_descriptions(self.task_name, episode_info_list, 1, seed=self.trial_id)
                 self.instruction = np.random.choice(results[0][self.args["instruction_type"]])
@@ -288,14 +307,12 @@ class RobotwinEnvWrapper:
     def get_instruction(self):
         """Get instruction for the task"""
         with self.lock:
-            
             return self.env.get_instruction()
             
     def step(self, action):
         """Execute action in environment"""
         with self.lock:
             try:
-                
                 self.env.take_action(action)
                 done = self.env.eval_success
                     
@@ -329,10 +346,15 @@ class RobotwinEnvWrapper:
                 except Exception as e:
                     print(f"******IN env.close ERROR {e} ******", flush=True)
 
-# ================ Libero-specific functions ================
 
+# ============================================================
+#              Libero-specific functions
+# ============================================================
 def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, is_valid, global_steps, max_steps):
-    """Worker process for Libero environments"""
+    """
+    - 主进程通过input_queue传送动作
+    - worker执行env.step，然后把obs/prior通过output_queue回传
+    """
     from libero.libero import benchmark
     
     benchmark_dict = benchmark.get_benchmark_dict()
@@ -419,8 +441,10 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
         }
         output_queue.put(output_data)
 
-# ================ Main Rollout Class ================
 
+# ============================================================
+#                 Main Rollout Class
+# ============================================================
 class RobHFRollout(BaseRollout):
     def __init__(self, module: nn.Module, config):
         super().__init__()
@@ -473,6 +497,11 @@ class RobHFRollout(BaseRollout):
             raise ValueError
         
     def vla_preprocess(self):
+        """
+        VLA 推理前置处理：
+        1) 开启 GPU memory growth，避免 TF 一次性吃光显存
+        2) 修正 config.unnorm_key，确保能在 module.norm_stats 找到动作反归一化统计
+        """
         if self.config.vla in ["openvla", "openvla-oft"]:
             gpus = tf.config.experimental.list_physical_devices('GPU')
             if gpus:
@@ -487,40 +516,34 @@ class RobHFRollout(BaseRollout):
                 self.config.unnorm_key = self.config.unnorm_key.removeprefix("robotwin_").removeprefix("robotwin2_")
             assert self.config.unnorm_key in self.module.norm_stats, f"Action un-norm key {self.config.unnorm_key} not found in VLA `norm_stats`!"
 
-    def generate_sequences(self, prompts):
-        batch_size = prompts.batch.batch_size[0]
-        
-        if prompts.meta_info.get('n_samples') is None:
-            micro_batch_size = self.config.val_micro_batch_size if self.config.val_micro_batch_size is not None else 1
-        else:
-            micro_batch_size = self.config.get('micro_batch_size', batch_size)
-            
-        num_chunks = max(batch_size // micro_batch_size, 1)
-        batch_prompts = prompts.chunk(chunks=num_chunks)
-        output = [self._generate_minibatch(p) for p in batch_prompts]
-        output = DataProto.concat(output)
-        return output
-    
     def process_input(self, inputs: list, task_descriptions: list):
-        """Unified input processing for both Robotwin and Libero"""
+        """
+        Unified input processing for both Robotwin and Libero
+        - 图像：head camera + wrist camera(s)
+        - 文本：把 task_description 拼成 prompt
+        - proprio（可选）
+        输出 dict，可直接喂给 VLA
+        """
         batchdata = {"input_ids": [], "attention_mask": [], "pixel_values": []}
         if self.config.use_proprio and "robotwin" in self.config.task_suite_name:
             batchdata["proprio"] = []
-        
+
         for i in range(len(inputs)):
             input_data = inputs[i]
             task_description = task_descriptions[i]
-            
-            # Process main image
+
+            # ---- 1) 主视角图像 ----
             image = Image.fromarray(input_data["full_image"]).convert("RGB")
             if self.config.center_crop:
                 image = center_crop_image(image)
+
+            # ---- 2) language prompt ----
             prompt = f"In: What action should the robot take to {task_description.lower()}?\nOut:"
+
             batch_feature = self.processor(prompt, image)
-            
             pixel_values_list = [batch_feature["pixel_values"]]
-            
-            # Process additional images (wrist cameras)
+
+            # ---- 3) 腕部相机视角图像 ----
             if "robotwin" in self.config.task_suite_name:
                 # Robotwin may have multiple wrist images
                 for key in input_data:
@@ -538,42 +561,49 @@ class RobHFRollout(BaseRollout):
                         wrist_image = center_crop_image(wrist_image)
                     wrist_batch_feature = self.processor(prompt, wrist_image)
                     pixel_values_list.append(wrist_batch_feature["pixel_values"])
-            
+
+            # 把多路图像在 channel/相机维度 concat
             batch_feature["pixel_values"] = torch.cat(pixel_values_list, dim=1)
-            
+
             input_ids = batch_feature["input_ids"]
             attention_mask = batch_feature["attention_mask"]
             pixel_values = batch_feature["pixel_values"]
-            
+
+            # 这里检查最后一个 token id 是否是 29871
+            # 工程经验做法：某些 tokenizer/processor 需要一个特定结尾 token
+            # 否则模型生成/对齐可能出现偏差
             if not torch.all(input_ids[:, -1] == 29871):
                 input_ids = torch.cat(
                     (input_ids, torch.unsqueeze(torch.Tensor([29871]).long(), dim=0).to(input_ids.device)), dim=1
                 )
                 if self.config.vla in ["openvla-oft"]:
                     attention_mask = torch.cat(
-                        (attention_mask, torch.unsqueeze(torch.Tensor([True]).bool(), dim=0).to(attention_mask.device)), dim=1
+                        (attention_mask, torch.unsqueeze(torch.Tensor([True]).bool(), dim=0).to(attention_mask.device)),
+                        dim=1
                     )
-            
+
             batchdata["input_ids"].append(input_ids)
             batchdata["attention_mask"].append(attention_mask)
             batchdata["pixel_values"].append(pixel_values)
-            
-            # Process proprioception for Robotwin
+
+            # ---- 4) Robotwin proprio ----
             if self.config.use_proprio and "robotwin" in self.config.task_suite_name:
                 proprio = input_data["state"]
                 proprio_norm_stats = self.module.norm_stats[self.config.unnorm_key]["proprio"]
                 proprio = normalize_proprio(proprio, proprio_norm_stats)
                 batchdata["proprio"].append(torch.from_numpy(proprio))
-        
+
         device = torch.device('cuda')
-        
+
         # Padding and device placement
         if self.config.vla in ["openvla-oft"]:
             batchdata["input_ids"] = [x.transpose(0, 1) for x in batchdata["input_ids"]]
             batchdata["attention_mask"] = [x.transpose(0, 1) for x in batchdata["attention_mask"]]
-            batchdata["input_ids"] = pad_sequence(batchdata["input_ids"], batch_first=True, padding_value=self.processor.tokenizer.pad_token_id).squeeze(-1).to(device)
-            batchdata["attention_mask"] = pad_sequence(batchdata["attention_mask"], batch_first=True, padding_value=0).squeeze(-1).to(device)
-            
+            batchdata["input_ids"] = pad_sequence(batchdata["input_ids"], batch_first=True,
+                                                  padding_value=self.processor.tokenizer.pad_token_id).squeeze(-1).to(device)
+            batchdata["attention_mask"] = pad_sequence(batchdata["attention_mask"], batch_first=True,
+                                                       padding_value=0).squeeze(-1).to(device)
+
             padding_mask = batchdata["input_ids"].ne(self.processor.tokenizer.pad_token_id)
             assert torch.all(padding_mask == batchdata["attention_mask"].ne(0))
             padding_mask = ~padding_mask
@@ -581,19 +611,39 @@ class RobHFRollout(BaseRollout):
             sorted_indices = torch.argsort(padding_mask, dim=1, descending=True, stable=True)
             batchdata["input_ids"] = torch.gather(batchdata["input_ids"], 1, sorted_indices)
             batchdata["attention_mask"] = torch.gather(batchdata["attention_mask"], 1, sorted_indices)
-            
+
             batchdata["pixel_values"] = torch.cat(batchdata["pixel_values"], dim=0).to(device)
-            
+
             if self.config.use_proprio and "robotwin" in self.config.task_suite_name:
                 batchdata["proprio"] = torch.stack(batchdata["proprio"], dim=0).to(device)
-                
-            assert torch.all(batchdata["attention_mask"].ne(0) == batchdata["input_ids"].ne(self.processor.tokenizer.pad_token_id))
+
+            assert torch.all(
+                batchdata["attention_mask"].ne(0) == batchdata["input_ids"].ne(self.processor.tokenizer.pad_token_id))
         else:
             for key in ["input_ids", "attention_mask", "pixel_values"]:
                 batchdata[key] = torch.cat(batchdata[key], dim=0).to(device)
 
         return batchdata
-    
+
+    def generate_sequences(self, prompts):
+        """
+        把prompts（DataProto）拆成micro-batch，逐个推理，再拼接回来
+        Motivation：
+        - 评测时batch_size可能较大，导致显存不够
+        """
+        batch_size = prompts.batch.batch_size[0]
+        
+        if prompts.meta_info.get('n_samples') is None:
+            micro_batch_size = self.config.val_micro_batch_size if self.config.val_micro_batch_size is not None else 1
+        else:
+            micro_batch_size = self.config.get('micro_batch_size', batch_size)
+
+        num_chunks = max(batch_size // micro_batch_size, 1)
+        batch_prompts = prompts.chunk(chunks=num_chunks)
+        output = [self._generate_minibatch(p) for p in batch_prompts]
+        output = DataProto.concat(output)
+        return output
+
     def _generate_minibatch(self, prompts):
         """Generate minibatch - routes to appropriate implementation based on task suite"""
         if "robotwin" in self.config.task_suite_name:
@@ -615,7 +665,7 @@ class RobHFRollout(BaseRollout):
         is_valid = meta_info.get('n_samples') is None
         global_steps = meta_info.get('global_steps', 0) if is_valid else 0
         
-        # Create environment wrappers
+        # -------- 1) 为每个样本创建一个 RobotwinEnvWrapper（线程安全 env 包装）--------
         env_wrappers = []
         for idx in range(batch_size):
             task_name = task_suite_name[idx].removeprefix("robotwin_").removeprefix("robotwin2_")
@@ -626,7 +676,7 @@ class RobHFRollout(BaseRollout):
             wrapper = RobotwinEnvWrapper(task_name, tr_id, tr_seed, self.config, version=self.robotwin_version)
             env_wrappers.append(wrapper)
         
-        # Initialize environments in parallel
+        # -------- 2) 并行初始化环境（ThreadPool）--------
         init_futures = []
         for wrapper in env_wrappers:
             future = self.env_thread_pool.submit(wrapper.initialize)
@@ -640,7 +690,7 @@ class RobHFRollout(BaseRollout):
                 traceback.print_exc()
                 raise
         
-        # Collect initial observations
+        # -------- 3) 收集初始 obs / instruction，并构造模型输入 --------
         inputs = []
         task_descriptions = []
         task_records = []
@@ -650,7 +700,7 @@ class RobHFRollout(BaseRollout):
             try:
                 obs = wrapper.get_obs()
                 obs = encode_obs(obs)
-                    
+
                 task_description = wrapper.get_instruction()
                 task_descriptions.append(task_description)
                 inputs.append(self._obs_to_input(obs, is_robotwin=True, robotwin_version=wrapper.version))
@@ -672,7 +722,7 @@ class RobHFRollout(BaseRollout):
                 traceback.print_exc()
                 raise
         
-        # Main rollout loop
+        # -------- 4) 主 rollout loop: VLA输出动作 -> env执行 -> 收集新的obs --------
         step = 0
         vla_history = []
         
@@ -770,7 +820,10 @@ class RobHFRollout(BaseRollout):
         return self._prepare_output_batch(vla_history, task_records, batch_size)
     
     def _generate_minibatch_libero(self, prompts):
-        """Generate minibatch for Libero using multiprocessing"""
+        """
+        Generate minibatch for Libero using multiprocessing
+        每个 env 在独立进程里跑（避免 mujoco/robosuite 等的线程不安全/死锁问题）
+        """
         self.module.eval()
         meta_info = prompts.meta_info
         n_samples = meta_info.get('n_samples', 1)
@@ -785,7 +838,8 @@ class RobHFRollout(BaseRollout):
         processes = []
         input_queues = []
         output_queues = []
-        
+
+        # -------- 1) 为每个 env 启动一个进程 env_worker --------
         for idx in range(batch_size):
             task_name = task_suite_name[idx]
             t_id = task_id[idx][0].item()
@@ -800,7 +854,8 @@ class RobHFRollout(BaseRollout):
             processes.append(p)
             input_queues.append(input_q)
             output_queues.append(output_q)
-        
+
+        # -------- 2) 读初始状态数据（子进程 env_worker 会先 put 一条 type='init'）--------
         inputs = []
         task_descriptions = []
         task_records = []
@@ -819,7 +874,8 @@ class RobHFRollout(BaseRollout):
             })
             if is_valid:
                 valid_video[init_data['task_file_name']].extend(init_data['valid_images'])
-        
+
+        # -------- 3) rollout loop：模型推理在主进程，env.step 在子进程 --------
         step = 0
         vla_history = []
         
@@ -828,7 +884,8 @@ class RobHFRollout(BaseRollout):
             
             current_inputs = inputs
             current_task_descriptions = task_descriptions
-            
+
+            # 模型推理
             vla_input = self.process_input(current_inputs, current_task_descriptions)
             vla_input.update(meta_info)
             vla_output = self._generate_one_step(vla_input)
@@ -843,10 +900,12 @@ class RobHFRollout(BaseRollout):
                 "step": step
             }
             vla_history.append(step_data)
-            
+
+            # 把动作发给各个子进程
             for idx in active_indices:
                 input_queues[idx].put(actions[idx])
-            
+
+            # 等子进程返回 step 结果
             new_inputs = inputs.copy()
             for idx in active_indices:
                 result = output_queues[idx].get(timeout=30)
@@ -860,7 +919,8 @@ class RobHFRollout(BaseRollout):
             
             inputs = new_inputs
             step += self.config.action_chunks_len
-        
+
+        # -------- 4) 终止所有子进程 --------
         for q in input_queues:
             q.put(None)
         for p in processes:
@@ -869,7 +929,8 @@ class RobHFRollout(BaseRollout):
                 p.terminate()
         
         torch.cuda.empty_cache()
-        
+
+        # -------- 5) 保存rollout视频 --------
         if is_valid:
             for task_file, images in valid_video.items():
                 complete = any(r['complete'] for r in task_records if r['task_file_name'] == task_file)
@@ -886,12 +947,14 @@ class RobHFRollout(BaseRollout):
         return self._prepare_output_batch(vla_history, task_records, batch_size)
     
     def _prepare_output_batch(self, vla_history, task_records, batch_size):
-        """Prepare the output batch from VLA history"""
+        """
+        Prepare the output batch(TensorDict) from VLA history(list[dict])
+        """
         batch = {
-            'responses': [],
-            'input_ids': [],
-            'attention_mask': [],
-            'pixel_values': []
+            'responses': [], # (B, T, ...)
+            'input_ids': [], # (B, T, L)
+            'attention_mask': [], # (B, T, L)
+            'pixel_values': [] # (B, T, ...)
         }
         
         key_names = ["responses", "input_ids", "attention_mask", "pixel_values"]
@@ -938,6 +1001,7 @@ class RobHFRollout(BaseRollout):
         
         with param_ctx:
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
+                # OpenVLA-OFT 直接在模型内部输出连续动作 actions（已经 unnorm 完成） + response tokens
                 actions, response = self.module.generate_action_verl(
                     input_ids=idx,
                     pixel_values=pixel_values,

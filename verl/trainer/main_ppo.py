@@ -36,7 +36,7 @@ class RobRewardManager():
         self.config=config
 
     def verify(self, data):
-        completes = data.batch['complete'].tolist()
+        completes = data.batch['complete'].tolist()  # per-sample
         batch_size = data.batch['responses'].size(0)
         assert len(completes) == batch_size
         score = [float(item) for item in completes]
@@ -56,9 +56,7 @@ class RobRewardManager():
         return score, reward_metrics, format_metrics, reward_format_metrics
 
     def __call__(self, data: DataProto):
-        
         # aggregate all available reward tensors
-
         reward_tensor_dict={}
         reward_metrics={}
         reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32) # batch * 64 * 56
@@ -88,8 +86,7 @@ class RobRewardManager():
         #     if self.config.reward_model.rm_coef!=0:
         #         reward_tensor += self.config.reward_model.rm_coef * reward_tensor_dict['rm_scores']
 
-        if self.config.verifier.reward_coef!=0:
-            
+        if self.config.verifier.reward_coef != 0:
             reward_metrics['verifier'] = reward_tensor_dict['gt_scores'].sum(dim=1).mean().item()
             reward_tensor += self.config.verifier.reward_coef * reward_tensor_dict['gt_scores']
 
@@ -198,12 +195,12 @@ def main_task(config):
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)
 
     trainer = RayTrainer(config=config,
-                            tokenizer=tokenizer,
-                            role_worker_mapping=role_worker_mapping,
-                            resource_pool_manager=resource_pool_manager,
-                            ray_worker_group_cls=ray_worker_group_cls,
-                            reward_fn=reward_fn,
-                            val_reward_fn=val_reward_fn)
+                        tokenizer=tokenizer,
+                        role_worker_mapping=role_worker_mapping,
+                        resource_pool_manager=resource_pool_manager,
+                        ray_worker_group_cls=ray_worker_group_cls,
+                        reward_fn=reward_fn,
+                        val_reward_fn=val_reward_fn)
     trainer.init_workers()
     trainer.fit()
 

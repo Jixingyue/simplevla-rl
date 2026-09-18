@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-FSDP PPO Trainer with Ray-based single controller.
-This trainer supports model-agonistic model initialization with huggingface
-"""
 
+"""
+Main RL training loop: data loading, VLA rollout, model updates, evaluation, checkpointing
+RL algorithm-specific advantage computation
+"""
 import os
 import statistics
 from collections import defaultdict, Counter
@@ -41,7 +41,7 @@ WorkerType = Type[Worker]
 
 class Role(Enum):
     """
-    To create more roles dynamically, you can subclass Role and add new members
+    训练系统里的"角色枚举"
     """
     Actor = 0
     Rollout = 1
@@ -55,8 +55,7 @@ class Role(Enum):
 @dataclass
 class ResourcePoolManager:
     """
-    Define a resource pool specification. Resource pool will be initialized first.
-    Mapping
+    资源池管理器
     """
     resource_pool_spec: dict[str, list[int]]
     mapping: dict[Role, str]
@@ -86,33 +85,41 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
     responses = data.batch['responses']
     
     traj_length = responses.size(1) * action_chunks_len  
-    action_length = action_token_len  # next fix
+    action_length = action_token_len
     token_level_scores = data.batch['token_level_scores']
     batch_size = data.batch.batch_size[0]
     #attention_mask = data.batch['attention_mask']
     finish_step = data.batch['finish_step'] * action_length
-    
-    steps = torch.arange(traj_length*action_length, device=data.batch['responses'].device)  # (traj_len,)
-    steps_expanded = steps.unsqueeze(0).expand(data.batch['responses'].size(0), -1)
-    response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
 
-    # compute kl between ref_policy and current policy
+    # 构造一个 token-level 的时间轴索引
+    steps = torch.arange(traj_length * action_length, device=data.batch['responses'].device)  # (traj_len,)
+    steps_expanded = steps.unsqueeze(0).expand(data.batch['responses'].size(0), -1)
+
+    # 只保留 < finish_step 的 token 位置，避免 padding/越界部分参与 KL/reward
+    response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, response_len)
+
+    # ---- Compute KL divergence ----
     if 'ref_log_prob' in data.batch.keys():
-        kld = core_algos.kl_penalty(data.batch['old_log_probs'], data.batch['ref_log_prob'],
-                                    kl_penalty=kl_penalty)  # (batch_size, response_length)
-        kld = kld * response_mask
+        kld = core_algos.kl_penalty(data.batch['old_log_probs'],
+                                    data.batch['ref_log_prob'],
+                                    kl_penalty=kl_penalty)
+        kld = kld * response_mask  # mask掉超出轨迹结束位置的token
         beta = kl_ctrl.value
     else:
         beta = 0
         kld = torch.zeros_like(response_mask, dtype=torch.float32)
 
+    # reward shaping
     token_level_rewards = token_level_scores - beta * kld
 
-    current_kl = masked_mean(kld, mask=response_mask, axis=-1)  # average over sequence
-    current_kl = torch.mean(current_kl, dim=0).item()
+    current_kl = masked_mean(kld, mask=response_mask, axis=-1)  # average over response length
+    current_kl = torch.mean(current_kl, dim=0).item()  # average over batch
 
-    # according to https://github.com/huggingface/trl/blob/951ca1841f29114b969b57b26c7d3e80a39f75a0/trl/trainer/ppo_trainer.py#L837
+    # # 自适应KL，训练更稳定
+    # https://github.com/huggingface/trl/blob/951ca1841f29114b969b57b26c7d3e80a39f75a0/trl/trainer/ppo_trainer.py#L837
     kl_ctrl.update(current_kl=current_kl, n_steps=batch_size)
+
+    # 写回 data，后续 compute_advantage 会用 token_level_rewards
     data.batch['token_level_rewards'] = token_level_rewards
 
     metrics = {'critic/kl': current_kl, 'critic/kl_coeff': beta}
@@ -121,13 +128,14 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
 
 
 def compute_advantage(data: DataProto, gamma, lam, adv_estimator, config):
-
     responses = data.batch['responses']
     response_length = responses.size(1) *  responses.size(2)
     # attention_mask = data.batch['attention_mask']
     finish_step = data.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
     steps = torch.arange(response_length, device=data.batch['responses'].device)  # (traj_len,)
     steps_expanded = steps.unsqueeze(0).expand(data.batch['responses'].size(0), -1)
+
+    # 只保留 < finish_step 的 token 位置，避免 padding/越界部分参与 KL/reward
     response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
 
     token_level_rewards = data.batch['token_level_rewards'] if 'token_level_rewards' in list(data.batch.keys()) else data.batch['token_level_scores']
@@ -143,6 +151,7 @@ def compute_advantage(data: DataProto, gamma, lam, adv_estimator, config):
         data.batch['returns'] = returns
         
     elif adv_estimator == 'gae':
+        # GAE：需要 values（critic 输出）
         values = data.batch['values']
         responses = data.batch['responses']
         response_length = responses.size(-1)
@@ -211,17 +220,18 @@ def reduce_metrics(metrics: dict):
 
 
 def compute_data_metrics(batch,config):
-    # TODO: add response length
+    # log statistics
     sequence_score = batch.batch['token_level_scores'].sum(-1)
     sequence_reward = batch.batch['token_level_rewards'].sum(-1)
     advantages = batch.batch['advantages']
     returns = batch.batch['returns']
-    #add
+
+    # response mask
     finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
     steps = torch.arange(batch.batch['responses'].size(1)*batch.batch['responses'].size(2), device=advantages.device)  # (traj_len,)
     steps_expanded = steps.unsqueeze(0).expand(batch.batch['responses'].size(0), -1)
     response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
-    #
+
     metrics = {
         # score
         'critic/score/mean': torch.mean(sequence_score).detach().item(),
@@ -240,7 +250,7 @@ def compute_data_metrics(batch,config):
         'critic/returns/max': torch.max(returns[response_mask.bool()]).detach().item(),
         'critic/returns/min': torch.min(returns[response_mask.bool()]).detach().item(),
         # response length
-  
+        # TODO: add response length
     }
     return metrics
 
@@ -273,7 +283,7 @@ class RayTrainer(object):
         self.use_rm = Role.RewardModel in role_worker_mapping
         self.ray_worker_group_cls = ray_worker_group_cls
 
-        # define KL control
+        # KL controller: fixed/adaptive
         if self.use_reference_policy:
             if config.algorithm.kl_ctrl.type == 'fixed':
                 self.kl_ctrl = core_algos.FixedKLController(kl_coef=config.algorithm.kl_ctrl.kl_coef)
@@ -289,19 +299,19 @@ class RayTrainer(object):
 
         self._create_dataloader()
 
-    def _create_dataloader(self):   # next fix
-        from torch.utils.data import DataLoader
+    def _create_dataloader(self):
         # TODO: we have to make sure the batch size is divisible by the dp size
+        from torch.utils.data import DataLoader
         from verl.utils.dataset.rob_dataset import LIBERO_Dataset, Robotwin_Dataset, collate_fn
+
         if "libero" in self.config.data.task_suite_name:
             self.train_dataset = LIBERO_Dataset(self.config.data.task_suite_name,
                                                 num_trials_per_task=self.config.data.num_trials_per_task,
                                                 train_val ="train")
             self.val_dataset = LIBERO_Dataset(self.config.data.task_suite_name,
-                                            num_trials_per_task=self.config.data.num_trials_per_task,
-                                            train_val ="valid")
+                                              num_trials_per_task=self.config.data.num_trials_per_task,
+                                              train_val ="valid")
         elif "robotwin" in self.config.data.task_suite_name:
-            # (cjh) We assume here that data set names are "robotwin_{task_name}" or "robotwin_all"
             self.train_dataset = Robotwin_Dataset(self.config.data.task_suite_name,
                                                   num_trials_per_task=self.config.data.num_trials_per_task,train_val ="train")
             self.val_dataset = Robotwin_Dataset(self.config.data.task_suite_name,
@@ -309,11 +319,13 @@ class RayTrainer(object):
         else:
             raise ValueError(f'Unsupported task suite name: {self.config.data.task_suite_name}')
 
+        # 训练：使用 BufferedDataLoader 包装
+        # batch_size = train_batch_size * oversample_factor：提前多抽一些，后面过滤掉一部分
         self.train_dataloader = BufferedDataLoader(DataLoader(dataset=self.train_dataset,
-                                           batch_size=int(self.config.data.train_batch_size*self.config.data.oversample_factor),
-                                           shuffle=True,
-                                           drop_last=True,
-                                           collate_fn=collate_fn))
+                                                              batch_size=int(self.config.data.train_batch_size * self.config.data.oversample_factor),
+                                                              shuffle=True,
+                                                              drop_last=True,
+                                                              collate_fn=collate_fn))
         self.val_dataloader = DataLoader(dataset=self.val_dataset,
                                          batch_size=self.config.data.val_batch_size,
                                          shuffle=True,
@@ -326,8 +338,8 @@ class RayTrainer(object):
         print(f'Size of train dataloader: {len(self.train_dataloader)}')
         print(f'Size of val dataloader: {len(self.val_dataloader)}')
 
+        # 计算 total_training_steps 并写回 config，给 scheduler/optimizer 用
         total_training_steps = len(self.train_dataloader) * self.config.trainer.total_epochs
-
         OmegaConf.set_struct(self.config, True)
         with open_dict(self.config):
             self.config.actor_rollout_ref.actor.optim.total_training_steps = total_training_steps
@@ -468,7 +480,8 @@ class RayTrainer(object):
 
     def fit(self):
         """
-        The training loop of VLA-RL.
+        The training loop of VLA-RL
+
         """
         from verl.utils.tracking import Tracking
         from omegaconf import OmegaConf
@@ -482,11 +495,11 @@ class RayTrainer(object):
 
         global_steps = 0
         dp_size = self.actor_rollout_wg.world_size // self.config.actor_rollout_ref.rollout.tensor_model_parallel_size
+
         batch_size = self.config.data.train_batch_size
         n_samples = self.config.data.n_samples
 
-        # perform validation before training
-        # currently, we only support validation using the reward_function.
+        # 训练前验证 (Optional)
         if self.val_reward_fn is not None and self.config.trainer.get('val_before_train', False):
             val_metrics = self._validate(global_steps=global_steps)
             val_metrics = {f'val/{key}': val for key, val in val_metrics.items()}
@@ -495,14 +508,20 @@ class RayTrainer(object):
             if self.config.trainer.get('val_only', False):
                 return
 
+        # ============================================================
+        # 外层：按 epoch 循环
+        # 内层：不断从 dataloader 拿 batch，直到攒够 batch_size * n_samples 条 rollout
+        # ============================================================
         for epoch in range(self.config.trainer.total_epochs):
             self.train_dataloader.start_new_epoch()
             while True:
                 valid_batch = []
                 buffer_batch = []
 
+                # 如果 buffer 里有剩余样本，先取出来拼到新 batch 里（避免浪费采样成本）
                 if self.train_dataloader.buffer_size() > 0:
                     buffer_batch = self.train_dataloader.get_from_buffer(batch_size, self.actor_rollout_wg.world_size)
+
                 metrics = defaultdict(list)
                 metrics['timing/gen'] = 0
                 metrics['timing/verify'] = 0
@@ -510,13 +529,14 @@ class RayTrainer(object):
                 metrics['timing/filter_format_error'] = 0
                 metrics['timing/compute_all_entropy'] = 0
 
+                # 目标：采样 batch_size 个 prompt，每个 prompt 有 n_samples 条 response
                 while len(valid_batch) < batch_size * n_samples:
                     try:
                         batch_dict = self.train_dataloader.get_next_batch()
                     except StopIteration:
                         break
 
-                    # generate a batch
+                    # =============== 1) rollout 生成 ===============
                     with Timer(name='gen', text="{name}: {seconds:.1f} seconds") as timer:
 
                         newbatch: DataProto = DataProto.from_single_dict(batch_dict)
@@ -533,19 +553,19 @@ class RayTrainer(object):
                             gen_batch = newbatch.select(batch_keys=['task_id', 'trial_id'],
                                                         non_tensor_batch_keys={"task_suite_name"},
                                                         meta_info_keys={})
- 
-                        newbatch.non_tensor_batch['uid'] = np.array([str(uuid.uuid4()) for _ in range(len(newbatch.batch))],
-                                                             dtype=object)
 
-                        batch_lst = sum([[newbatch[i:i + 1] for _ in range(n_samples)] for i in range(len(newbatch))],
-                                        [])
+                        # uid：给每个样本生成唯一标识，便于后续对齐、去重、debug
+                        newbatch.non_tensor_batch['uid'] = np.array([str(uuid.uuid4()) for _ in range(len(newbatch.batch))], dtype=object)
+
+                        batch_lst = sum([[newbatch[i:i + 1] for _ in range(n_samples)] for i in range(len(newbatch))], [])
 
                         gen_batch.meta_info = {
                             'eos_token_id': self.tokenizer.eos_token_id,
                             'n_samples': n_samples,
                             'pad_token_id': self.tokenizer.pad_token_id,
                         }
-                        
+
+                        # actor 根据 prompts 生成 action token 序列
                         gen_batch_output = self.actor_rollout_wg.generate_sequences(prompts=gen_batch)
                         
                         roll_batch = DataProto.concat(batch_lst)
@@ -555,7 +575,7 @@ class RayTrainer(object):
                     metrics['timing/gen'] += timer.last
                     
                     
-                    # do accuracy filtering and score logging
+                    # =============== 2) verify（准确率/格式/约束检查） ===============
                     with Timer(name='verify', text="{name}: {seconds:.1f} seconds") as timer:
                         scores_tensor, reward_metrics, format_metrics, reward_format_metrics = self.reward_fn.verify(roll_batch)
                         for k, v in reward_metrics.items():
@@ -568,8 +588,8 @@ class RayTrainer(object):
                             metrics['train_verify_score_wo_format/' + k].append(v)    
                             
                     metrics['timing/verify'] += timer.last
-                    
-                    # do accuracy filtering and score logging
+
+                    # =============== 3) filter（accuracy filtering and score logging） ===============
                     with Timer(name='acc&trunc_filter', text="{name}: {seconds:.1f} seconds") as timer:
                         if self.config.data.filter_accuracy or self.config.data.filter_truncated:
                             print(f"before filtering: {len(roll_batch)}")
@@ -577,7 +597,6 @@ class RayTrainer(object):
                             print(f"after filtering: {len(filtered_roll_batch)}")
                     metrics['timing/acc&trunc_filter'] += timer.last
 
-                    
                     if self.config.data.filter_warmup:
                         raise ValueError
                         roll_batch_to_add = filtered_roll_batch if len(filtered_roll_batch) > 0 else roll_batch
@@ -607,7 +626,8 @@ class RayTrainer(object):
                 
                 batch = valid_batch
                 print(f'rollout batch size: {len(batch)}')
-                
+
+                # =============== 4) compute advantage ===============
                 if self.use_reference_policy:
                     # compute reference log_prob
                     with Timer(name='ref', text="{name}: {seconds:.1f} seconds") as timer:
@@ -669,6 +689,7 @@ class RayTrainer(object):
                     entropy_output_metrics = reduce_metrics(entropy_output.meta_info['metrics'])
                     metrics.update(actor_output_metrics)
                     metrics.update(entropy_output_metrics)
+
                 # validate
                 if self.val_reward_fn is not None and (global_steps + 1) % self.config.trainer.test_freq == 0:
                     with Timer(name='testing', text="{name}: {seconds:.1f} seconds") as timer:
