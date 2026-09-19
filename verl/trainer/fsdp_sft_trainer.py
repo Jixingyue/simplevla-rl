@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-A lightweight one-file FSDP SFT Trainer
+一个轻量的单文件 FSDP SFT Trainer
 TODO(zhangchi.usc1992)
-- Add calculation of mfu
-- Add validation
+- 添加 mfu 的计算
+- 添加验证
 """
 
 import os
@@ -60,21 +60,21 @@ class FSDPSFTTrainer(object):
     def __init__(self, config, device_mesh: DeviceMesh):
         self.config = config
         self.device_mesh = device_mesh
-        # build tokenizer first
+        # 先构建 tokenizer
         local_model_path = copy_local_path_from_hdfs(src=self.config.model.partial_pretrain, verbose=True)
         from verl.utils import hf_tokenizer
         self.tokenizer = hf_tokenizer(local_model_path, trust_remote_code=self.config.model.trust_remote_code)
         if self.config.data.chat_template is not None:
             raise ValueError('Apply Chat template from config is not supported yet.')
 
-        # normalize dp size
+        # 归一化 dp size
         self._normalize_config_bsz()
 
         self._build_dataloader()
-        # build model
+        # 构建模型
         self._build_model_optimizer()
 
-        # TODO: add checkpoint manager
+        # TODO: 添加 checkpoint 管理器
         if self.device_mesh.get_rank() == 0:
             print(self.config)
 
@@ -91,7 +91,7 @@ class FSDPSFTTrainer(object):
 
     def _build_dataloader(self):
         config = self.config
-        # build dataset
+        # 构建数据集
         self.train_dataset = SFTDataset(parquet_files=config.data.train_files,
                                         tokenizer=self.tokenizer,
                                         prompt_key=config.data.prompt_key,
@@ -109,7 +109,7 @@ class FSDPSFTTrainer(object):
                                       max_length=config.data.max_length,
                                       truncation=config.data.truncation)
 
-        # build dataloader
+        # 构建 dataloader
         rank = self.device_mesh.get_rank()
         world_size = self.device_mesh.size()
         self.train_sampler = DistributedSampler(self.train_dataset,
@@ -134,22 +134,22 @@ class FSDPSFTTrainer(object):
 
     def _build_model_optimizer(self):
         # TODO (zhangchi.usc1992):
-        # 1. support pretrain from random weights
-        # 2. support init directly from sharded weights
+        # 1. 支持从随机权重开始预训练
+        # 2. 支持直接从分片权重初始化
         local_model_path = copy_local_path_from_hdfs(src=self.config.model.partial_pretrain, verbose=True)
 
         if self.config.model.get('external_lib', None) is not None:
-            # This is used to import external_lib into the huggingface systems
+            # 这用于将 external_lib 导入到 huggingface 系统中
             import importlib
             importlib.import_module(self.config.model.external_lib)
 
         log_gpu_memory_usage('Before model allocation', logger=logger)
 
         trust_remote_code = self.config.model.trust_remote_code
-        # load config first
+        # 先加载 config
         config = AutoConfig.from_pretrained(local_model_path, trust_remote_code=trust_remote_code)
 
-        # This may be very large
+        # 这可能会非常大
         init_context = get_init_weight_context_manager(use_meta_tensor=not config.tie_word_embeddings)
 
         with init_context():
@@ -219,17 +219,17 @@ class FSDPSFTTrainer(object):
             output = self.fsdp_model(input_ids=batch['input_ids'],
                                      attention_mask=batch['attention_mask'],
                                      position_ids=batch['position_ids'],
-                                     use_cache=False)  # prevent model thinks it it generating
+                                     use_cache=False)  # 防止模型认为它正在生成
 
         logits = output.logits
 
         shift_logits = logits[..., :-1, :].contiguous()
         shift_labels = labels.contiguous()
-        # Flatten the tokens
+        # 将 token 展平
         loss_fct = nn.CrossEntropyLoss(reduction='none')
         shift_logits = shift_logits.view(-1, self.model.config.vocab_size)
         shift_labels = shift_labels.view(-1)
-        # Enable model parallelism
+        # 启用模型并行
         shift_labels = shift_labels.to(shift_logits.device)
         loss = loss_fct(shift_logits, shift_labels)
         loss = loss * loss_mask
@@ -237,12 +237,12 @@ class FSDPSFTTrainer(object):
         valid_token_this_rank = torch.sum(loss_mask)
 
         if self.config.data.balance_dp_token:
-            torch.distributed.all_reduce(valid_token_this_rank)  # becomes total valid tokens in all ranks
+            torch.distributed.all_reduce(valid_token_this_rank)  # 变成所有 rank 上的总有效 token 数
             dp_size = torch.distributed.get_world_size()
         else:
             dp_size = 1
 
-        loss = torch.sum(loss) / valid_token_this_rank * dp_size  # possible bugs here for dp
+        loss = torch.sum(loss) / valid_token_this_rank * dp_size  # 这里在 dp 下可能存在 bug
         return loss
 
     def training_step(self, batch: TensorDict):
@@ -270,12 +270,12 @@ class FSDPSFTTrainer(object):
 
         self.lr_scheduler.step()
 
-        # reduce loss across dp ranks
+        # 在 dp rank 之间归约 loss
         lr = self.lr_scheduler.get_last_lr()[0]
 
         log_gpu_memory_usage('After offload weights', logger=logger)
 
-        # TODO: all reduce to get accurate loss
+        # TODO: all reduce 以获得准确的 loss
         return {'train/loss': loss.detach().item(), 'train/lr(1e-3)': lr * 1e3}
 
     def validation_step(self, batch: TensorDict):
@@ -286,14 +286,14 @@ class FSDPSFTTrainer(object):
         return loss
 
     def save_checkpoint(self, step):
-        # save checkpoint
+        # 保存 checkpoint
         from torch.distributed.fsdp import FullStateDictConfig, StateDictType
         cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
         with FSDP.state_dict_type(self.fsdp_model, StateDictType.FULL_STATE_DICT, cfg):
             state_dict = self.fsdp_model.state_dict()
 
         path = os.path.join(self.config.trainer.default_local_dir, f'global_step_{step}')
-        # save huggingface model
+        # 保存 huggingface 模型
         if self.device_mesh.get_rank() == 0:
             os.makedirs(path, exist_ok=True)
             self.model.save_pretrained(path, state_dict=state_dict)
@@ -306,7 +306,7 @@ class FSDPSFTTrainer(object):
     def fit(self):
         rank = self.device_mesh.get_rank()
 
-        # TODO: add a unified tracking
+        # TODO: 添加统一的 tracking
         if rank == 0:
             tracking = Tracking(project_name=self.config.trainer.project_name,
                                 experiment_name=self.config.trainer.experiment_name,
@@ -314,7 +314,7 @@ class FSDPSFTTrainer(object):
 
         global_step = 0
 
-        # TODO (zhangchi.usc1992) add back checkpoint manager. Currently, it blocks when uploading to hdfs. So very slow.
+        # TODO (zhangchi.usc1992) 加回 checkpoint 管理器。目前上传到 hdfs 时会阻塞，因此非常慢。
 
         for epoch in range(self.config.trainer.total_epochs):
             self.train_sampler.set_epoch(epoch=epoch)
@@ -325,7 +325,7 @@ class FSDPSFTTrainer(object):
                     tracking.log(data=metric, step=global_step)
                 global_step += 1
 
-            # validation
+            # 验证
             val_losses = []
             for data in self.val_dataloader:
                 data = TensorDict(data, batch_size=self.config.data.micro_batch_size).cuda()
@@ -337,7 +337,7 @@ class FSDPSFTTrainer(object):
                 tracking.log(data=metric, step=global_step)
             torch.distributed.barrier()
 
-            # save checkpoint
+            # 保存 checkpoint
             self.save_checkpoint(step=global_step)
 
 

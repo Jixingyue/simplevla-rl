@@ -1,7 +1,7 @@
 """
-This logic is largely copied from the Hendrycks' MATH release (math_equivalence).
+此逻辑主要复制自 Hendrycks 的 MATH 发布版（math_equivalence）。
 
-From: https://github.com/openai/prm800k/blob/main/prm800k/grading/math_normalize.py
+来源：https://github.com/openai/prm800k/blob/main/prm800k/grading/math_normalize.py
 """
 import re
 from typing import Optional
@@ -12,7 +12,7 @@ def normalize_answer(answer: Optional[str]) -> Optional[str]:
         return None
     answer = answer.strip()
     try:
-        # Remove enclosing `\text{}`.
+        # 移除外层的 `\text{}`。
         m = re.search("^\\\\text\{(?P<text>.+?)\}$", answer)
         if m is not None:
             answer = m.group("text").strip()
@@ -69,7 +69,7 @@ def _fix_a_slash_b(string):
 
 
 def _remove_right_units(string):
-    # "\\text{ " only ever occurs (at least in the val set) when describing units
+    # "\\text{ " 只在描述单位时出现（至少在验证集中如此）
     if "\\text{ " in string:
         splits = string.split("\\text{ ")
         assert len(splits) == 2
@@ -94,70 +94,70 @@ def _fix_sqrt(string):
 
 
 def _strip_string(string):
-    # linebreaks
+    # 换行符
     string = string.replace("\n", "")
     # print(string)
 
-    # remove inverse spaces
+    # 移除反向空格
     string = string.replace("\\!", "")
     # print(string)
 
-    # replace \\ with \
+    # 将 \\ 替换为 \
     string = string.replace("\\\\", "\\")
     # print(string)
 
-    # replace tfrac and dfrac with frac
+    # 将 tfrac 和 dfrac 替换为 frac
     string = string.replace("tfrac", "frac")
     string = string.replace("dfrac", "frac")
     # print(string)
 
-    # remove \left and \right
+    # 移除 \left 和 \right
     string = string.replace("\\left", "")
     string = string.replace("\\right", "")
     # print(string)
 
-    # Remove circ (degrees)
+    # 移除 circ（度数符号）
     string = string.replace("^{\\circ}", "")
     string = string.replace("^\\circ", "")
 
-    # remove dollar signs
+    # 移除美元符号
     string = string.replace("\\$", "")
 
-    # remove units (on the right)
+    # 移除单位（右侧）
     string = _remove_right_units(string)
 
-    # remove percentage
+    # 移除百分号
     string = string.replace("\\%", "")
     string = string.replace("\%", "")
 
-    # " 0." equivalent to " ." and "{0." equivalent to "{." Alternatively, add "0" if "." is the start of the string
+    # " 0." 等价于 " ."，"{0." 等价于 "{."；或者，若 "." 位于字符串开头则在前面添加 "0"
     string = string.replace(" .", " 0.")
     string = string.replace("{.", "{0.")
-    # if empty, return empty string
+    # 若为空，则返回空字符串
     if len(string) == 0:
         return string
     if string[0] == ".":
         string = "0" + string
 
-    # to consider: get rid of e.g. "k = " or "q = " at beginning
+    # 待考虑：去掉开头如 "k = " 或 "q = " 的部分
     if len(string.split("=")) == 2:
         if len(string.split("=")[0]) <= 2:
             string = string.split("=")[1]
 
-    # fix sqrt3 --> sqrt{3}
+    # 修正 sqrt3 --> sqrt{3}
     string = _fix_sqrt(string)
 
-    # remove spaces
+    # 移除空格
     string = string.replace(" ", "")
 
-    # \frac1b or \frac12 --> \frac{1}{b} and \frac{1}{2}, etc. Even works with \frac1{72} (but not \frac{72}1). Also does a/b --> \\frac{a}{b}
+    # \frac1b 或 \frac12 --> \frac{1}{b} 和 \frac{1}{2} 等。即使 \frac1{72}（但不是 \frac{72}1）也能正确处理。同时将 a/b --> \\frac{a}{b}
     string = _fix_fracs(string)
 
-    # manually change 0.5 --> \frac{1}{2}
+    # 手动将 0.5 --> \frac{1}{2}
     if string == "0.5":
         string = "\\frac{1}{2}"
 
-    # NOTE: X/Y changed to \frac{X}{Y} in dataset, but in simple cases fix in case the model output is X/Y
+    # NOTE: 数据集中 X/Y 已改为 \frac{X}{Y}，但在简单情况下仍作修正，以防模型输出为 X/Y
     string = _fix_a_slash_b(string)
 
     return string

@@ -35,13 +35,13 @@ from .config import ModelConfig, LoadConfig
 logger = init_logger(__name__)
 
 
-# How batches are constructed.
+# batch 的构建方式。
 class BatchType(IntEnum):
-    # Every batch is prefill.
+    # 每个 batch 都是 prefill。
     PREFILL = 0
-    # Every batch is decode.
+    # 每个 batch 都是 decode。
     DECODE = 1
-    # Batch is a mixture of prefill and decode.
+    # batch 是 prefill 和 decode 的混合。
     MIXED = 2
 
 
@@ -49,7 +49,7 @@ class ModelRunner(ModelRunner):
 
     def __init__(
         self,
-        model: Union[nn.Module, Dict], # model itself or its parameter dict
+        model: Union[nn.Module, Dict], # 模型本身或其参数字典
         model_config: ModelConfig,
         parallel_config: ParallelConfig,
         scheduler_config: SchedulerConfig,
@@ -65,20 +65,20 @@ class ModelRunner(ModelRunner):
         self.lora_config = lora_config
         self.load_config = load_config
 
-        # model_config can be None in tests/samplers/test_sampler.py.
-        # FIXME(woosuk): This is a hack to make the tests work. Refactor this.
+        # 在 tests/samplers/test_sampler.py 中 model_config 可以为 None。
+        # FIXME(woosuk): 这是让测试能通过的一种权宜之计。需要重构。
         self.sliding_window = (model_config.get_sliding_window() if model_config is not None else None)
         self.device_config = (device_config if device_config is not None else DeviceConfig())
         self.device = self.device_config.device
 
-        # NOTE(sgm): add for verl
-        self.model = model  # this will be replaced by get_model()
+        # NOTE(sgm): 为 verl 添加
+        self.model = model  # 这将被 get_model() 替换
 
-        # Set after load_model.
+        # 在 load_model 之后设置。
         self.lora_manager: LRUCacheWorkerLoRAManager = None
 
         self.graph_runners: Dict[int, CUDAGraphRunner] = {}
-        self.graph_memory_pool: Optional[Tuple[int, int]] = None  # Set during graph capture.
+        self.graph_memory_pool: Optional[Tuple[int, int]] = None  # 在 graph capture 期间设置。
 
         self.max_seq_len_to_capture = (self.model_config.max_seq_len_to_capture if self.model_config is not None else 0)
 
@@ -88,20 +88,20 @@ class ModelRunner(ModelRunner):
 
         self.attn_backend = get_attn_backend(self.model_config.dtype if model_config is not None else None)
 
-        # Lazy initialization
-        self.block_size: int  # Set after initial profiling.
-        # When using CUDA graph, the input block tables must be padded to
-        # max_seq_len_to_capture. However, creating the block table in
-        # Python can be expensive. To optimize this, we cache the block table
-        # in numpy and only copy the actual input content at every iteration.
-        # The shape of the cached block table will be
-        # (max batch size to capture, max context len to capture / block size).
-        self.graph_block_tables: torch.Tensor  # Set after initial profiling.
+        # 惰性初始化
+        self.block_size: int  # 在初始 profiling 之后设置。
+        # 使用 CUDA graph 时，输入的 block table 必须填充到
+        # max_seq_len_to_capture。然而，在 Python 中创建 block table
+        # 的开销可能很大。为了优化这一点，我们将 block table
+        # 缓存在 numpy 中，并且每次迭代只复制实际的输入内容。
+        # 缓存的 block table 形状为
+        # (max batch size to capture, max context len to capture / block size)。
+        self.graph_block_tables: torch.Tensor  # 在初始 profiling 之后设置。
 
-        # Set if the backend is flashinfer.
+        # 如果后端是 flashinfer 则设置。
         self.flashinfer_workspace_buffer: torch.Tensor
 
-    # NOTE(sgm): initialize model using the actor model
+    # NOTE(sgm): 使用 actor 模型初始化模型
     def load_model(self) -> None:
         with CudaMemoryProfiler() as m:
             self.model = get_model(actor_model=self.model,
@@ -127,7 +127,7 @@ class ModelRunner(ModelRunner):
             self.model = self.lora_manager.create_lora_manager(self.model)
 
         if self.kv_cache_dtype == "fp8" and is_hip():
-            # Currently scaled KV cache is only enabled on ROCm
+            # 目前 scaled KV cache 仅在 ROCm 上启用
             if self.model_config.quantization_param_path is not None:
                 if callable(getattr(self.model, "load_kv_cache_scales", None)):
                     self.model.load_kv_cache_scales(self.model_config.quantization_param_path)
@@ -149,7 +149,7 @@ class ModelRunner(ModelRunner):
         seq_group_metadata_list: List[SequenceGroupMetadata],
     ) -> Tuple[torch.Tensor, torch.Tensor, AttentionMetadata, SamplingMetadata, Set[LoRARequest], LoRAMapping,
                torch.Tensor]:
-        # NOTE(sgm): all workers prepare the input in the same way
+        # NOTE(sgm): 所有 worker 以相同的方式准备输入
         prefill_reqs = []
         decode_reqs = []
         for seq_group_meta in seq_group_metadata_list:
@@ -158,7 +158,7 @@ class ModelRunner(ModelRunner):
             else:
                 decode_reqs.append(seq_group_meta)
 
-        # Prepare input tensors.
+        # 准备输入张量。
         (
             input_tokens,
             input_positions,
@@ -190,8 +190,8 @@ class ModelRunner(ModelRunner):
         num_prefill_tokens = len(input_tokens)
         num_decode_tokens = len(decode_input_tokens)
 
-        # Coalesce tensors. Note that attn_metadata is currently not
-        # coalesced for simplicity.
+        # 合并张量。注意，为简单起见，attn_metadata 目前
+        # 未进行合并。
         input_tokens.extend(decode_input_tokens)
         input_positions.extend(decode_input_positions)
         slot_mapping.extend(decode_slot_mapping)
@@ -211,9 +211,9 @@ class ModelRunner(ModelRunner):
         else:
             lora_mapping = None
 
-        # Broadcast the metadata.
-        # If batch contains both prefill and decode, it sends 2 broadcasts.
-        # If it only contains 1 type, it triggers a single broadcast.
+        # 广播元数据。
+        # 如果 batch 同时包含 prefill 和 decode，会发送 2 次广播。
+        # 如果只包含 1 种类型，则只触发一次广播。
         if (prefill_attn_metadata is not None and decode_attn_metadata is not None):
             batch_type = BatchType.MIXED
         elif prefill_attn_metadata is not None:
@@ -246,7 +246,7 @@ class ModelRunner(ModelRunner):
         if self.lora_config:
             self.set_active_loras(lora_requests, lora_mapping)
 
-        # Currently cuda graph is only supported by the decode phase.
+        # 目前 cuda graph 仅在 decode 阶段受支持。
         prefill_meta = attn_metadata.prefill_metadata
         decode_meta = attn_metadata.decode_metadata
         if prefill_meta is None and decode_meta.use_cuda_graph:
@@ -264,15 +264,15 @@ class ModelRunner(ModelRunner):
             execute_model_kwargs.update({"image_input": multi_modal_input})
         hidden_states = model_executable(**execute_model_kwargs)
 
-        # Compute the logits.
+        # 计算 logits。
         logits = self.model.compute_logits(hidden_states, sampling_metadata)
 
-        # Only perform sampling in the driver worker.
+        # 只在 driver worker 上执行采样。
         # if not self.is_driver_worker:
         #     return None
 
-        # TODO(sgm): perform sampling on rank 0
-        # Sample the next token.
+        # TODO(sgm): 在 rank 0 上执行采样
+        # 采样下一个 token。
         output = self.model.sample(
             logits=logits,
             sampling_metadata=sampling_metadata,

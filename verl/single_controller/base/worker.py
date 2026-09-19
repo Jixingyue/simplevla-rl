@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-the class for Worker
+Worker 类
 """
 import os
 import socket
@@ -79,13 +79,13 @@ class WorkerMeta:
         return {f"_{key.lower()}": self._store.get(f"_{key.lower()}", None) for key in WorkerMeta.keys}
 
 
-# we assume that in each WorkerGroup, there is a Master Worker
+# 我们假设每个 WorkerGroup 中都存在一个 Master Worker
 class Worker(WorkerHelper):
 
     def __new__(cls, *args, **kwargs):
         instance = super().__new__(cls)
 
-        # note that here we use int to distinguish
+        # 注意这里用 int 来区分
         disable_worker_init = int(os.environ.get('DISABLE_WORKER_INIT', 0))
         if disable_worker_init:
             return instance
@@ -93,7 +93,7 @@ class Worker(WorkerHelper):
         rank = os.environ.get("RANK", None)
         worker_group_prefix = os.environ.get("WG_PREFIX", None)
 
-        # when decorator @ray.remote applies, __new__ will be called while we don't want to apply _configure_before_init
+        # 当应用 @ray.remote 装饰器时会调用 __new__，而此时我们不希望执行 _configure_before_init
         if None not in [rank, worker_group_prefix] and 'ActorClass(' not in cls.__name__:
             instance._configure_before_init(f"{worker_group_prefix}_register_center", int(rank))
 
@@ -117,7 +117,7 @@ class Worker(WorkerHelper):
             os.environ.update(rank_zero_info)
 
     def __init__(self, cuda_visible_devices=None) -> None:
-        # construct a meta from envrionment variable. Note that the import must be inside the class because it is executed remotely
+        # 从环境变量构造 meta。注意 import 必须放在类内部，因为相关代码会在远端执行
         import os
         world_size = int(os.environ['WORLD_SIZE'])
         rank = int(os.environ['RANK'])
@@ -146,10 +146,10 @@ class Worker(WorkerHelper):
 
     def _configure_with_meta(self, meta: WorkerMeta):
         """
-        This function should only be called inside by WorkerGroup
+        该函数只应由 WorkerGroup 在内部调用
         """
         assert isinstance(meta, WorkerMeta)
-        self.__dict__.update(meta.to_dict())  # this is hacky
+        self.__dict__.update(meta.to_dict())  # 这里写得比较 hacky
         # print(f"__dict__: {self.__dict__}")
         for key in WorkerMeta.keys:
             val = self.__dict__.get(f"_{key.lower()}", None)

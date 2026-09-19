@@ -3,15 +3,15 @@ import random
 from typing import Dict, Tuple, Optional
 
 def extract_solution(solution_str: str) -> Tuple[Optional[str], str]:
-    """Extracts the final answer from the model's response string.
+    """从模型响应字符串中提取最终答案。
     
-    Args:
-        solution_str: Raw response string from the language model
+    参数:
+        solution_str: 语言模型的原始响应字符串
         
-    Returns:
-        Tuple containing (extracted_answer, processed_string)
+    返回:
+        元组 (提取的答案, 处理后的字符串)
     """
-    # Split response to isolate assistant output
+    # 拆分响应以分离出 assistant 的输出
     if "Assistant:" in solution_str:
         processed_str = solution_str.split("Assistant:", 1)[1]
     elif "<|im_start|>assistant" in solution_str:
@@ -20,7 +20,7 @@ def extract_solution(solution_str: str) -> Tuple[Optional[str], str]:
         # print("[Error] Failed to locate model response header")
         return None, solution_str
 
-    # Extract final answer using XML-style tags
+    # 使用 XML 风格的标签提取最终答案
     answer_pattern = r'<answer>(.*?)</answer>'
     matches = list(re.finditer(answer_pattern, processed_str, re.DOTALL))
     
@@ -32,13 +32,13 @@ def extract_solution(solution_str: str) -> Tuple[Optional[str], str]:
     return final_answer, processed_str
 
 def parse_solution_text_format(solution_text: str) -> Dict[str, str]:
-    """Parses ground truth solution text into status dictionary.
+    """将真实答案文本解析为角色状态字典。
     
-    Args:
-        solution_text: Formatted solution text from dataset
+    参数:
+        solution_text: 数据集中格式化的解答文本
         
-    Returns:
-        Dictionary mapping character names to their roles (knight/knave)
+    返回:
+        将角色名映射到其身份（knight/knave）的字典
     """
     status_dict = {}
     # print("\n[Ground Truth Parsing]")
@@ -59,14 +59,14 @@ def parse_solution_text_format(solution_text: str) -> Dict[str, str]:
     return status_dict
 
 def parse_model_answer(answer_text: str, expected_names: list) -> Optional[Dict[str, str]]:
-    """Parses model's answer text into status dictionary.
+    """将模型的答案文本解析为状态字典。
     
-    Args:
-        answer_text: Text extracted from model's <answer> tags
-        expected_names: List of character names requiring identification
+    参数:
+        answer_text: 从模型 <answer> 标签中提取的文本
+        expected_names: 需要识别身份的角色名列表
         
-    Returns:
-        Dictionary mapping character names to predicted roles, or None if incomplete
+    返回:
+        将角色名映射到预测身份的字典；若不完整则返回 None
     """
     status_dict = {}
     # print("\n[Model Answer Parsing]")
@@ -98,18 +98,18 @@ def parse_model_answer(answer_text: str, expected_names: list) -> Optional[Dict[
     return status_dict
 
 def validate_response_structure(processed_str: str) -> bool:
-    """Performs comprehensive validation of response structure.
+    """对响应结构进行全面的校验。
     
-    Args:
-        processed_str: Processed response string from the model
+    参数:
+        processed_str: 来自模型的、已处理的响应字符串
         
-    Returns:
-        Boolean indicating whether all formatting requirements are met
+    返回:
+        布尔值，表示是否满足所有格式要求
     """
     # print("\n[Structure Validation]")
     validation_passed = True
 
-    # Check required tags
+    # 检查必需的标签
     tags = {
         'think_start': ('<think>', 1),
         'think_end': ('</think>', 1),
@@ -128,7 +128,7 @@ def validate_response_structure(processed_str: str) -> bool:
             # print(f"  [Error] {tag_str} appears {count} times (expected {expected_count})")
             validation_passed = False
 
-    # Verify tag order
+    # 校验标签顺序
     if (positions['think_start'] > positions['think_end'] or
         positions['think_end'] > positions['answer_start'] or
         positions['answer_start'] > positions['answer_end']):
@@ -144,16 +144,16 @@ def compute_score(solution_str: str,
                  ground_truth: Dict[str, str],
                  format_reward: int = 1,
                  answer_reward: float = 1.0) :
-    """Computes comprehensive score for model response.
+    """为模型响应计算综合得分。
     
-    Args:
-        solution_str: Raw model response string
-        ground_truth: Dictionary containing ground truth data
-        format_reward: Points awarded/deducted for format correctness
-        answer_reward: Points awarded/deducted for answer correctness
+    参数:
+        solution_str: 模型的原始响应字符串
+        ground_truth: 包含真实数据的字典
+        format_reward: 格式正确与否的加分/扣分
+        answer_reward: 答案正确与否的加分/扣分
         
-    Returns:
-        Total score (sum of format and answer rewards)
+    返回:
+        总分（格式分与答案分之和）
     """
     do_print = random.randint(1, 256) == 1
 
@@ -161,26 +161,26 @@ def compute_score(solution_str: str,
         print("\n" + "="*80)
         print(" Processing New Sample ".center(80, '='))
         
-    # Parse ground truth data
+    # 解析真实数据
     solution_text = ground_truth.get('solution_text_format', '')
     gt_status = parse_solution_text_format(solution_text)
     expected_names = list(gt_status.keys())
     if do_print:
         print(f"[Ground Truth] Final identities: {gt_status}")
 
-    # Extract model answer
+    # 提取模型答案
     answer_text, processed_str = extract_solution(solution_str)
     if do_print:
         print(f"\n[Model Response]\n{processed_str}")
 
-    # Validate response structure
+    # 校验响应结构
     format_correct = validate_response_structure(processed_str)
     format_score = format_reward if format_correct else -abs(format_reward)
     if do_print:
         print(f"\n  Format validation: {'PASS' if format_correct else 'FAIL'}")
         print(f"  Format score: {format_score}")
 
-    # Validate answer content
+    # 校验答案内容
     answer_score = 0
     if format_correct and answer_text:
         pred_status = parse_model_answer(answer_text, expected_names)

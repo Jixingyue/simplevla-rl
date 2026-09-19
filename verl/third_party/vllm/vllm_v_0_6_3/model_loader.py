@@ -11,8 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/tree/main/vllm/model_executor/models
-"""Utilities for selecting and loading models."""
+# 改编自 https://github.com/vllm-project/vllm/tree/main/vllm/model_executor/models
+"""选择和加载模型的工具函数。"""
 from typing import Dict, Optional, Union
 
 import torch
@@ -63,7 +63,7 @@ def get_model(
 
 
 def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
-    """Get a model loader based on the load format."""
+    """根据加载格式获取模型加载器。"""
 
     if isinstance(load_config.load_format, type):
         return load_config.load_format(load_config)
@@ -72,7 +72,7 @@ def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
         update_megatron_weight_loader()
         return MegatronLoader(load_config)
 
-    # NOTE(sgm): change the weight_loader function in runtime
+    # NOTE(sgm): 在运行时替换 weight_loader 函数
     if load_config.load_format == LoadFormat.MEGATRON:
         update_megatron_weight_loader()
         return MegatronLoader(load_config)
@@ -102,7 +102,7 @@ def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
 
 
 class DummyModelLoader(BaseModelLoader):
-    """Model loader that will set model weights to random values."""
+    """将模型权重设置为随机值的模型加载器。"""
 
     def __init__(self, load_config: LoadConfig):
         super().__init__(load_config)
@@ -126,14 +126,14 @@ class DummyModelLoader(BaseModelLoader):
         with set_default_torch_dtype(model_config.dtype):
             with torch.device(device_config.device):
                 model = _initialize_model(model_config, self.load_config, lora_config, cache_config, scheduler_config)
-            # NOTE(woosuk): For accurate performance evaluation, we assign
-            # random values to the weights.
+            # NOTE(woosuk): 为了准确评估性能，我们为权重分配了
+            # 随机值。
             # initialize_dummy_weights(model)
         return model.eval()
 
 
 class MegatronLoader(BaseModelLoader):
-    """Model loader that can load the model weights from partitioned megatron model."""
+    """可以从分片的 megatron 模型加载模型权重的模型加载器。"""
 
     def __init__(self, load_config: LoadConfig):
         super().__init__(load_config)
@@ -142,10 +142,10 @@ class MegatronLoader(BaseModelLoader):
                              f"load format {load_config.load_format}")
 
     def download_model(self, model_config: ModelConfig) -> None:
-        pass  # Nothing to download
+        pass  # 没有需要下载的内容
 
     def _get_weights_iterator(actor_model: Union[PreTrainedModel, Dict]):
-        # NOTE(shengguangming) Load the weights from the actor model
+        # NOTE(shengguangming) 从 actor 模型加载权重
         pass
         # if isinstance(actor_model, nn.Module):
         #     load_weights(actor_weights=dict(actor_model.named_parameters(remove_duplicate=False)), vllm_model=model)
@@ -167,7 +167,7 @@ class MegatronLoader(BaseModelLoader):
             with torch.device(device_config.device):
                 model = _initialize_model(model_config, self.load_config, lora_config, cache_config, scheduler_config)
 
-            # TODO(sgm): This is a hack, we need to register the load_weight() func for each model in vllm
+            # TODO(sgm): 这是一种权宜做法，我们需要为 vllm 中的每个模型注册 load_weight() 函数
             if isinstance(actor_model, nn.Module):
                 load_megatron_weights(actor_weights=dict(actor_model.named_parameters(remove_duplicate=False)),
                                       vllm_model=model)
@@ -178,17 +178,17 @@ class MegatronLoader(BaseModelLoader):
                 quant_method = getattr(module, "quant_method", None)
                 if quant_method is not None:
                     quant_method.process_weights_after_loading(module)
-                # FIXME: Remove this after Mixtral is updated
-                # to use quant_method.
+                # FIXME: 在 Mixtral 更新为使用 quant_method 后
+                # 移除此段。
                 if hasattr(module, "process_weights_after_loading"):
                     module.process_weights_after_loading()
-        # NOTE(sgm) Some weights are point to gpu, but still need this.
-        model = model.cuda()  # NOTE (zhangchi.usc1992) We need this for vllm to profile memory usage
+        # NOTE(sgm) 有些权重已指向 gpu，但仍然需要这一步。
+        model = model.cuda()  # NOTE (zhangchi.usc1992) vllm 分析内存占用时需要这一步
         return model.eval()
 
 
 class HFLoader(BaseModelLoader):
-    """Model loader that can load the model weights from model's full params."""
+    """可以从模型的完整参数加载模型权重的模型加载器。"""
 
     def __init__(self, load_config: LoadConfig):
         super().__init__(load_config)
@@ -216,24 +216,24 @@ class HFLoader(BaseModelLoader):
     ) -> nn.Module:
         with set_default_torch_dtype(model_config.dtype):
             # with torch.device(device_config.device):
-            # NOTE(sgm): init the model in cpu
+            # NOTE(sgm): 在 cpu 上初始化模型
             model = _initialize_model(model_config, self.load_config, lora_config, cache_config, scheduler_config)
             model.load_weights(self._get_weights_iterator(actor_model))
             for _, module in model.named_modules():
                 quant_method = getattr(module, "quant_method", None)
                 if quant_method is not None:
                     quant_method.process_weights_after_loading(module)
-                # FIXME: Remove this after Mixtral is updated
-                # to use quant_method.
+                # FIXME: 在 Mixtral 更新为使用 quant_method 后
+                # 移除此段。
                 if hasattr(module, "process_weights_after_loading"):
                     module.process_weights_after_loading()
-        # NOTE(sgm) Some weights are point to gpu, but still need this.
-        model = model.cuda()  # NOTE (zhangchi.usc1992) We need this for vllm to profile memory usage
+        # NOTE(sgm) 有些权重已指向 gpu，但仍然需要这一步。
+        model = model.cuda()  # NOTE (zhangchi.usc1992) vllm 分析内存占用时需要这一步
         return model.eval()
 
 
 class DTensorLoader(BaseModelLoader):
-    """Model loader that can load the model weights from partitioned megatron model."""
+    """可以从分片的 megatron 模型加载模型权重的模型加载器。"""
 
     def __init__(self, load_config: LoadConfig):
         super().__init__(load_config)
@@ -242,7 +242,7 @@ class DTensorLoader(BaseModelLoader):
                              f"load format {load_config.load_format}")
 
     def _get_weights_iterator(actor_model: Union[PreTrainedModel, Dict]):
-        # NOTE(shengguangming) Load the weights from the actor model
+        # NOTE(shengguangming) 从 actor 模型加载权重
         pass
         # if isinstance(actor_model, nn.Module):
         #     load_weights(actor_weights=dict(actor_model.named_parameters(remove_duplicate=False)), vllm_model=model)
@@ -264,7 +264,7 @@ class DTensorLoader(BaseModelLoader):
             with torch.device(device_config.device):
                 model = _initialize_model(model_config, self.load_config, lora_config, cache_config, scheduler_config)
 
-            # TODO(sgm): This is a hack, we need to register the load_weight() func for each model in vllm
+            # TODO(sgm): 这是一种权宜做法，我们需要为 vllm 中的每个模型注册 load_weight() 函数
             if isinstance(actor_model, nn.Module):
                 load_dtensor_weights(actor_weights=dict(actor_model.named_parameters(remove_duplicate=False)),
                                      vllm_model=model)
@@ -275,27 +275,27 @@ class DTensorLoader(BaseModelLoader):
                 quant_method = getattr(module, "quant_method", None)
                 if quant_method is not None:
                     quant_method.process_weights_after_loading(module)
-                # FIXME: Remove this after Mixtral is updated
-                # to use quant_method.
+                # FIXME: 在 Mixtral 更新为使用 quant_method 后
+                # 移除此段。
                 if hasattr(module, "process_weights_after_loading"):
                     module.process_weights_after_loading()
-        # NOTE(sgm) Some weights are point to gpu, but still need this.
-        model = model.cuda()  # NOTE (zhangchi.usc1992) We need this for vllm to profile memory usage
+        # NOTE(sgm) 有些权重已指向 gpu，但仍然需要这一步。
+        model = model.cuda()  # NOTE (zhangchi.usc1992) vllm 分析内存占用时需要这一步
         return model.eval()
 
 
-# FIXME(sgm): hack the _get_logits function in vllm v0.4.2
-# as they use ray, the _get_logits result will only need to return to the driver node,
-# therefore gather is enough. However, we use SPMD instead of a central scheduler,
-# all_gather is required (aligned with v0.2.6)
+# FIXME(sgm): 对 vllm v0.4.2 中的 _get_logits 函数做一个权宜修改
+# 由于它们使用 ray，_get_logits 的结果只需要返回到 driver 节点，
+# 因此 gather 就足够了。然而我们使用 SPMD 而不是中央调度器，
+# 所以需要 all_gather（与 v0.2.6 对齐）
 def _get_logits(self, hidden_states: torch.Tensor, embedding: torch.Tensor,
                 embedding_bias: Optional[torch.Tensor]) -> torch.Tensor:
-    # Get the logits for the next tokens.
+    # 获取下一个 token 的 logits。
     logits = torch.matmul(hidden_states, embedding.t())
     if embedding_bias is not None:
         logits += embedding_bias
     logits = tensor_model_parallel_all_gather(logits)
-    # Remove paddings in vocab (if any).
+    # 移除词表中的 padding（如果有）。
     if logits is not None:
         logits = logits[:, :self.org_vocab_size]
     return logits
@@ -314,19 +314,19 @@ def logitsprocessor_init(
 ) -> None:
     """
     Args:
-        scale: A scaling factor to apply to the logits.
+        scale: 应用于 logits 的缩放因子。
     """
     super(LogitsProcessor, self).__init__()
     self.scale = scale
     self.vocab_size = vocab_size
-    # Whether the input is logits (default is hidden states).
+    # 输入是否为 logits（默认为 hidden states）。
     self.logits_as_input = logits_as_input
-    # original vocabulary size (without LoRA).
+    # 原始词表大小（不含 LoRA）。
     self.org_vocab_size = org_vocab_size or vocab_size
-    # Soft cap the logits. Used in Gemma 2.
+    # 对 logits 做 soft cap。用于 Gemma 2。
     self.soft_cap = soft_cap
-    # Whether to use gather or all-gather to gather the logits.
+    # 使用 gather 还是 all-gather 来收集 logits。
     self.use_gather = False
 
 
-LogitsProcessor.__init__ = logitsprocessor_init  # use all_gather
+LogitsProcessor.__init__ = logitsprocessor_init  # 使用 all_gather

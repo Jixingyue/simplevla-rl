@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Offline evaluate the performance of a generated file using reward model and ground truth verifier.
-The input is a parquet file that contains N generated sequences and (optional) the ground truth.
+使用奖励模型和真值验证器对生成文件进行离线性能评估。
+输入是一个 parquet 文件，其中包含 N 条生成的序列以及（可选的）真值。
 
 """
 
@@ -47,7 +47,7 @@ def main(config):
     for i in range(total):
         response_lst = responses[i]
         data_source = data_sources[i]
-        # select reward score based on data_source
+        # 根据 data_source 选择奖励分数计算函数
         prompt = prompts[i]
         reward_data = reward_model_data[i]
         reward_fn = select_reward_fn(data_source)

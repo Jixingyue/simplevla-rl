@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Note that we don't combine the main with ray_trainer as ray_trainer is used by other main.
+注意：我们没有将 main 与 ray_trainer 合并在一起，因为 ray_trainer 会被其他 main 使用。
 """
 
 import json
@@ -28,15 +28,15 @@ import warnings
 warnings.filterwarnings("ignore", message="Batch mode enable graph is only supported with num_graph_seeds==1")
 
 class RobRewardManager():
-    """The reward manager.
+    """奖励管理器。
     """
-    # TODO: we are requiring a reward manager to be much more stronger than this. so this is fully refactored!
+    # TODO: 我们需要一个比这强大得多的奖励管理器，因此这里已完全重构！
     def __init__(self, num_examine,config) -> None:
-        self.num_examine = num_examine  # the number of batches of decoded responses to print to the console
+        self.num_examine = num_examine  # 打印到控制台的已解码回复 batch 数量
         self.config=config
 
     def verify(self, data):
-        completes = data.batch['complete'].tolist()  # per-sample
+        completes = data.batch['complete'].tolist()  # 每个样本
         batch_size = data.batch['responses'].size(0)
         assert len(completes) == batch_size
         score = [float(item) for item in completes]
@@ -56,7 +56,7 @@ class RobRewardManager():
         return score, reward_metrics, format_metrics, reward_format_metrics
 
     def __call__(self, data: DataProto):
-        # aggregate all available reward tensors
+        # 聚合所有可用的奖励张量
         reward_tensor_dict={}
         reward_metrics={}
         reward_tensor = torch.zeros_like(data.batch['responses'], dtype=torch.float32) # batch * 64 * 56
@@ -67,7 +67,7 @@ class RobRewardManager():
         valid_response_length = data.batch['finish_step'] * self.config.actor_rollout_ref.model.action_token_len 
        
         if 'acc' in data.batch:
-            # the separated rewards have been logged; now we add format correctness back for reward shaping
+            # 各项分离的奖励已被记录；现在把格式正确性加回来用于奖励塑形
             #verifier_score = data.batch['acc'].cpu().numpy().tolist() + (0.0 * data.batch['format_correctness'].cpu().numpy()).tolist()
             verifier_score = data.batch['acc'].cpu().numpy().tolist()
         else:
@@ -78,7 +78,7 @@ class RobRewardManager():
             
         reward_tensor_dict['gt_scores'] = verifier_reward
 
-        # If there is rm score, we directly return rm score. Otherwise, we compute via rm_score_fn
+        # 如果存在 rm 分数，则直接返回 rm 分数；否则通过 rm_score_fn 计算
         # if 'rm_scores' in data.batch.keys():
         #     raise  ValueError
         #     reward_tensor_dict['rm_scores'] = data.batch['rm_scores']
@@ -102,7 +102,7 @@ import hydra
 @hydra.main(config_path='config', config_name='ppo_trainer', version_base=None)
 def main(config):
     if not ray.is_initialized():
-        # this is for local ray cluster
+        # 这用于本地 ray 集群
         if os.path.isfile(str(config.trainer.runtime_env)):
             with open(str(config.trainer.runtime_env), 'r') as f:
                 runtime_env = json.load(f)
@@ -118,20 +118,20 @@ def main_task(config):
     from verl.utils.fs import copy_local_path_from_hdfs
     from transformers import AutoTokenizer
 
-    # print initial config
+    # 打印初始配置
     from pprint import pprint
     from omegaconf import OmegaConf
-    pprint(OmegaConf.to_container(config, resolve=True))  # resolve=True will eval symbol values
+    pprint(OmegaConf.to_container(config, resolve=True))  # resolve=True 会对符号值进行求值
     OmegaConf.resolve(config)
 
-    # download the checkpoint from hdfs
+    # 从 hdfs 下载 checkpoint
     local_path = copy_local_path_from_hdfs(config.actor_rollout_ref.model.path)
 
-    # instantiate tokenizer
+    # 实例化 tokenizer
     from verl.utils import hf_tokenizer
     tokenizer = hf_tokenizer(local_path)
 
-    # define worker classes
+    # 定义 worker 类
     if config.actor_rollout_ref.actor.strategy == 'fsdp':
         assert config.actor_rollout_ref.actor.strategy == config.critic.strategy
         from verl.workers.fsdp_workers import ActorRolloutRefWorker, CriticWorker, RobActorRolloutRefWorker
@@ -165,12 +165,12 @@ def main_task(config):
         Role.RefPolicy: global_pool_id,
     }
 
-    # we should adopt a multi-source reward function here
-    # - for rule-based rm, we directly call a reward score
-    # - for model-based rm, we call a model
-    # - for code related prompt, we send to a sandbox if there are test cases
-    # - finally, we combine all the rewards together
-    # - The reward type depends on the tag of the data
+    # 这里应采用多来源的奖励函数
+    # - 对于基于规则的 rm，直接调用奖励分数计算
+    # - 对于基于模型的 rm，调用一个模型
+    # - 对于代码相关的 prompt，如果有测试用例则发送到沙箱
+    # - 最后，将所有奖励组合在一起
+    # - 奖励类型取决于数据的 tag
     if config.reward_model.enable and config.reward_model.rm_coef!=0.:
         if config.reward_model.rm_type == 'normal':
             if config.reward_model.strategy == 'fsdp':
@@ -187,9 +187,9 @@ def main_task(config):
             raise NotImplementedError
         mapping[Role.RewardModel] = global_pool_id
 
-    reward_fn = RobRewardManager( num_examine=0, config=config) # note: verifier is called both inside reward_fn and outside.
+    reward_fn = RobRewardManager( num_examine=0, config=config) # 注意：verifier 在 reward_fn 内部和外部都会被调用。
 
-    # Note that we always use function-based RM for validation
+    # 注意：验证时我们始终使用基于函数的 RM
     val_reward_fn = RobRewardManager( num_examine=1,config=config)
 
     resource_pool_manager = ResourcePoolManager(resource_pool_spec=resource_pool_spec, mapping=mapping)

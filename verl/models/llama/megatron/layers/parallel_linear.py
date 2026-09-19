@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/linear.py
+# 改编自 https://github.com/vllm-project/vllm/blob/main/vllm/model_executor/layers/linear.py
 
 from typing import Optional, Tuple
 
@@ -30,7 +30,7 @@ class QKVParallelLinear(tensor_parallel.ColumnParallelLinear):
                  gather_output=True,
                  skip_bias_add=False,
                  **kwargs):
-        # Keep input parameters, and already restrict the head numbers
+        # 保存输入参数，且已对 head 数量做了限制
         self.input_size = input_size
         self.q_output_size = num_heads * head_dim
         self.kv_output_size = num_key_value_heads * head_dim
@@ -60,7 +60,7 @@ class MergedColumnParallelLinear(tensor_parallel.ColumnParallelLinear):
                  gather_output=True,
                  skip_bias_add=False,
                  **kwargs):
-        # Keep input parameters, and already restrict the head numbers
+        # 保存输入参数，且已对 head 数量做了限制
         self.input_size = input_size
         self.output_size = gate_ouput_size + up_output_size
         self.gather_output = gather_output

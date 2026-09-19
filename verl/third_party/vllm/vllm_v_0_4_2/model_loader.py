@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # Adapted from https://github.com/vllm-project/vllm/tree/main/vllm/model_executor/model_loader
-"""Utilities for selecting and loading models."""
+"""用于选择和加载模型的工具函数。"""
 from typing import Dict, Union, Optional, Iterable, Tuple
 
 import torch
@@ -53,7 +53,7 @@ def get_model(actor_model: Union[PreTrainedModel, Dict], model_config: ModelConf
 
 
 def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
-    """Get a model loader based on the load format."""
+    """根据加载格式获取模型加载器。"""
 
     if isinstance(load_config.load_format, type):
         return load_config.load_format(load_config)
@@ -62,7 +62,7 @@ def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
         update_megatron_weight_loader()
         return MegatronLoader(load_config)
 
-    # NOTE(sgm): change the weight_loader function in runtime
+    # NOTE(sgm): 在运行时替换 weight_loader 函数
     if load_config.load_format == LoadFormat.MEGATRON:
         update_megatron_weight_loader()
         return MegatronLoader(load_config)
@@ -92,7 +92,7 @@ def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
 
 
 class DummyModelLoader(BaseModelLoader):
-    """Model loader that will set model weights to random values."""
+    """将模型权重设置为随机值的模型加载器。"""
 
     def __init__(self, load_config: LoadConfig):
         super().__init__(load_config)
@@ -106,14 +106,14 @@ class DummyModelLoader(BaseModelLoader):
         with set_default_torch_dtype(model_config.dtype):
             with torch.device(device_config.device):
                 model = _initialize_model(model_config, self.load_config, lora_config, vision_language_config)
-            # NOTE(woosuk): For accurate performance evaluation, we assign
-            # random values to the weights.
+            # NOTE(woosuk): 为了准确评估性能，我们为权重
+            # 赋予随机值。
             # initialize_dummy_weights(model)
         return model.eval()
 
 
 class MegatronLoader(BaseModelLoader):
-    """Model loader that can load the model weights from partitioned megatron model."""
+    """可以从分区的 megatron 模型加载模型权重的模型加载器。"""
 
     def __init__(self, load_config: LoadConfig):
         super().__init__(load_config)
@@ -122,7 +122,7 @@ class MegatronLoader(BaseModelLoader):
                              f"load format {load_config.load_format}")
 
     def _get_weights_iterator(actor_model: Union[PreTrainedModel, Dict]):
-        # NOTE(shengguangming) Load the weights from the actor model
+        # NOTE(shengguangming) 从 actor 模型加载权重
         pass
         # if isinstance(actor_model, nn.Module):
         #     load_weights(actor_weights=dict(actor_model.named_parameters(remove_duplicate=False)), vllm_model=model)
@@ -138,7 +138,7 @@ class MegatronLoader(BaseModelLoader):
             with torch.device(device_config.device):
                 model = _initialize_model(model_config, self.load_config, lora_config, vision_language_config)
 
-            # TODO(sgm): This is a hack, we need to register the load_weight() func for each model in vllm
+            # TODO(sgm): 这是一种权宜之计，我们需要为 vllm 中的每个模型注册 load_weight() 函数
             if isinstance(actor_model, nn.Module):
                 load_megatron_weights(actor_weights=dict(actor_model.named_parameters(remove_duplicate=False)),
                                       vllm_model=model)
@@ -149,17 +149,17 @@ class MegatronLoader(BaseModelLoader):
                 quant_method = getattr(module, "quant_method", None)
                 if quant_method is not None:
                     quant_method.process_weights_after_loading(module)
-                # FIXME: Remove this after Mixtral is updated
-                # to use quant_method.
+                # FIXME: 等 Mixtral 更新为使用 quant_method 之后
+                # 再移除此代码。
                 if hasattr(module, "process_weights_after_loading"):
                     module.process_weights_after_loading()
-        # NOTE(sgm) Some weights are point to gpu, but still need this.
-        model = model.cuda()  # NOTE (zhangchi.usc1992) We need this for vllm to profile memory usage
+        # NOTE(sgm) 有些权重指向 gpu，但仍然需要这行代码。
+        model = model.cuda()  # NOTE (zhangchi.usc1992) 我们需要这行代码，以便 vllm 进行内存 profiling
         return model.eval()
 
 
 class HFLoader(BaseModelLoader):
-    """Model loader that can load the model weights from model's full params."""
+    """可以从模型的全量参数加载模型权重的模型加载器。"""
 
     def __init__(self, load_config: LoadConfig):
         super().__init__(load_config)
@@ -181,24 +181,24 @@ class HFLoader(BaseModelLoader):
                    parallel_config: ParallelConfig, scheduler_config: SchedulerConfig) -> nn.Module:
         with set_default_torch_dtype(model_config.dtype):
             # with torch.device(device_config.device):
-            # NOTE(sgm): init the model in cpu
+            # NOTE(sgm): 在 cpu 上初始化模型
             model = _initialize_model(model_config, self.load_config, lora_config, vision_language_config)
             model.load_weights(self._get_weights_iterator(actor_model))
             for _, module in model.named_modules():
                 quant_method = getattr(module, "quant_method", None)
                 if quant_method is not None:
                     quant_method.process_weights_after_loading(module)
-                # FIXME: Remove this after Mixtral is updated
-                # to use quant_method.
+                # FIXME: 等 Mixtral 更新为使用 quant_method 之后
+                # 再移除此代码。
                 if hasattr(module, "process_weights_after_loading"):
                     module.process_weights_after_loading()
-        # NOTE(sgm) Some weights are point to gpu, but still need this.
-        model = model.cuda()  # NOTE (zhangchi.usc1992) We need this for vllm to profile memory usage
+        # NOTE(sgm) 有些权重指向 gpu，但仍然需要这行代码。
+        model = model.cuda()  # NOTE (zhangchi.usc1992) 我们需要这行代码，以便 vllm 进行内存 profiling
         return model.eval()
 
 
 class DTensorLoader(BaseModelLoader):
-    """Model loader that can load the model weights from partitioned megatron model."""
+    """可以从分区的 megatron 模型加载模型权重的模型加载器。"""
 
     def __init__(self, load_config: LoadConfig):
         super().__init__(load_config)
@@ -207,7 +207,7 @@ class DTensorLoader(BaseModelLoader):
                              f"load format {load_config.load_format}")
 
     def _get_weights_iterator(actor_model: Union[PreTrainedModel, Dict]):
-        # NOTE(shengguangming) Load the weights from the actor model
+        # NOTE(shengguangming) 从 actor 模型加载权重
         pass
         # if isinstance(actor_model, nn.Module):
         #     load_weights(actor_weights=dict(actor_model.named_parameters(remove_duplicate=False)), vllm_model=model)
@@ -223,7 +223,7 @@ class DTensorLoader(BaseModelLoader):
             with torch.device(device_config.device):
                 model = _initialize_model(model_config, self.load_config, lora_config, vision_language_config)
 
-            # TODO(sgm): This is a hack, we need to register the load_weight() func for each model in vllm
+            # TODO(sgm): 这是一种权宜之计，我们需要为 vllm 中的每个模型注册 load_weight() 函数
             if isinstance(actor_model, nn.Module):
                 load_dtensor_weights(actor_weights=dict(actor_model.named_parameters(remove_duplicate=False)),
                                      vllm_model=model)
@@ -234,27 +234,27 @@ class DTensorLoader(BaseModelLoader):
                 quant_method = getattr(module, "quant_method", None)
                 if quant_method is not None:
                     quant_method.process_weights_after_loading(module)
-                # FIXME: Remove this after Mixtral is updated
-                # to use quant_method.
+                # FIXME: 等 Mixtral 更新为使用 quant_method 之后
+                # 再移除此代码。
                 if hasattr(module, "process_weights_after_loading"):
                     module.process_weights_after_loading()
-        # NOTE(sgm) Some weights are point to gpu, but still need this.
-        model = model.cuda()  # NOTE (zhangchi.usc1992) We need this for vllm to profile memory usage
+        # NOTE(sgm) 有些权重指向 gpu，但仍然需要这行代码。
+        model = model.cuda()  # NOTE (zhangchi.usc1992) 我们需要这行代码，以便 vllm 进行内存 profiling
         return model.eval()
 
 
-# FIXME(sgm): hack the _get_logits function in vllm v0.4.2
-# as they use ray, the _get_logits result will only need to return to the driver node,
-# therefore gather is enough. However, we use SPMD instead of a central scheduler,
-# all_gather is required (aligned with v0.2.6)
+# FIXME(sgm): 在 vllm v0.4.2 中 hack _get_logits 函数
+# 由于它们使用 ray，_get_logits 的结果只需要返回给 driver 节点，
+# 因此用 gather 就足够了。然而，我们使用 SPMD 而不是中央调度器，
+# 所以需要 all_gather（与 v0.2.6 保持一致）
 def _get_logits(self, hidden_states: torch.Tensor, embedding: torch.Tensor,
                 embedding_bias: Optional[torch.Tensor]) -> torch.Tensor:
-    # Get the logits for the next tokens.
+    # 获取下一个 token 的 logits。
     logits = torch.matmul(hidden_states, embedding.t())
     if embedding_bias is not None:
         logits += embedding_bias
     logits = tensor_model_parallel_all_gather(logits)
-    # Remove paddings in vocab (if any).
+    # 移除词表中的填充（如果有）。
     if logits is not None:
         logits = logits[:, :self.org_vocab_size]
     return logits

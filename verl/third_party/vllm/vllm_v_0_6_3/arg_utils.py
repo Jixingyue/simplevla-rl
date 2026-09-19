@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/engine/arg_utils.py
+# 改编自 https://github.com/vllm-project/vllm/blob/main/vllm/engine/arg_utils.py
 
 import os
 from dataclasses import dataclass
@@ -70,7 +70,7 @@ class EngineArgs(EngineArgs):
     def create_engine_config(self) -> EngineConfig:
         engine_config = super().create_engine_config()
 
-        # NOTE[VERL]: Use the world_size set by torchrun
+        # NOTE[VERL]: 使用 torchrun 设置的 world_size
         world_size = int(os.getenv("WORLD_SIZE", "-1"))
         assert world_size != -1, "The world_size is set to -1, not initialized by TORCHRUN"
         engine_config.parallel_config.world_size = world_size

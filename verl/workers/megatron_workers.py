@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-The main entry point to run the PPO algorithm
+运行 PPO 算法的主入口
 """
 
 import os
@@ -54,7 +54,7 @@ def set_random_seed(seed):
     if torch.cuda.device_count() > 0:
         from megatron.core import tensor_parallel
         tensor_parallel.model_parallel_cuda_manual_seed(seed)
-    # FIXME: torch cumsum not support deterministic (used in vllm sampler),
+    # FIXME: torch cumsum 不支持确定性计算（vllm sampler 中会用到），
     # https://github.com/pytorch/pytorch/issues/89492
     # torch.use_deterministic_algorithms(True, warn_only=True)
     # os.environ['CUBLAS_WORKSPACE_CONFIG'] = ':4096:8'
@@ -62,20 +62,20 @@ def set_random_seed(seed):
 
 class ActorRolloutRefWorker(MegatronWorker):
     """
-    This worker can be instantiated as a standalone actor or a standalone rollout or a standalone reference policy
-    or a hybrid engine based on the config.rollout
+    此 worker 可以被实例化为独立的 actor、独立的 rollout、独立的参考策略，
+    或基于 config.rollout 的混合引擎
     """
 
     def __init__(self, config: DictConfig, role: str):
         super().__init__()
         self.config = config
 
-        # NOTE(sgm): We utilize colocate WorkerGroup by default.
-        # As a result, Workers for different model share the same process.
-        # Therefore, we only require one distribute initialization.
-        # To utilize different parallel startegy in different models:
-        # 1, users should disable WorkerDict; 2.assign different ResourcePool to different models,
-        # 3. and apply the following patch in ray==2.10, https://github.com/ray-project/ray/pull/44385
+        # NOTE(sgm): 默认使用 colocate WorkerGroup。
+        # 因此不同模型的 Worker 共享同一个进程。
+        # 所以我们只需要一次分布式初始化。
+        # 若要在不同模型上使用不同的并行策略：
+        # 1. 用户应禁用 WorkerDict；2. 为不同模型分配不同的 ResourcePool；
+        # 3. 并在 ray==2.10 中应用以下补丁，https://github.com/ray-project/ray/pull/44385
         if not torch.distributed.is_initialized():
             rank = int(os.environ['LOCAL_RANK'])
             torch.distributed.init_process_group(backend="nccl")
@@ -103,13 +103,13 @@ class ActorRolloutRefWorker(MegatronWorker):
         self._is_rollout = self.role in ['rollout', 'actor_rollout', 'actor_rollout_ref']
         self._is_ref = self.role in ['ref', 'actor_rollout_ref']
 
-        # TODO(sgm): Currently, we only support reference model param offload
-        # will support other offload later
+        # TODO(sgm): 目前只支持参考模型的参数 offload，
+        # 后续会支持其他 offload
         self._is_offload_param = False
         self._is_offload_grad = False
         self._is_offload_optimizer = False
 
-        # normalize config
+        # 归一化 config
         if self._is_actor and self._is_rollout:
             self.config.actor.ppo_mini_batch_size //= mpu.get_data_parallel_world_size()
             self.config.actor.ppo_micro_batch_size //= mpu.get_data_parallel_world_size()
@@ -133,11 +133,11 @@ class ActorRolloutRefWorker(MegatronWorker):
         from verl.utils.megatron_utils import get_model, init_megatron_optim_config
         from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
-        # Step 1: initialize the tokenizer
+        # 步骤 1：初始化 tokenizer
         local_path = copy_local_path_from_hdfs(model_path)
         self.tokenizer = hf_tokenizer(local_path)
 
-        # Step 2: get the actor_model_config
+        # 步骤 2：获取 actor_model_config
         actor_model_config = AutoConfig.from_pretrained(local_path)
 
         override_config_kwargs = {
@@ -153,8 +153,8 @@ class ActorRolloutRefWorker(MegatronWorker):
 
         def megatron_actor_model_provider(pre_process, post_process):
             from verl.utils.model import get_parallel_model_from_config
-            # vpp is not supported yet because it will hang for some reason. Need debugging
-            vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()  # this will be set inside get_model
+            # vpp 尚不支持，因为由于某些原因会卡住，需要调试
+            vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()  # 这会在 get_model 内部被设置
             # this_megatron_config = copy.deepcopy(megatron_config)
             # this_megatron_config.virtual_pipeline_model_parallel_rank = vpp_rank
             parallel_model = get_parallel_model_from_config(config=actor_model_config,
@@ -165,11 +165,11 @@ class ActorRolloutRefWorker(MegatronWorker):
             parallel_model.cuda()
             return parallel_model
 
-        # Step 3: initialize the megatron model
+        # 步骤 3：初始化 megatron 模型
         if self._is_actor and self._is_rollout:
-            # Initialize the 3D HybridEngine
+            # 初始化 3D HybridEngine
             hybrid_engine = AllGatherPPModel(model_provider=megatron_actor_model_provider)
-            # Fetch the model at current rank
+            # 获取当前 rank 的模型
             actor_module = hybrid_engine.this_rank_models
             if isinstance(actor_module, nn.ModuleList):
                 actor_module = [actor_module[0]]
@@ -190,7 +190,7 @@ class ActorRolloutRefWorker(MegatronWorker):
                                    wrap_with_ddp=False)
             # ref_module = nn.ModuleList(ref_module)
 
-            if self.config.ref.load_weight:  # should align with the actor:
+            if self.config.ref.load_weight:  # 应与 actor 对齐：
                 assert self.config.actor.load_weight == self.config.ref.load_weight
                 print(f'load ref weight start')
                 load_megatron_model_weights(self.config,
@@ -201,7 +201,7 @@ class ActorRolloutRefWorker(MegatronWorker):
             log_gpu_memory_usage('After ref module init', logger=logger)
             return ref_module, actor_model_config
 
-        # TODO: add more optimizer args into config
+        # TODO: 将更多 optimizer 参数加入 config
         if self._is_actor:
             optim_config = init_megatron_optim_config(optim_config)
             actor_optimizer = get_megatron_optimizer(model=actor_module, config=optim_config)
@@ -219,8 +219,8 @@ class ActorRolloutRefWorker(MegatronWorker):
             from verl.workers.hybrid_engine import MegatronVLLMShardingManager
             from verl.utils.model import normalize_pp_vpp_params
 
-            # NOTE(sgm): If the QKV and gate_up projection layer are concate together in actor,
-            # we will reorganize their weight format when resharding from actor to rollout.
+            # NOTE(sgm): 如果 actor 中 QKV 和 gate_up 投影层是拼接在一起的，
+            # 那么在从 actor reshard 到 rollout 时，我们会重新组织它们的权重格式。
             layer_name_mapping = {
                 "qkv_layer_name":
                     self.config.rollout.layer_name_map.get("qkv_layer_name", "qkv"),
@@ -228,14 +228,14 @@ class ActorRolloutRefWorker(MegatronWorker):
                     self.config.rollout.layer_name_map.get("gate_proj_layer_name", "linear_fc1.weight"),
             }
 
-            # reshard the weight partition from actor to rollout to initialize the rollout class
-            # create a new cuda space for parameters not in this pp rank
+            # 将权重分片从 actor reshard 到 rollout，用于初始化 rollout 类
+            # 为不在当前 pp rank 上的参数创建新的 cuda 空间
             self.hybrid_engine.load_params_to_cuda()
-            # broadcast the parameters from pp rank to other ranks
+            # 将参数从 pp rank 广播到其他 rank
             self.hybrid_engine.allgather_params()
-            # obtain name to parameters in pp/vpp
+            # 获取 pp/vpp 中名称到参数的映射
             params = self.hybrid_engine.get_all_params()
-            # update the param name for the
+            # 为其更新参数名
             params = normalize_pp_vpp_params(params=params,
                                              num_hidden_layers=self.actor_model_config.num_hidden_layers,
                                              layer_name='layers')
@@ -246,7 +246,7 @@ class ActorRolloutRefWorker(MegatronWorker):
                                   train_tp=mpu.get_tensor_model_parallel_world_size())
             log_gpu_memory_usage('After building vllm rollout', logger=logger)
 
-            # perform weight resharding between actor and rollout
+            # 在 actor 和 rollout 之间执行权重 resharding
             sharding_manager = MegatronVLLMShardingManager(module=self.hybrid_engine,
                                                            inference_engine=rollout.inference_engine,
                                                            model_config=self.actor_model_config,
@@ -260,7 +260,7 @@ class ActorRolloutRefWorker(MegatronWorker):
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
         if self.config.model.get('external_lib', None) is not None:
-            # This is used to import external_lib into the huggingface systems
+            # 用于将 external_lib 导入 huggingface 系统
             import importlib
             importlib.import_module(self.config.model.external_lib)
 
@@ -282,7 +282,7 @@ class ActorRolloutRefWorker(MegatronWorker):
         megatron_config = init_model_parallel_config(megatron_config)
 
         if self._is_actor or self._is_rollout:
-            # we need the model for actor and rollout
+            # actor 和 rollout 都需要该模型
             if self._is_actor:
                 optim_config = self.config.actor.optim
             else:
@@ -335,7 +335,7 @@ class ActorRolloutRefWorker(MegatronWorker):
 
         log_gpu_memory_usage('After update policy', logger=logger)
 
-        # TODO: here, we should return all metrics
+        # TODO: 此处应返回所有 metrics
         output = DataProto(meta_info={'metrics': metrics})
         output = output.to('cpu')
         torch.cuda.empty_cache()
@@ -360,14 +360,14 @@ class ActorRolloutRefWorker(MegatronWorker):
 
         validate = prompts.meta_info.get('validate', False)
         if self._is_actor and not validate:
-            # we should always recompute old_log_probs when it is HybridEngine
+            # 使用 HybridEngine 时应始终重新计算 old_log_probs
             output.meta_info['micro_batch_size'] = self.config.rollout.log_prob_micro_batch_size
             output.meta_info['temperature'] = self.config.rollout.temperature
             old_log_probs = self.actor.compute_log_prob(data=output)
             output.batch['old_log_probs'] = old_log_probs
 
         output = output.to('cpu')
-        # clear kv cache
+        # 清空 kv cache
         torch.cuda.empty_cache()
         log_gpu_memory_usage('After recompute log prob', logger=logger)
         return output
@@ -411,12 +411,12 @@ class CriticWorker(MegatronWorker):
         super().__init__()
         self.config = config
 
-        # NOTE(sgm): We utilize colocate WorkerGroup by default.
-        # As a result, Workers for different model share the same process.
-        # Therefore, we only require one distribute initialization.
-        # To utilize different parallel startegy in different models:
-        # 1, users should disable WorkerDict; 2.assign different ResourcePool to different models,
-        # 3. and apply the following patch in ray==2.10, https://github.com/ray-project/ray/pull/44385
+        # NOTE(sgm): 默认使用 colocate WorkerGroup。
+        # 因此不同模型的 Worker 共享同一个进程。
+        # 所以我们只需要一次分布式初始化。
+        # 若要在不同模型上使用不同的并行策略：
+        # 1. 用户应禁用 WorkerDict；2. 为不同模型分配不同的 ResourcePool；
+        # 3. 并在 ray==2.10 中应用以下补丁，https://github.com/ray-project/ray/pull/44385
         if not torch.distributed.is_initialized():
             rank = int(os.environ['LOCAL_RANK'])
             torch.distributed.init_process_group(backend="nccl")
@@ -437,11 +437,11 @@ class CriticWorker(MegatronWorker):
 
         set_random_seed(seed=self.config.megatron.seed)
 
-        # normalize config
+        # 归一化 config
         self.config.ppo_mini_batch_size //= mpu.get_data_parallel_world_size()
         self.config.ppo_micro_batch_size //= mpu.get_data_parallel_world_size()
 
-        # TODO(sgm): support critic model offload
+        # TODO(sgm): 支持 critic 模型 offload
 
     def _build_critic_model_optimizer(self,
                                       model_path,
@@ -455,11 +455,11 @@ class CriticWorker(MegatronWorker):
         from verl.utils.megatron_utils import get_model, init_megatron_optim_config, init_model_parallel_config
         from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
-        # Step 1: initialize the tokenizer
+        # 步骤 1：初始化 tokenizer
         local_path = copy_local_path_from_hdfs(model_path)
         self.tokenizer = hf_tokenizer(local_path)
 
-        # Step 2: get the actor_model_config
+        # 步骤 2：获取 actor_model_config
         critic_model_config = AutoConfig.from_pretrained(local_path)
 
         override_config_kwargs = {
@@ -475,7 +475,7 @@ class CriticWorker(MegatronWorker):
 
         def megatron_critic_model_provider(pre_process, post_process):
             from verl.utils.model import get_parallel_model_from_config
-            # TODO: support vpp here
+            # TODO: 在此处支持 vpp
             # vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()  # this will be set inside get_model
             # this_megatron_config = copy.deepcopy(megatron_config)
             # this_megatron_config.virtual_pipeline_model_parallel_rank = vpp_rank
@@ -487,12 +487,12 @@ class CriticWorker(MegatronWorker):
             parallel_model.cuda()
             return parallel_model
 
-        # Step 3: initialize the megatron model
+        # 步骤 3：初始化 megatron 模型
         critic_module = get_model(model_provider_func=megatron_critic_model_provider,
                                   model_type=ModelType.encoder_or_decoder,
                                   wrap_with_ddp=True)
-        # note that here critic_module will be a list to be compatible with the construction of interleaved pp (vpp).
-        # but here, we do not use pp (vpp) yet. For simplicity, we remove the list
+        # 注意：此处 critic_module 会是一个 list，以兼容交错式流水线并行（vpp）的构造方式。
+        # 但这里我们还没有使用 pp（vpp）。为简单起见，我们去掉这个 list
         # critic_module = nn.ModuleList(critic_module)
 
         if self.config.load_weight:
@@ -504,7 +504,7 @@ class CriticWorker(MegatronWorker):
         if self.rank == 0:
             print_model_size(critic_module[0])
 
-        # TODO: add more optimizer args into config
+        # TODO: 将更多 optimizer 参数加入 config
         optim_config = init_megatron_optim_config(optim_config)
         critic_optimizer = get_megatron_optimizer(model=critic_module, config=optim_config)
         torch.cuda.empty_cache()
@@ -512,12 +512,12 @@ class CriticWorker(MegatronWorker):
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
-        # create critic
+        # 创建 critic
         from omegaconf import OmegaConf
         from verl.utils.torch_dtypes import PrecisionType
 
         if self.config.model.get('external_lib', None) is not None:
-            # This is used to import external_lib into the huggingface systems
+            # 用于将 external_lib 导入 huggingface 系统
             import importlib
             importlib.import_module(self.config.model.external_lib)
         override_model_config = OmegaConf.to_container(self.config.model.get('override_config', OmegaConf.create()))
@@ -575,19 +575,19 @@ class CriticWorker(MegatronWorker):
 
 class RewardModelWorker(MegatronWorker):
     """
-    Note that we only implement the reward model that is subclass of AutoModelForSequenceClassification.
+    注意：我们只实现了 AutoModelForSequenceClassification 子类的 reward model。
     """
 
     def __init__(self, config):
         super().__init__()
         self.config = config
 
-        # NOTE(sgm): We utilize colocate WorkerGroup by default.
-        # As a result, Workers for different model share the same process.
-        # Therefore, we only require one distribute initialization.
-        # To utilize different parallel startegy in different models:
-        # 1, users should disable WorkerDict; 2.assign different ResourcePool to different models,
-        # 3. and apply the following patch in ray==2.10, https://github.com/ray-project/ray/pull/44385
+        # NOTE(sgm): 默认使用 colocate WorkerGroup。
+        # 因此不同模型的 Worker 共享同一个进程。
+        # 所以我们只需要一次分布式初始化。
+        # 若要在不同模型上使用不同的并行策略：
+        # 1. 用户应禁用 WorkerDict；2. 为不同模型分配不同的 ResourcePool；
+        # 3. 并在 ray==2.10 中应用以下补丁，https://github.com/ray-project/ray/pull/44385
         if not torch.distributed.is_initialized():
             rank = int(os.environ['LOCAL_RANK'])
             torch.distributed.init_process_group(backend="nccl")
@@ -608,7 +608,7 @@ class RewardModelWorker(MegatronWorker):
 
         set_random_seed(seed=self.config.megatron.seed)
 
-        # normalize config
+        # 归一化 config
         self.config.micro_batch_size //= mpu.get_data_parallel_world_size()
 
     def _build_rm_model(self, model_path, megatron_config: ModelParallelConfig, override_model_config):
@@ -617,11 +617,11 @@ class RewardModelWorker(MegatronWorker):
         from verl.utils.megatron_utils import get_model
         from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
 
-        # Step 1: initialize the tokenizer
+        # 步骤 1：初始化 tokenizer
         local_path = copy_local_path_from_hdfs(model_path)
         self.tokenizer = hf_tokenizer(local_path)
 
-        # Step 2: get the actor_model_config
+        # 步骤 2：获取 actor_model_config
         rm_model_config = AutoConfig.from_pretrained(local_path)
 
         override_config_kwargs = {
@@ -637,8 +637,8 @@ class RewardModelWorker(MegatronWorker):
 
         def megatron_rm_model_provider(pre_process, post_process):
             from verl.utils.model import get_parallel_model_from_config
-            # vpp is not supported yet because it will hang for some reason. Need debugging
-            vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()  # this will be set inside get_model
+            # vpp 尚不支持，因为由于某些原因会卡住，需要调试
+            vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()  # 这会在 get_model 内部被设置
             # this_megatron_config = copy.deepcopy(megatron_config)
             # this_megatron_config.virtual_pipeline_model_parallel_rank = vpp_rank
             parallel_model = get_parallel_model_from_config(config=rm_model_config,
@@ -649,12 +649,12 @@ class RewardModelWorker(MegatronWorker):
             parallel_model.cuda()
             return parallel_model
 
-        # Step 3: initialize the megatron model
+        # 步骤 3：初始化 megatron 模型
         reward_model = get_model(model_provider_func=megatron_rm_model_provider,
                                  model_type=ModelType.encoder_or_decoder,
                                  wrap_with_ddp=False)
-        # note that here critic_module will be a list to be compatible with the construction of interleaved pp (vpp).
-        # but here, we do not use pp (vpp) yet. For simplicity, we remove the list
+        # 注意：此处 critic_module 会是一个 list，以兼容交错式流水线并行（vpp）的构造方式。
+        # 但这里我们还没有使用 pp（vpp）。为简单起见，我们去掉这个 list
         # reward_model = nn.ModuleList(reward_model)
 
         if self.config.load_weight:
@@ -664,19 +664,19 @@ class RewardModelWorker(MegatronWorker):
                                         params_dtype=megatron_config.params_dtype,
                                         is_value_model=True)
 
-        # TODO: add more optimizer args into config
+        # TODO: 将更多 optimizer 参数加入 config
         torch.cuda.empty_cache()
         return reward_model, rm_model_config
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
-        # create critic
+        # 创建 critic
         from omegaconf import OmegaConf
         from verl.utils.torch_dtypes import PrecisionType
         from transformers import AutoTokenizer
 
         if self.config.model.get('external_lib', None) is not None:
-            # This is used to import external_lib into the huggingface systems
+            # 用于将 external_lib 导入 huggingface 系统
             import importlib
             importlib.import_module(self.config.model.external_lib)
         override_model_config = OmegaConf.to_container(self.config.model.get('override_config', OmegaConf.create()))
@@ -708,8 +708,8 @@ class RewardModelWorker(MegatronWorker):
             megatron_config=megatron_config,
             override_model_config=override_model_config,
         )
-        # FIXME(sgm): reward model param offload is implemented in MegatronRewardModel
-        # should be implemented in workers
+        # FIXME(sgm): reward model 的参数 offload 已在 MegatronRewardModel 中实现，
+        # 应该在 worker 中实现
         self.rm = MegatronRewardModel(config=self.config,
                                       reward_model_module=reward_model_module,
                                       model_config=reward_model_config,
@@ -717,8 +717,8 @@ class RewardModelWorker(MegatronWorker):
                                       sft_tokenizer=sft_tokenizer,
                                       rm_tokenizer=rm_tokenizer)
 
-    # TODO: reward model use itself tokenizer instead of sft tokenizer
-    # the input_ids, responses, attention_mask and position_ids may be different!
+    # TODO: reward model 应使用自己的 tokenizer 而不是 sft tokenizer
+    # input_ids、responses、attention_mask 和 position_ids 可能会不同！
     @register(dispatch_mode=Dispatch.MEGATRON_COMPUTE_PROTO)
     def compute_rm_score(self, data: DataProto):
         data.batch = data.batch.cuda()

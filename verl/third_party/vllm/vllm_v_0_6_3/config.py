@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/config.py
+# 改编自 https://github.com/vllm-project/vllm/blob/main/vllm/config.py
 
 import enum
 import json
@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING, List, Optional, Union
 
 from transformers import PretrainedConfig
 
-# Add for verl
+# 为 verl 添加
 from vllm.config import ModelConfig
 from vllm.logger import init_logger
 from vllm.utils import is_hip
@@ -51,24 +51,22 @@ class ModelConfig(ModelConfig):
 @dataclass
 class LoadConfig:
     """
-    download_dir: Directory to download and load the weights, default to the
-        default cache directory of huggingface.
-    load_format: The format of the model weights to load:
-        "auto" will try to load the weights in the safetensors format and
-            fall back to the pytorch bin format if safetensors format is
-            not available.
-        "pt" will load the weights in the pytorch bin format.
-        "safetensors" will load the weights in the safetensors format.
-        "npcache" will load the weights in pytorch format and store
-            a numpy cache to speed up the loading.
-        "dummy" will initialize the weights with random values, which is
-            mainly for profiling.
-        "tensorizer" will use CoreWeave's tensorizer library for
-            fast weight loading.
-        "bitsandbytes" will load nf4 type weights.
-    ignore_patterns: The list of patterns to ignore when loading the model.
-        Default to "original/**/*" to avoid repeated loading of llama's
-        checkpoints.
+    download_dir: 下载和加载权重的目录，默认为 huggingface 的
+        默认缓存目录。
+    load_format: 要加载的模型权重格式：
+        "auto" 会尝试以 safetensors 格式加载权重，若 safetensors 格式
+            不可用则回退到 pytorch bin 格式。
+        "pt" 会以 pytorch bin 格式加载权重。
+        "safetensors" 会以 safetensors 格式加载权重。
+        "npcache" 会以 pytorch 格式加载权重，并存储 numpy 缓存以
+            加快加载速度。
+        "dummy" 会用随机值初始化权重，主要用于性能分析。
+        "tensorizer" 会使用 CoreWeave 的 tensorizer 库来快速加载
+            权重。
+        "bitsandbytes" 会加载 nf4 类型的权重。
+    ignore_patterns: 加载模型时要忽略的模式列表。
+        默认为 "original/**/*"，以避免重复加载 llama 的
+        checkpoint。
 
     """
 

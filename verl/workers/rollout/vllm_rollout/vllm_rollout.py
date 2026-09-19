@@ -12,17 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-The vllm_rollout that can be applied in different backend
-When working with FSDP:
-- Use DTensor weight loader (recommended) or HF weight loader
-- Utilize state_dict from the FSDP to synchronize the weights among tp ranks in vLLM
-When working with Megatron:
-- Use Megatron weight loader
-- During training, only the current pp stage holds the parameters
-- Before inference, broadcast the parameters of the current pp rank to all other pp ranks (all pp ranks holds all the parameters)
-- Bind the parameters to the inference engine
-- Do inference in tp. pp is treated as additional dp
-- After inference, all the parameters that doesn't belong to this pp rank is freed.
+可在不同后端中使用的 vllm_rollout
+与 FSDP 配合使用时：
+- 使用 DTensor 权重加载器（推荐）或 HF 权重加载器
+- 利用 FSDP 的 state_dict 在 vLLM 的各个 tp rank 之间同步权重
+与 Megatron 配合使用时：
+- 使用 Megatron 权重加载器
+- 训练期间，只有当前 pp 阶段持有参数
+- 推理之前，将当前 pp rank 的参数广播给所有其他 pp rank（所有 pp rank 持有全部参数）
+- 将参数绑定到推理引擎
+- 在 tp 维度上做推理，pp 被视作额外的 dp
+- 推理结束后，释放所有不属于当前 pp rank 的参数
 """
 from typing import List
 from contextlib import contextmanager
@@ -40,14 +40,14 @@ from verl.third_party.vllm import parallel_state as vllm_ps
 from vllm import SamplingParams
 
 # TODO
-# 1. support pp in vllm
-# 2. passing tokenizer is not necessary? no encoding/decoding is happending here
-# 3. simplify init logics
+# 1. 在 vllm 中支持 pp
+# 2. 传入 tokenizer 是否必要？这里并没有发生编码/解码
+# 3. 简化初始化逻辑
 
 
-# NOTE(sgm): add for verl. We can optimize it by making the dataloader yield List[int] without padding.
+# NOTE(sgm): 为 verl 添加。可以通过让 dataloader 直接产出不含 padding 的 List[int] 来优化。
 def _pre_process_inputs(pad_token_id, prompt_token_ids: torch.Tensor) -> List[int]:
-    # remove the left padding in the prompt token_id
+    # 去除 prompt token_id 中的左侧填充
     # pad_token_id = self.llm_engine.tokenizer.pad_token_id if self.llm_engine.tokenizer.pad_token_id is not None else self.llm_engine.tokenizer.eos_token_id
     non_pad_index = torch.nonzero(prompt_token_ids != pad_token_id, as_tuple=False)[0][0]
     token_ids = prompt_token_ids[non_pad_index:].tolist()
@@ -57,14 +57,14 @@ def _pre_process_inputs(pad_token_id, prompt_token_ids: torch.Tensor) -> List[in
 class vLLMRollout(BaseRollout):
 
     def __init__(self, actor_module: nn.Module, config: DictConfig, tokenizer, model_hf_config, **kwargs):
-        """A vLLM rollout. It requires the module is supported by the vllm.
+        """一个 vLLM rollout。它要求模块受 vllm 支持。
 
         Args:
-            module: module here follows huggingface APIs
+            module: 这里的 module 遵循 huggingface API
             config: DictConfig
-            tokenizer: the task/model tokenizer
-            model_hf_config: the huggingface config to initiallize the generating model in vllm
-            **kwargs: train_tp, for Megatron Backend to initialize hybrid engine (zero redundancy) process group
+            tokenizer: 任务/模型的 tokenizer
+            model_hf_config: 用于在 vllm 中初始化生成模型的 huggingface 配置
+            **kwargs: train_tp，供 Megatron 后端初始化混合引擎（零冗余）进程组使用
         """
         super().__init__()
         self.config = config
@@ -76,7 +76,7 @@ class vLLMRollout(BaseRollout):
             "tensor parallel size should be less than or equal to the world size"
 
         if kwargs.get('train_tp', None) is not None:
-            # deployed with megatron
+            # 使用 megatron 部署
             import os
             os.environ['CUDA_TIMER_STREAM_KAFKA_ENABLE'] = '0'
             os.environ['MEGATRON_IMPORT_TIMERS'] = '0'
@@ -99,20 +99,20 @@ class vLLMRollout(BaseRollout):
                                     max_model_len=config.prompt_length + config.response_length,
                                     load_format=config.load_format)
 
-        # Offload vllm model to reduce peak memory usage
+        # offload vllm 模型以降低峰值内存占用
         self.inference_engine.offload_model_weights()
 
         kwargs = dict(
             n=1,
-            logprobs=1,  # can be set to 0 and let actor to recompute
+            logprobs=1,  # 可以设为 0，让 actor 重新计算
             max_tokens=config.response_length,
         )
 
-        # we may detokenize the result all together later
+        # 之后我们可能会把结果整体 detokenize
         if vllm_version in ('0.4.2', '0.5.4', '0.6.3'):
             kwargs['detokenize'] = False
 
-        # supporting adding any sampling params from the config file
+        # 支持从配置文件添加任意采样参数
         for k in config.keys():
             if hasattr(SamplingParams(), str(k)):
                 kwargs[k] = config.get(k)
@@ -124,7 +124,7 @@ class vLLMRollout(BaseRollout):
 
     @contextmanager
     def update_sampling_params(self, **kwargs):
-        # update sampling params
+        # 更新采样参数
         old_sampling_params_args = {}
         if kwargs:
             for key, value in kwargs.items():
@@ -133,30 +133,30 @@ class vLLMRollout(BaseRollout):
                     old_sampling_params_args[key] = old_value
                     setattr(self.sampling_params, key, value)
         yield
-        # roll back to previous sampling params
+        # 回滚到之前的采样参数
         # if len(old_sampling_params_args):
         for key, value in old_sampling_params_args.items():
             setattr(self.sampling_params, key, value)
 
     @torch.no_grad()
     def generate_sequences(self, prompts: DataProto, **kwargs) -> DataProto:
-        # rebuild vllm cache engine
+        # 重建 vllm 缓存引擎
         if self.config.free_cache_engine:
             self.inference_engine.init_cache_engine()
 
         n_samples = prompts.meta_info.get('n_samples', 1)
         idx = prompts.batch['input_ids'].repeat_interleave(n_samples,dim=0)  # (bs, prompt_length)
-        # left-padded attention_mask
+        # 左填充的 attention_mask
         attention_mask = prompts.batch['attention_mask'].repeat_interleave(n_samples,dim=0)
         position_ids = prompts.batch['position_ids'].repeat_interleave(n_samples,dim=0)
 
-        # used to construct attention_mask
+        # 用于构建 attention_mask
         eos_token_id = prompts.meta_info['eos_token_id']
 
         batch_size = idx.size(0)
 
         idx_list = []
-        # parse idx from torch.Tensor to List[List[str]]
+        # 将 idx 从 torch.Tensor 解析为 List[List[str]]
         for i in range(batch_size):
             idx_list.append(_pre_process_inputs(self.pad_token_id, idx[i]))
 
@@ -170,10 +170,10 @@ class vLLMRollout(BaseRollout):
                 'temperature': 0,
             }
 
-        # users can customize different sampling_params at different run
+        # 用户可以在不同运行中自定义不同的 sampling_params
         with self.update_sampling_params(**kwargs):
             output = self.inference_engine.generate(
-                prompts=None,  # because we have already convert it to prompt token id
+                prompts=None,  # 因为我们已经将其转换为 prompt token id
                 sampling_params=self.sampling_params,
                 prompt_token_ids=idx_list,
                 use_tqdm=False)
@@ -191,8 +191,8 @@ class vLLMRollout(BaseRollout):
         delta_position_id = torch.arange(1, response_length + 1, device=position_ids.device)
         delta_position_id = delta_position_id.unsqueeze(0).repeat(batch_size, 1)
 
-        # TODO(sgm): fix position_ids on right_pad
-        # prompt: left pad + response: right pad
+        # TODO(sgm): 修复 right_pad 情况下的 position_ids
+        # prompt: 左填充 + response: 右填充
         # attention_mask: [0,0,0,0,1,1,1,1, | 1,1,1,0,0,0,0,0]
         # position_ids:   [0,0,0,0,0,1,2,3, | 4,5,6,7,8,9,10,11]
         response_position_ids = position_ids[:, -1:] + delta_position_id
@@ -200,19 +200,19 @@ class vLLMRollout(BaseRollout):
         response_attention_mask = get_eos_mask(response_id=response, eos_token=eos_token_id, dtype=attention_mask.dtype)
         attention_mask = torch.cat((attention_mask, response_attention_mask), dim=-1)
 
-        # all the tp ranks should contain the same data here. data in all ranks are valid
+        # 所有 tp rank 在这里应包含相同的数据。所有 rank 上的数据都是有效的
         batch = TensorDict(
             {
                 'prompts': idx,
                 'responses': response,
-                'input_ids': seq,  # here input_ids become the whole sentences
-                # 'old_log_probs': log_probs, # we will recompute old log prob with actor
+                'input_ids': seq,  # 这里 input_ids 变成了完整的句子
+                # 'old_log_probs': log_probs, # 我们将用 actor 重新计算 old log prob
                 'attention_mask': attention_mask,
                 'position_ids': position_ids
             },
             batch_size=batch_size)
 
-        # free vllm cache engine
+        # 释放 vllm 缓存引擎
         if self.config.free_cache_engine:
             self.inference_engine.free_cache_engine()
 

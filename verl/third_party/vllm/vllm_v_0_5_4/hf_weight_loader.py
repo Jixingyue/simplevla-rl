@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/tree/main/vllm/model_executor/models
+# 改编自 https://github.com/vllm-project/vllm/tree/main/vllm/model_executor/models
 
 from typing import Dict, Union, Optional, Iterable, Tuple
 
@@ -37,8 +37,7 @@ def load_hf_weights(actor_weights: Dict, vllm_model: nn.Module):
         quant_method = getattr(module, "quant_method", None)
         if quant_method is not None:
             quant_method.process_weights_after_loading(module)
-        # FIXME: Remove this after Mixtral is updated
-        # to use quant_method.
+        # FIXME: 在 Mixtral 更新为使用 quant_method 后移除此段。
         if hasattr(module, "process_weights_after_loading"):
             module.process_weights_after_loading()
     vllm_model = vllm_model.cuda()

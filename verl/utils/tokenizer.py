@@ -11,17 +11,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Utils for tokenization."""
+"""用于 tokenization 的工具函数。"""
 import warnings
 
 __all__ = ['hf_tokenizer']
 
 
 def set_pad_token_id(tokenizer):
-    """Set pad_token_id to eos_token_id if it is None.
+    """当 pad_token_id 为 None 时，将其设置为 eos_token_id。
 
     Args:
-        tokenizer (transformers.PreTrainedTokenizer): The tokenizer to be set.
+        tokenizer (transformers.PreTrainedTokenizer): 要设置的 tokenizer。
 
     """
     if tokenizer.pad_token_id is None:
@@ -33,21 +33,21 @@ def set_pad_token_id(tokenizer):
 
 
 def hf_tokenizer(name_or_path, correct_pad_token=True, correct_gemma2=True, **kwargs):
-    """Create a huggingface pretrained tokenizer.
+    """创建一个 huggingface 预训练 tokenizer。
 
     Args:
-        name (str): The name of the tokenizer.
-        correct_pad_token (bool): Whether to correct the pad token id.
-        correct_gemma2 (bool): Whether to correct the gemma2 tokenizer.
-        **kwargs: The keyword arguments for the tokenizer.
+        name (str): tokenizer 的名称。
+        correct_pad_token (bool): 是否修正 pad token id。
+        correct_gemma2 (bool): 是否修正 gemma2 tokenizer。
+        **kwargs: 传递给 tokenizer 的关键字参数。
 
     Returns:
-        transformers.PreTrainedTokenizer: The pretrained tokenizer.
+        transformers.PreTrainedTokenizer: 预训练 tokenizer。
 
     """
     from transformers import AutoTokenizer, AutoConfig, AutoProcessor
     if correct_gemma2 and isinstance(name_or_path, str) and 'gemma-2-2b-it' in name_or_path:
-        # the EOS token in gemma2 is ambiguious, which may worsen RL performance.
+        # gemma2 的 EOS token 存在歧义，可能会恶化 RL 性能。
         # https://huggingface.co/google/gemma-2-2b-it/commit/17a01657f5c87135bcdd0ec7abb4b2dece04408a
         warnings.warn('Found gemma-2-2b-it tokenizer. Set eos_token and eos_token_id to <end_of_turn> and 107.')
         kwargs['eos_token'] = '<end_of_turn>'

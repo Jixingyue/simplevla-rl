@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Contain small python utility functions
+包含一些小型的 Python 工具函数
 """
 
 from typing import Dict
@@ -20,7 +20,7 @@ from types import SimpleNamespace
 
 
 def union_two_dict(dict1: Dict, dict2: Dict):
-    """Union two dict. Will throw an error if there is an item not the same object with the same key.
+    """合并两个字典。如果同一个键对应的项不是相同的对象，将抛出错误。
 
     Args:
         dict1:

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/worker/worker.py
-"""A GPU worker class."""
+"""一个 GPU worker 类。"""
 import os
 import gc
 from typing import Dict, List, Tuple, Optional, Union, Set
@@ -37,16 +37,16 @@ from vllm.lora.request import LoRARequest
 
 
 class Worker:
-    """A worker class that executes (a partition of) the model on a GPU.
+    """在 GPU 上执行模型（的一部分）的 worker 类。
 
-    Each worker is associated with a single GPU. The worker is responsible for
-    maintaining the KV cache and executing the model on the GPU. In case of
-    distributed inference, each worker is assigned a partition of the model.
+    每个 worker 与单个 GPU 关联。该 worker 负责维护 KV cache 并在
+    GPU 上执行模型。在分布式推理的情况下，每个 worker 被分配模型的
+    一个分区。
     """
 
     def __init__(
         self,
-        model: Union[nn.Module, Dict], # model itself or its parameter dict
+        model: Union[nn.Module, Dict], # 模型本身或其参数字典
         model_config: ModelConfig,
         parallel_config: ParallelConfig,
         scheduler_config: SchedulerConfig,
@@ -56,7 +56,7 @@ class Worker:
         lora_config: Optional[LoRAConfig] = None,
         kv_cache_dtype: Optional[str] = "auto",
     ) -> None:
-        # self.model = model  # will be replaced in the init_model
+        # self.model = model  # 将在 init_model 中被替换
         self.model_config = model_config
         self.parallel_config = parallel_config
         self.scheduler_config = scheduler_config
@@ -74,8 +74,8 @@ class Worker:
             kv_cache_dtype=kv_cache_dtype,
         )
 
-        # Uninitialized cache engine. Will be initialized by
-        # self.init_cache_engine().
+        # 尚未初始化的 cache engine。将由
+        # self.init_cache_engine() 初始化。
         self.cache_config = None
         self.block_size = None
         self.sliding_window = None
@@ -83,19 +83,18 @@ class Worker:
         self.cache_events = None
         self.gpu_cache = None
 
-        # For offloading inference engine params
+        # 用于卸载推理引擎参数
         self.cpu_model = None
 
     def init_model(self, cupy_port: Optional[int] = None):
-        # torch.distributed.all_reduce does not free the input tensor until
-        # the synchronization point. This causes the memory usage to grow
-        # as the number of all_reduce calls increases. This env var disables
-        # this behavior.
-        # Related issue:
+        # torch.distributed.all_reduce 在到达同步点之前不会释放输入张量。
+        # 这导致内存使用随着 all_reduce 调用次数的增加而增长。这个环境变量
+        # 禁用了该行为。
+        # 相关 issue：
         # https://discuss.pytorch.org/t/cuda-allocation-lifetime-for-inputs-to-distributed-all-reduce/191573
         os.environ["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
 
-        # Env vars will be set by TORCHRUN.
+        # 环境变量将由 TORCHRUN 设置。
         self.rank = self.rank if self.rank is not None else int(os.getenv("RANK", "-1"))
         local_rank = int(os.getenv("LOCAL_RANK", "0"))
         self.device = torch.device(f"cuda:{local_rank}")
@@ -105,12 +104,12 @@ class Worker:
 
         _check_if_gpu_supports_dtype(self.model_config.dtype)
 
-        # Initialize the distributed environment.
-        # TODO: do not use cupy
+        # 初始化分布式环境。
+        # TODO: 不要使用 cupy
         _init_distributed_environment(self.parallel_config, self.rank, self.distributed_init_method)
         if not self.parallel_config.disable_custom_all_reduce:
             init_custom_ar()
-        # Initialize the model.
+        # 初始化模型。
         set_random_seed(self.model_config.seed)
         # self.model = get_model(actor_model=self.model, model_config=self.model_config)
 
@@ -125,24 +124,22 @@ class Worker:
         cpu_swap_space: int,
         cache_dtype: str,
     ) -> Tuple[int, int]:
-        # Profile the memory usage of the model and get the maximum number of
-        # cache blocks that can be allocated with the remaining free memory.
+        # 统计模型的内存使用，并获取可用剩余空闲内存分配的
+        # cache block 的最大数量。
         torch.cuda.empty_cache()
         # torch.cuda.reset_peak_memory_stats()
 
-        # Execute a forward pass with dummy inputs to profile the memory usage
-        # of the model.
+        # 使用虚拟输入执行一次前向传播，以统计模型的内存使用。
         self.model_runner.profile_run()
 
-        # Calculate the number of blocks that can be allocated with the
-        # profiled peak memory.
+        # 根据统计到的峰值内存，计算可以分配的 block 数量。
         torch.cuda.synchronize()
         free_gpu_memory, total_gpu_memory = torch.cuda.mem_get_info()
         peak_memory = total_gpu_memory - free_gpu_memory
 
         cache_block_size = CacheEngine.get_cache_block_size(block_size, cache_dtype, self.model_config,
                                                             self.parallel_config)
-        # NOTE(sgm) use the remaining memory
+        # NOTE(sgm) 使用剩余内存
         num_gpu_blocks = int((free_gpu_memory * gpu_memory_utilization) // cache_block_size)
         # num_gpu_blocks = int((total_gpu_memory * gpu_memory_utilization - peak_memory) // cache_block_size)
         num_cpu_blocks = int(cpu_swap_space // cache_block_size)
@@ -152,7 +149,7 @@ class Worker:
             self.model_runner.remove_all_loras()
         gc.collect()
         torch.cuda.empty_cache()
-        # Synchronize number of blocks with all the rank
+        # 与所有 rank 同步 block 数量
         num_gpu_blocks = torch.tensor([num_gpu_blocks], device='cuda')
         num_cpu_blocks = torch.tensor([num_cpu_blocks], device='cuda')
         torch.distributed.all_reduce(num_gpu_blocks,
@@ -174,15 +171,15 @@ class Worker:
             self.model_runner.set_block_size(self.cache_engine.block_size)
 
     def free_cache_engine(self):
-        # ensure `enforce_eager=True`
+        # 确保设置 `enforce_eager=True`
         self.cache_engine = None
         self.gpu_cache = None
 
     def warm_up_model(self) -> None:
         if not self.model_config.enforce_eager:
             self.model_runner.capture_model(self.gpu_cache)
-        # Reset the seed to ensure that the random state is not affected by
-        # the model initialization and profiling.
+        # 重置随机种子，以确保随机状态不受模型初始化和
+        # profiling 的影响。
         set_random_seed(self.model_config.seed)
 
     def cache_swap(
@@ -191,7 +188,7 @@ class Worker:
         blocks_to_swap_out: Dict[int, int],
         blocks_to_copy: Dict[int, List[int]],
     ) -> None:
-        # Issue cache operations.
+        # 发起 cache 操作。
         issued_cache_op = False
         if blocks_to_swap_in:
             self.cache_engine.swap_in(blocks_to_swap_in)
@@ -205,8 +202,8 @@ class Worker:
 
         cache_events = self.cache_events if issued_cache_op else None
 
-        # Wait for cache operations to finish.
-        # TODO(woosuk): Profile swapping overhead and optimize if needed.
+        # 等待 cache 操作完成。
+        # TODO(woosuk): 统计 swapping 开销并在需要时进行优化。
         if cache_events is not None:
             for event in cache_events:
                 event.wait()
@@ -222,18 +219,18 @@ class Worker:
         num_seq_groups = len(seq_group_metadata_list)
         self.cache_swap(blocks_to_swap_in, blocks_to_swap_out, blocks_to_copy)
 
-        # If there is no input, we don't need to execute the model.
+        # 如果没有输入，我们就不需要执行模型。
         if num_seq_groups == 0:
             return {}
         output = self.model_runner.execute_model(seq_group_metadata_list, self.gpu_cache)
         return output
 
-        # # Prepare input tensors.
-        # # NOTE(shengguangming): currently we pad in our dataloader and unpad it in pre_process_input, j
-        # # we can just input un-padded sequence for better performance
+        # # 准备输入张量。
+        # # NOTE(shengguangming): 目前我们在 dataloader 中进行 padding，并在 pre_process_input 中 unpad，j
+        # # 因此可以直接输入未填充的序列以获得更好的性能
         # input_tokens, input_positions, input_metadata = self._prepare_inputs(seq_group_metadata_list)
 
-        # # Execute the model.
+        # # 执行模型。
         # output = self.model(
         #     input_ids=input_tokens,
         #     positions=input_positions,
@@ -243,7 +240,7 @@ class Worker:
         # )
         # return output
 
-    # assume the input is .state_dict()
+    # 假设输入是 .state_dict()
     def sync_model_weights(self, actor_weights: Dict):
         load_weights(actor_weights, self.model_runner.model)
 
@@ -272,7 +269,7 @@ def _init_distributed_environment(
     rank: int,
     distributed_init_method: Optional[str] = None,
 ) -> None:
-    """Initialize the distributed environment."""
+    """初始化分布式环境。"""
     if torch.distributed.is_initialized():
         print('The distributed environment has been initialized before vLLM')
     elif not distributed_init_method:
@@ -286,9 +283,9 @@ def _init_distributed_environment(
             # init_method=distributed_init_method,
         )
 
-    # A small all_reduce for warmup.
+    # 用于预热的小型 all_reduce。
     torch.distributed.all_reduce(torch.zeros(1).cuda())
-    # TODO (shengguangming): maybe we should also flag the megatron is initialized
+    # TODO (shengguangming): 也许我们还应该标记 megatron 已初始化
     if torch.distributed.get_world_size() > 1:
         initialize_model_parallel_from_megatron(tensor_model_parallel_size=parallel_config.tensor_parallel_size)
     else:
@@ -304,7 +301,7 @@ def _pad_to_max(x: List[int], max_len: int, pad: int) -> List[int]:
 
 
 def _check_if_gpu_supports_dtype(torch_dtype: torch.dtype):
-    # Check if the GPU supports the dtype.
+    # 检查 GPU 是否支持该 dtype。
     if torch_dtype == torch.bfloat16:
         compute_capability = torch.cuda.get_device_capability()
         if compute_capability[0] < 8:

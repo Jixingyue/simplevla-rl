@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Base class for a critic
+critic 的基类
 """
 from abc import ABC, abstractmethod
 
@@ -31,10 +31,10 @@ class BasePPOCritic(ABC):
 
     @abstractmethod
     def compute_values(self, data: DataProto) -> torch.Tensor:
-        """Compute values"""
+        """计算 values"""
         pass
 
     @abstractmethod
     def update_critic(self, data: DataProto):
-        """Update the critic"""
+        """更新 critic"""
         pass

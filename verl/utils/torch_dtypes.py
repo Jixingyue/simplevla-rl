@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Adapted from Cruise.
+改编自 Cruise。
 """
 
 import torch
@@ -25,7 +25,7 @@ BFLOAT_LIST = ["bf16", "bfloat16"]
 
 
 class PrecisionType(object):
-    """Type of precision used.
+    """使用的精度类型。
 
     >>> PrecisionType.HALF == 16
     True

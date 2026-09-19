@@ -13,8 +13,8 @@
 # limitations under the License.
 
 '''
-VLA rollout implementation: environment creation, multi-environment parallel rendering,
-VLA action generation, environment interaction, video saving, trajectory and 0/1 reward collection
+VLA rollout 实现：环境创建、多环境并行渲染、
+VLA 动作生成、环境交互、视频保存、轨迹与 0/1 奖励收集
 '''
 
 import os
@@ -36,7 +36,7 @@ from verl.utils.torch_functional import get_eos_mask
 from verl.utils.libero_utils import save_rollout_video
 from .base import BaseRollout
 
-# import Libero package
+# 导入 Libero 包
 try:
     from verl.utils.libero_utils import (
         get_libero_env, get_libero_dummy_action, get_libero_image, 
@@ -69,13 +69,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 from codetiming import Timer
 
-# For Libero multiprocessing
+# 用于 Libero 多进程
 import multiprocessing
 from multiprocessing import Process, Queue
 
 __all__ = ['RobHFRollout']
 
-# Environment initialization lock for Robotwin
+# Robotwin 环境初始化锁
 _ENV_INIT_LOCK = threading.Lock()
 
 OPENVLA_V01_SYSTEM_PROMPT = (
@@ -136,7 +136,7 @@ def center_crop_image(image):
     return image
 
 # ============================================================
-#              Robotwin-specific functions
+#              Robotwin 专用函数
 # ============================================================
 def normalize_proprio(proprio, norm_stats):
     """
@@ -165,7 +165,7 @@ def normalize_proprio(proprio, norm_stats):
 
 def get_robotwin2_task(task_name, config):
     """
-    return:
+    返回：
     - env_instance：Robotwin2.0的任务类实例
     - args：加载的超参数（task_config/embodiment/camera）
     """
@@ -244,13 +244,13 @@ def get_robotwin2_task(task_name, config):
     return env_instance, args
 
 def encode_obs(observation):
-    """Post-Process Observation for Robotwin 2.0"""
+    """对 Robotwin 2.0 的观测进行后处理"""
     return observation
 
 class RobotwinEnvWrapper:
     """
-    Thread-safe wrapper for Robotwin environment (supports both 1.0 and 2.0)
-    统一封装 initialize/get_obs/step/close functions
+    Robotwin 环境的线程安全包装器（同时支持 1.0 和 2.0）
+    统一封装 initialize/get_obs/step/close 等函数
     """
     def __init__(self, task_name, trial_id, trial_seed, config, version="1.0"):
         self.task_name = task_name
@@ -267,7 +267,7 @@ class RobotwinEnvWrapper:
         self.instruction = None
         
     def initialize(self):
-        """Initialize the environment"""
+        """初始化环境"""
         with _ENV_INIT_LOCK:
             with self.lock:
                 try:
@@ -292,7 +292,7 @@ class RobotwinEnvWrapper:
                 self.env.set_instruction(instruction=self.instruction)
                 
     def get_obs(self):
-        """Get observation from environment"""
+        """从环境获取观测"""
         with self.lock:
             try:
                 geted_obs = self.env.get_obs()
@@ -305,12 +305,12 @@ class RobotwinEnvWrapper:
                 return geted_obs
     
     def get_instruction(self):
-        """Get instruction for the task"""
+        """获取任务指令"""
         with self.lock:
             return self.env.get_instruction()
             
     def step(self, action):
-        """Execute action in environment"""
+        """在环境中执行动作"""
         with self.lock:
             try:
                 self.env.take_action(action)
@@ -338,7 +338,7 @@ class RobotwinEnvWrapper:
             return obs, done
             
     def close(self):
-        """Close the environment"""
+        """关闭环境"""
         with self.lock:
             if self.env is not None:
                 try:
@@ -348,7 +348,7 @@ class RobotwinEnvWrapper:
 
 
 # ============================================================
-#              Libero-specific functions
+#              Libero 专用函数
 # ============================================================
 def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, is_valid, global_steps, max_steps):
     """
@@ -443,7 +443,7 @@ def env_worker(task_name, task_id, trial_id, config, input_queue, output_queue, 
 
 
 # ============================================================
-#                 Main Rollout Class
+#                 主 Rollout 类
 # ============================================================
 class RobHFRollout(BaseRollout):
     def __init__(self, module: nn.Module, config):
@@ -481,13 +481,13 @@ class RobHFRollout(BaseRollout):
         self.processor = AutoProcessor.from_pretrained(config.pretrained_checkpoint, trust_remote_code=True)
         self.vla_preprocess()
         
-        # Setup execution pool based on task suite
+        # 根据任务套件设置执行线程池
         if "robotwin" in self.config.task_suite_name:
             self.env_thread_pool = ThreadPoolExecutor(max_workers=16)
             self.robotwin_version = self._detect_robotwin_version()
         
     def _detect_robotwin_version(self):
-        """Detect which version of robotwin to use based on config"""
+        """根据配置检测应使用的 robotwin 版本"""
         if hasattr(self.config, 'robotwin_version'):
             return self.config.robotwin_version
         elif 'robotwin2' in self.config.task_suite_name:
@@ -518,8 +518,8 @@ class RobHFRollout(BaseRollout):
 
     def process_input(self, inputs: list, task_descriptions: list):
         """
-        Unified input processing for both Robotwin and Libero
-        - 图像：head camera + wrist camera(s)
+        统一处理 Robotwin 和 Libero 的输入
+        - 图像：头部相机 + 腕部相机（可多个）
         - 文本：把 task_description 拼成 prompt
         - proprio（可选）
         输出 dict，可直接喂给 VLA
@@ -537,7 +537,7 @@ class RobHFRollout(BaseRollout):
             if self.config.center_crop:
                 image = center_crop_image(image)
 
-            # ---- 2) language prompt ----
+            # ---- 2) 语言 prompt ----
             prompt = f"In: What action should the robot take to {task_description.lower()}?\nOut:"
 
             batch_feature = self.processor(prompt, image)
@@ -545,7 +545,7 @@ class RobHFRollout(BaseRollout):
 
             # ---- 3) 腕部相机视角图像 ----
             if "robotwin" in self.config.task_suite_name:
-                # Robotwin may have multiple wrist images
+                # Robotwin 可能有多个腕部相机图像
                 for key in input_data:
                     if "wrist" in key and isinstance(input_data[key], np.ndarray):
                         wrist_image = Image.fromarray(input_data[key]).convert("RGB")
@@ -554,7 +554,7 @@ class RobHFRollout(BaseRollout):
                         wrist_batch_feature = self.processor(prompt, wrist_image)
                         pixel_values_list.append(wrist_batch_feature["pixel_values"])
             else:
-                # Libero has single wrist image
+                # Libero 只有单个腕部相机图像
                 if "wrist_image" in input_data:
                     wrist_image = Image.fromarray(input_data["wrist_image"]).convert("RGB")
                     if self.config.center_crop:
@@ -586,7 +586,7 @@ class RobHFRollout(BaseRollout):
             batchdata["attention_mask"].append(attention_mask)
             batchdata["pixel_values"].append(pixel_values)
 
-            # ---- 4) Robotwin proprio ----
+            # ---- 4) RoboTwin 本体感知（proprio）----
             if self.config.use_proprio and "robotwin" in self.config.task_suite_name:
                 proprio = input_data["state"]
                 proprio_norm_stats = self.module.norm_stats[self.config.unnorm_key]["proprio"]
@@ -595,7 +595,7 @@ class RobHFRollout(BaseRollout):
 
         device = torch.device('cuda')
 
-        # Padding and device placement
+        # 填充（padding）与设备放置
         if self.config.vla in ["openvla-oft"]:
             batchdata["input_ids"] = [x.transpose(0, 1) for x in batchdata["input_ids"]]
             batchdata["attention_mask"] = [x.transpose(0, 1) for x in batchdata["attention_mask"]]
@@ -628,7 +628,7 @@ class RobHFRollout(BaseRollout):
     def generate_sequences(self, prompts):
         """
         把prompts（DataProto）拆成micro-batch，逐个推理，再拼接回来
-        Motivation：
+        动机：
         - 评测时batch_size可能较大，导致显存不够
         """
         batch_size = prompts.batch.batch_size[0]
@@ -645,14 +645,14 @@ class RobHFRollout(BaseRollout):
         return output
 
     def _generate_minibatch(self, prompts):
-        """Generate minibatch - routes to appropriate implementation based on task suite"""
+        """生成 minibatch —— 根据 task suite 路由到对应的实现"""
         if "robotwin" in self.config.task_suite_name:
             return self._generate_minibatch_robotwin(prompts)
         else:
             return self._generate_minibatch_libero(prompts)
     
     def _generate_minibatch_robotwin(self, prompts):
-        """Generate minibatch for Robotwin using threading"""
+        """使用线程为 Robotwin 生成 minibatch"""
         self.module.eval()
         meta_info = prompts.meta_info
         n_samples = meta_info.get('n_samples', 1)
@@ -732,7 +732,7 @@ class RobHFRollout(BaseRollout):
             current_inputs = inputs
             current_task_descriptions = task_descriptions
             
-            # Get VLA actions
+            # 获取 VLA 动作
             vla_input = self.process_input(current_inputs, current_task_descriptions)
             vla_input.update(meta_info)
             
@@ -752,7 +752,7 @@ class RobHFRollout(BaseRollout):
                 
             vla_history.append(step_data)
             
-            # Execute actions in parallel
+            # 并行执行动作
             step_futures = []
             for idx in active_indices:
                 future = self.env_thread_pool.submit(
@@ -761,7 +761,7 @@ class RobHFRollout(BaseRollout):
                 )
                 step_futures.append((idx, future))
             
-            # Collect results
+            # 收集结果
             new_inputs = inputs.copy()
             for idx, future in step_futures:
                 try:
@@ -787,7 +787,7 @@ class RobHFRollout(BaseRollout):
             inputs = new_inputs
             step += self.config.action_chunks_len
         
-        # Clean up environments
+        # 清理环境
         cleanup_futures = []
         for wrapper in env_wrappers:
             future = self.env_thread_pool.submit(wrapper.close)
@@ -802,7 +802,7 @@ class RobHFRollout(BaseRollout):
         torch.cuda.empty_cache()
         gc.collect()
         
-        # Save validation videos
+        # 保存验证视频
         if is_valid:
             for task_file, images in valid_video.items():
                 complete = any(r['complete'] for r in task_records if r['task_file_name'] == task_file)
@@ -816,12 +816,12 @@ class RobHFRollout(BaseRollout):
         
         self.module.train()
         
-        # Prepare output batch
+        # 准备输出 batch
         return self._prepare_output_batch(vla_history, task_records, batch_size)
     
     def _generate_minibatch_libero(self, prompts):
         """
-        Generate minibatch for Libero using multiprocessing
+        使用多进程为 Libero 生成 minibatch
         每个 env 在独立进程里跑（避免 mujoco/robosuite 等的线程不安全/死锁问题）
         """
         self.module.eval()
@@ -948,7 +948,7 @@ class RobHFRollout(BaseRollout):
     
     def _prepare_output_batch(self, vla_history, task_records, batch_size):
         """
-        Prepare the output batch(TensorDict) from VLA history(list[dict])
+        从 VLA 历史（list[dict]）构建输出 batch（TensorDict）
         """
         batch = {
             'responses': [], # (B, T, ...)
@@ -977,7 +977,7 @@ class RobHFRollout(BaseRollout):
     
     @torch.no_grad()
     def _generate_one_step(self, prompts: dict):
-        """Generate one step of actions"""
+        """生成一步动作"""
         if self.config.vla == "openvla-oft":
             return self._generate_one_step_oft(prompts)
         elif self.config.vla == "openvla":
@@ -986,7 +986,7 @@ class RobHFRollout(BaseRollout):
             raise ValueError(f"Unknown VLA type: {self.config.vla}")
     
     def _generate_one_step_oft(self, prompts: dict):
-        """Generate one step for OpenVLA-OFT"""
+        """OpenVLA-OFT 的单步生成"""
         idx = prompts['input_ids']
         attention_mask = prompts['attention_mask']
         pixel_values = prompts["pixel_values"]
@@ -1042,7 +1042,7 @@ class RobHFRollout(BaseRollout):
         return batch
     
     def _generate_one_step_openvla(self, prompts: dict):
-        """Generate one step for OpenVLA"""
+        """OpenVLA 的单步生成"""
         idx = prompts['input_ids']
         attention_mask = prompts['attention_mask']
         pixel_values = prompts["pixel_values"]
@@ -1095,7 +1095,7 @@ class RobHFRollout(BaseRollout):
         )
         attention_mask = torch.cat((attention_mask, response_attention_mask), dim=-1)
         
-        # Extract and unnormalize actions
+        # 提取并反归一化动作
         predicted_action_token_ids = response.detach().cpu().numpy()
         discretized_actions = self.module.vocab_size - predicted_action_token_ids
         discretized_actions = np.clip(
@@ -1147,7 +1147,7 @@ class RobHFRollout(BaseRollout):
         return batch
     
     def _obs_to_input(self, obs, is_robotwin=False, robotwin_version="1.0"):
-        """Convert observation to model input format"""
+        """将观测转换为模型输入格式"""
         if not is_robotwin:
             # Libero
             state = np.concatenate([
@@ -1190,6 +1190,6 @@ class RobHFRollout(BaseRollout):
                 }
     
     def __del__(self):
-        """Cleanup resources on deletion"""
+        """删除对象时清理资源"""
         if hasattr(self, 'env_thread_pool'):
             self.env_thread_pool.shutdown(wait=False)

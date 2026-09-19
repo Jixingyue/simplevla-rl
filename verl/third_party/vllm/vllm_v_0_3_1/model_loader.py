@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # Adapted from https://github.com/vllm-project/vllm/tree/main/vllm/model_executor/model_loader
-"""Utilities for selecting and loading models."""
+"""用于选择和加载模型的工具函数。"""
 import contextlib
 from typing import Dict, Type, Union
 
@@ -36,7 +36,7 @@ from vllm.model_executor.layers.sampler import _prune_hidden_states, _apply_logi
 
 @contextlib.contextmanager
 def _set_default_torch_dtype(dtype: torch.dtype):
-    """Sets the default torch dtype to the given dtype."""
+    """将默认的 torch dtype 设置为给定的 dtype。"""
     old_dtype = torch.get_default_dtype()
     torch.set_default_dtype(dtype)
     yield
@@ -64,11 +64,11 @@ __LAYER_WEIGHT_LOADER_REGISTRY__ = {
     RowParallelLinear: parallel_weight_loader,
     VocabParallelEmbedding: parallel_weight_loader,
     ParallelLMHead: parallel_weight_loader
-    # "ScaledActivation.weight_loader": ScaledActivation, # TODO(shengguangming): latest commit in vllm fix awq for this function and add load_weights
+    # "ScaledActivation.weight_loader": ScaledActivation, # TODO(shengguangming): vllm 的最新提交修复了该函数的 awq 问题并添加了 load_weights
     # "default_weight_loader": default_weight_loader
 }
 
-# NOTE(gmsheng): change the weight_loader function in runtime
+# NOTE(gmsheng): 在运行时更换 weight_loader 函数
 for layer_class, weight_loader in __LAYER_WEIGHT_LOADER_REGISTRY__.items():
     layer_class.weight_loader = weight_loader
 
@@ -79,8 +79,8 @@ __MODEL_WEIGHT_LOADER_REGISTRY__ = {
     'MistralForCausalLM': mistral_weight_loader,
 }
 
-# FIXME(shengguangming): the vLLM vocab will pad to 64, which may incur out of bounds
-# so we need to rewrite the init function of vocab
+# FIXME(shengguangming): vLLM 的词表会填充到 64，可能导致越界
+# 因此我们需要重写 vocab 的 init 函数
 DEFAULT_VOCAB_PADDING_SIZE = 64
 
 
@@ -92,8 +92,8 @@ def vocab_init(self,
                padding_size: int = DEFAULT_VOCAB_PADDING_SIZE):
     super(VocabParallelEmbedding, self).__init__()
 
-    # Keep the input dimensions.
-    # TODO (pad to be divided by 4)
+    # 保留输入维度。
+    # TODO (填充到能被 4 整除)
     self.num_embeddings = num_embeddings
     self.org_vocab_size = org_num_embeddings or num_embeddings
 
@@ -103,7 +103,7 @@ def vocab_init(self,
     if params_dtype is None:
         params_dtype = torch.get_default_dtype()
     self.tp_size = get_tensor_model_parallel_world_size()
-    # Divide the weight matrix along the vocaburaly dimension.
+    # 沿词表维度切分权重矩阵。
 
     self.vocab_start_index, self.vocab_end_index = (VocabUtility.vocab_range_from_global_vocab_size(
         self.num_embeddings, get_tensor_model_parallel_rank(), self.tp_size))
@@ -133,7 +133,7 @@ def get_model(actor_model: Union[PreTrainedModel, Dict],
               lora_config: Optional[LoRAConfig] = None) -> nn.Module:
     model_class = _get_model_architecture(model_config.hf_config)
 
-    # Get the quantization config.
+    # 获取量化配置。
     linear_method = None
     quant_config = None
     if model_config.quantization is not None:
@@ -154,50 +154,50 @@ def get_model(actor_model: Union[PreTrainedModel, Dict],
         linear_method = quant_config.get_linear_method()
 
     with _set_default_torch_dtype(model_config.dtype):
-        # Create a model instance.
-        # The weights will be initialized as empty tensors.
+        # 创建模型实例。
+        # 权重将被初始化为空张量。
         # with torch.device(device_config.device):
-        # NOTE(sgm): init the model in cpu
+        # NOTE(sgm): 在 cpu 上初始化模型
         model = model_class(model_config.hf_config, linear_method)
 
         if model_config.load_format == "dummy":
             model = model.cuda()
-            # NOTE(woosuk): For accurate performance evaluation, we assign
-            # random values to the weights.
+            # NOTE(woosuk): 为了准确评估性能，我们
+            # 为权重赋予随机值。
             initialize_dummy_weights(model)
         elif model_config.load_format == 'model' or model_config.load_format == 'auto':
-            # NOTE(shengguangming) Load the weights from the actor model
+            # NOTE(shengguangming) 从 actor 模型加载权重
             if isinstance(actor_model, nn.Module):
                 load_weights(actor_weights=dict(actor_model.named_parameters(remove_duplicate=False)), vllm_model=model)
             else:
                 load_weights(actor_weights=actor_model, vllm_model=model)
 
-        # NOTE(sgm) Some weights are point to gpu, but still need this.
-        model = model.cuda()  # NOTE (zhangchi.usc1992) We need this for vllm to profile memory usage
+        # NOTE(sgm) 一些权重指向 gpu，但仍然需要这一步。
+        model = model.cuda()  # NOTE (zhangchi.usc1992) 我们需要这一步以便 vllm 统计内存使用
     return model.eval()
 
 
-# the actor model is .state_dict()
+# actor 模型是 .state_dict()
 def load_weights(actor_weights: Dict, vllm_model: nn.Module):
     weight_loader = _get_model_weight_loader(vllm_model.__class__.__name__)
     weight_loader(actor_weights, vllm_model)
-    # NOTE(sgm) to reduce peak memory usage, we offload vllm model to cpu
-    # after init, and we need this after sync model weights for in first iter.
+    # NOTE(sgm) 为了降低峰值内存占用，我们在初始化后将 vllm 模型卸载到 cpu
+    # 并且在第一次迭代同步模型权重之后需要这一步。
     vllm_model = vllm_model.cuda()
 
 
-# FIXME(sgm): hack the Sampler function in vllm v0.3.1
-# as they use ray, the sampler result will only need to return to the driver node,
-# therefore gather is enough. However, we use SPMD instead of a central scheduler,
-# all_gather is required (aligned with v0.2.6)
+# FIXME(sgm): hack vllm v0.3.1 的 Sampler 函数
+# 因为他们使用 ray，采样结果只需要返回给 driver 节点，
+# 因此 gather 就足够了。然而我们使用 SPMD 而不是中央调度器，
+# 需要使用 all_gather（与 v0.2.6 对齐）
 def _get_logits(self, hidden_states: torch.Tensor, embedding: torch.Tensor,
                 embedding_bias: Optional[torch.Tensor]) -> torch.Tensor:
-    # Get the logits for the next tokens.
+    # 获取下一个 token 的 logits。
     logits = torch.matmul(hidden_states, embedding.t())
     if embedding_bias is not None:
         logits += embedding_bias
     logits = tensor_model_parallel_all_gather(logits)
-    # Remove paddings in vocab (if any).
+    # 移除词表中的填充（如果有）。
     if logits is not None:
         logits = logits[:, :self.org_vocab_size]
     return logits
@@ -210,39 +210,39 @@ def forward(
     sampling_metadata: SamplingMetadata,
     embedding_bias: Optional[torch.Tensor] = None,
 ) -> Optional[SamplerOutput]:
-    # Get the hidden states that we use for sampling.
+    # 获取用于采样的 hidden states。
     hidden_states = _prune_hidden_states(hidden_states, sampling_metadata)
 
-    # Get the logits for the next tokens.
+    # 获取下一个 token 的 logits。
     logits = self._get_logits(hidden_states, embedding, embedding_bias)
-    # save origin logprobs for sampler_output
+    # 为 sampler_output 保存原始 logprobs
     origin_logprobs = torch.log_softmax(logits, dim=-1, dtype=torch.float)
 
-    # Only perform sampling in the driver worker.
-    # Note: `_get_logits` is still distributed across TP workers because
-    # the `embedding` weight is distributed across TP workers.
-    # TODO(zhuohan): Change the get_logits part to a separate stage.
+    # 仅在 driver worker 中执行采样。
+    # Note: `_get_logits` 仍然分布在各 TP worker 上，因为
+    # `embedding` 权重分布在各 TP worker 上。
+    # TODO(zhuohan): 将 get_logits 部分改为一个单独的阶段。
     if not sampling_metadata.perform_sampling:
         return None
 
     assert logits is not None
     _, vocab_size = logits.shape
 
-    # Apply logits processors (if any).
+    # 应用 logits 处理器（如果有）。
     logits = _apply_logits_processors(logits, sampling_metadata)
 
-    # Prepare sampling tensors with pinned memory to avoid blocking.
+    # 使用锁页内存准备采样张量以避免阻塞。
     (sampling_tensors, do_penalties, do_top_p_top_k,
      do_min_p) = SamplingTensors.from_sampling_metadata(sampling_metadata, vocab_size, logits.device, logits.dtype)
 
-    # Apply presence and frequency penalties.
+    # 应用 presence 和 frequency 惩罚。
     if do_penalties:
         logits = _apply_penalties(logits, sampling_tensors.prompt_tokens, sampling_tensors.output_tokens,
                                   sampling_tensors.presence_penalties, sampling_tensors.frequency_penalties,
                                   sampling_tensors.repetition_penalties)
 
-    # Apply temperature scaling.
-    # Use in-place division to avoid creating a new tensor.
+    # 应用温度缩放。
+    # 使用原地除法以避免创建新张量。
     logits.div_(sampling_tensors.temperatures.unsqueeze_(dim=1))
 
     if do_top_p_top_k:
@@ -251,17 +251,17 @@ def forward(
     if do_min_p:
         logits = _apply_min_p(logits, sampling_tensors.min_ps)
 
-    # We use float32 for probabilities and log probabilities.
-    # Compute the probabilities.
+    # 我们使用 float32 存储概率和对数概率。
+    # 计算概率。
     probs = torch.softmax(logits, dim=-1, dtype=torch.float)
-    # Compute the log probabilities.
-    # Use log_softmax to ensure numerical stability.
+    # 计算对数概率。
+    # 使用 log_softmax 确保数值稳定性。
     logprobs = torch.log_softmax(logits, dim=-1, dtype=torch.float)
 
-    # Sample the next tokens.
+    # 采样下一个 token。
     sample_results = _sample(probs, logprobs, sampling_metadata)
 
-    # Get the logprobs query results.
+    # 获取 logprobs 查询结果。
     # prompt_logprobs, sample_logprobs = _get_logprobs(
     #     logprobs, sampling_metadata, sample_results)
     prompt_logprobs, sample_logprobs = _get_logprobs(origin_logprobs, sampling_metadata, sample_results)

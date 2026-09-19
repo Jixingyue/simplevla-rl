@@ -35,7 +35,7 @@ class ParallelLlamaMLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        # The weight is only [hidden_size, intermediate_size // model_parallel_world_size]
+        # 权重仅为 [hidden_size, intermediate_size // model_parallel_world_size]
 
         column_kwargs = tp_utils.get_default_kwargs_for_column_parallel_linear()
         row_kwargs = tp_utils.get_default_kwargs_for_row_parallel_linear()

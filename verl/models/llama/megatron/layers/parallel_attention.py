@@ -43,7 +43,7 @@ class LlamaRotaryEmbedding(nn.Module):
         inv_freq = 1.0 / (self.base**(torch.arange(0, self.dim, 2).float().to(device) / self.dim))
         self.register_buffer("inv_freq", inv_freq, persistent=False)
 
-        # Build here to make `torch.jit.trace` work.
+        # 在这里构建以使 `torch.jit.trace` 正常工作。
         self._set_cos_sin_cache(seq_len=max_position_embeddings,
                                 device=self.inv_freq.device,
                                 dtype=torch.get_default_dtype())
@@ -53,7 +53,7 @@ class LlamaRotaryEmbedding(nn.Module):
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        # 与论文不同，但使用了一种不同的排列以获得相同的计算结果
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
@@ -70,7 +70,7 @@ class LlamaRotaryEmbedding(nn.Module):
 
 
 class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
-    """LlamaRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
+    """LlamaRotaryEmbedding 加上线性缩放的扩展版本。致谢 Reddit 用户 /u/kaiokendev"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -82,14 +82,14 @@ class LlamaLinearScalingRotaryEmbedding(LlamaRotaryEmbedding):
         t = t / self.scaling_factor
 
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        # 与论文不同，但使用了一种不同的排列以获得相同的计算结果
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
 
 class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
-    """LlamaRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
+    """LlamaRotaryEmbedding 加上动态 NTK 缩放的扩展版本。致谢 Reddit 用户 /u/bloc97 和 /u/emozilla"""
 
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None, scaling_factor=1.0):
         self.scaling_factor = scaling_factor
@@ -107,14 +107,14 @@ class LlamaDynamicNTKScalingRotaryEmbedding(LlamaRotaryEmbedding):
         t = torch.arange(self.max_seq_len_cached, device=device, dtype=self.inv_freq.dtype)
 
         freqs = torch.einsum("i,j->ij", t, self.inv_freq)
-        # Different from paper, but it uses a different permutation in order to obtain the same calculation
+        # 与论文不同，但使用了一种不同的排列以获得相同的计算结果
         emb = torch.cat((freqs, freqs), dim=-1)
         self.register_buffer("cos_cached", emb.cos().to(dtype), persistent=False)
         self.register_buffer("sin_cached", emb.sin().to(dtype), persistent=False)
 
 
 def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
+    """旋转输入的一半隐藏维度。"""
     x1 = x[..., :x.shape[-1] // 2]
     x2 = x[..., x.shape[-1] // 2:]
     return torch.cat((-x2, x1), dim=-1)
@@ -130,8 +130,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    等价于 torch.repeat_interleave(x, dim=1, repeats=n_rep)。隐藏状态的形状从 (batch,
+    num_key_value_heads, seqlen, head_dim) 变为 (batch, num_attention_heads, seqlen, head_dim)
     """
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
@@ -141,7 +141,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
 
 
 class ParallelLlamaAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+    """来自论文 'Attention Is All You Need' 的多头注意力"""
 
     def __init__(self, config: LlamaConfig, megatron_config: ModelParallelConfig):
         super().__init__()
@@ -155,7 +155,7 @@ class ParallelLlamaAttention(nn.Module):
         self.max_position_embeddings = config.max_position_embeddings
         self.rope_theta = config.rope_theta
 
-        # assign values after tp
+        # 在 tp 之后赋值
         tp_size = mpu.get_tensor_model_parallel_world_size()
         assert self.num_heads % tp_size == 0, f'num_head must be divisible by tp_size. Got num_head={self.num_heads}, tp_size={tp_size}'
         assert self.num_key_value_heads % tp_size == 0, \
@@ -265,7 +265,7 @@ class ParallelLlamaAttention(nn.Module):
                     f"Attention mask should be of size {(bsz, 1, q_len, kv_seq_len)}, but is {attention_mask.size()}")
             attn_weights = attn_weights + attention_mask
 
-        # upcast attention to fp32
+        # 将 attention 上转为 fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
         attn_output = torch.matmul(attn_weights, value_states)
 
@@ -281,9 +281,9 @@ class ParallelLlamaAttention(nn.Module):
 
 
 """
-Remove padding Attention
-- Using Flash-attn 2
-- Compatible with sequence parallel
+去除 padding 的 Attention
+- 使用 Flash-attn 2
+- 兼容 sequence parallel
 """
 
 from transformers.utils import is_flash_attn_2_available
@@ -315,8 +315,8 @@ def apply_rotary_pos_emb_rmpad(q, k, cos, sin, position_ids, indices, sequence_l
 from flash_attn.layers.rotary import apply_rotary_emb
 
 
-# use flash-attn rotary embeddings with rmpad
-# cos/sin shoudl be: (seq_length, rotary_dim / 2)
+# 在 rmpad 下使用 flash-attn 的旋转位置编码
+# cos/sin 应为: (seq_length, rotary_dim / 2)
 def apply_rotary_pos_emb_rmpad_flash(q, k, cos, sin, cu_seqlens, max_seqlen):
     q_embed = apply_rotary_emb(q,
                                cos,
@@ -344,7 +344,7 @@ class ParallelLlamaAttentionRmPad(ParallelLlamaAttention):
                 indices: torch.Tensor = None,
                 cu_seqlens: torch.Tensor = None,
                 max_seqlen_in_batch: int = None):
-        total_nnz, _, _ = hidden_states.size()  # This is the total_nnz padded after sequence parallel
+        total_nnz, _, _ = hidden_states.size()  # 这是 sequence parallel 填充后的 total_nnz
 
         if self.megatron_config.sequence_parallel:
             total_nnz = total_nnz * mpu.get_tensor_model_parallel_world_size()
@@ -355,20 +355,20 @@ class ParallelLlamaAttentionRmPad(ParallelLlamaAttention):
 
         if self.megatron_config.sequence_parallel:
             sequence_parallel_pad = total_nnz - cu_seqlens[-1]
-            total_nnz = cu_seqlens[-1]  # total_nnz before sp padding
+            total_nnz = cu_seqlens[-1]  # sp padding 之前的 total_nnz
             query_states = query_states[:total_nnz]
             key_states = key_states[:total_nnz]
             value_states = value_states[:total_nnz]
 
-        # Flash attention requires the input to have the shape
+        # Flash attention 要求输入的形状为
         # batch_size x seq_length x head_dime x hidden_dim
-        # therefore we just need to keep the original shape
+        # 因此我们只需保持原始形状
         query_states = query_states.view(total_nnz, self.num_heads_per_tp, self.head_dim)
         key_states = key_states.view(total_nnz, self.num_key_value_heads_per_tp, self.head_dim)
         value_states = value_states.view(total_nnz, self.num_key_value_heads_per_tp, self.head_dim)
 
         cos, sin = self.rotary_emb(value_states, seq_len=sequence_length)
-        cos, sin = cos[:, :cos.shape[1] // 2], sin[:, :sin.shape[1] // 2]  # flash attn only needs half
+        cos, sin = cos[:, :cos.shape[1] // 2], sin[:, :sin.shape[1] // 2]  # flash attn 只需要一半
         query_states, key_states = apply_rotary_pos_emb_rmpad_flash(query_states,
                                                                     key_states,
                                                                     cos,
@@ -377,16 +377,16 @@ class ParallelLlamaAttentionRmPad(ParallelLlamaAttention):
                                                                     max_seqlen=max_seqlen_in_batch)
         # query_states, key_states = apply_rotary_pos_emb_rmpad(query_states, key_states, cos, sin, position_ids, indices,
 
-        # TODO: llama does not have dropout in the config??
-        # It is recommended to use dropout with FA according to the docs
-        # when training.
+        # TODO: llama 的 config 中没有 dropout？？
+        # 根据文档，建议在训练时
+        # 配合 FA 使用 dropout
         dropout_rate = 0.0  # if not self.training else self.attn_dropout
 
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in float16 just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (LlamaRMSNorm handles it correctly)
+        # 在 PEFT 中，出于训练稳定性考虑，通常将 layer norm 转为 float32
+        # 因此输入的 hidden states 会被静默转为 float32。所以，我们需要
+        # 将它们转回 float16，以确保一切按预期工作。
+        # 这可能会拖慢训练与推理，因此建议不要将 LayerNorm
+        # 转为 fp32。（LlamaRMSNorm 正确处理了这一点）
         input_dtype = query_states.dtype
         if input_dtype == torch.float32:
             query_states = query_states.to(torch.float16)
@@ -409,8 +409,8 @@ class ParallelLlamaAttentionRmPad(ParallelLlamaAttention):
         attn_output_unpad = attn_output_unpad.to(input_dtype)
         attn_output_unpad = attn_output_unpad.reshape(total_nnz, 1, self.hidden_size_per_tp).contiguous()
 
-        # sequence parallel reduce_scatter is performed inside RowColumnParallel if enabled
-        # Here we need to repad
+        # 若启用 sequence parallel，reduce_scatter 会在 RowColumnParallel 内部执行
+        # 这里我们需要重新 padding
         if self.megatron_config.sequence_parallel:
             attn_output_unpad = F.pad(attn_output_unpad, pad=(0, 0, 0, 0, 0, sequence_parallel_pad))
 

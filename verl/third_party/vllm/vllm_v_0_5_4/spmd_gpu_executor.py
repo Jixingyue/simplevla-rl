@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/executor/gpu_executor.py
+# 改编自 https://github.com/vllm-project/vllm/blob/main/vllm/executor/gpu_executor.py
 
 import os
 import socket
@@ -32,11 +32,11 @@ logger = init_logger(__name__)
 
 
 class SPMDGPUExecutor(ExecutorBase):
-    """SPMD-based multi-GPU executor implementations."""
+    """基于 SPMD 的多 GPU executor 实现。"""
 
     def __init__(
         self,
-        model, # pytorch model itself or its parameter dict
+        model, # pytorch 模型本身或其参数字典
         model_config: ModelConfig,
         cache_config: CacheConfig,
         parallel_config: ParallelConfig,
@@ -62,23 +62,23 @@ class SPMDGPUExecutor(ExecutorBase):
         distributed_init_method = initialize_cluster(parallel_config)
         self._init_executor(model, distributed_init_method)
 
-    # TODO(sgm): verl not support speculative decode now
+    # TODO(sgm): verl 目前不支持投机解码
     def _init_executor(self, model, distributed_init_method) -> None:
         assert (not self.speculative_config), "Speculative decoding not yet supported for multi-GPU backend."
 
-        # Create the parallel worker for each GPU.
+        # 为每个 GPU 创建并行 worker。
         self._init_workers_sp(model, distributed_init_method)
 
     def _init_workers_sp(self, model, distributed_init_method: str):
-        # Lazy import the Worker to avoid importing torch.cuda/xformers
-        # before CUDA_VISIBLE_DEVICES is set in the Worker
+        # 延迟导入 Worker，避免在 Worker 中设置 CUDA_VISIBLE_DEVICES
+        # 之前就导入 torch.cuda/xformers
         from .worker import Worker  # pylint: disable=import-outside-toplevel
 
         rank = int(os.getenv("RANK"))
         local_rank = int(os.getenv("LOCAL_RANK"))
         print(f'local rank {local_rank}')
 
-        # see https://github.com/NVIDIA/nccl/issues/1234
+        # 参见 https://github.com/NVIDIA/nccl/issues/1234
         os.environ['NCCL_CUMEM_ENABLE'] = '0'
 
         self.worker = Worker(
@@ -97,40 +97,39 @@ class SPMDGPUExecutor(ExecutorBase):
             speculative_config=None,
             prompt_adapter_config=self.speculative_config,
             is_driver_worker=True,
-            model_runner_cls=None,  # use the default one
+            model_runner_cls=None,  # 使用默认值
         )
 
-        # NOTE(shengguangming): torch.distributed.init_process_group will be called inside the init_model()
+        # NOTE(shengguangming): torch.distributed.init_process_group 会在 init_model() 内部被调用
         self.worker.init_device()
         self.worker.load_model()
 
     def determine_num_available_blocks(self) -> Tuple[int, int]:
-        """Determine the number of available KV blocks.
+        """确定可用的 KV block 数量。
 
-        This invokes `determine_num_available_blocks` on each worker and takes
-        the min of the results, guaranteeing that the selected cache sizes are
-        compatible with all workers.
+        该方法会在每个 worker 上调用 `determine_num_available_blocks`，
+        并取各结果的最小值，从而保证所选的缓存大小对所有 worker 都
+        兼容。
 
         Returns:
             - tuple[num_gpu_blocks, num_cpu_blocks]
         """
-        # Get the maximum number of blocks that can be allocated on GPU and CPU.
+        # 获取 GPU 和 CPU 上可分配的最大 block 数量。
         num_blocks = self.worker.determine_num_available_blocks()
 
-        # NOTE(shengguangming): Now we don't use a shared centralized controler but each process will
-        # have its own scheduler
+        # NOTE(shengguangming): 现在我们不使用共享的集中式控制器，
+        # 而是每个进程拥有自己的调度器
         num_gpu_blocks = num_blocks[0]
         num_cpu_blocks = num_blocks[1]
 
         return num_gpu_blocks, num_cpu_blocks
 
     def initialize_cache(self, num_gpu_blocks: int, num_cpu_blocks: int) -> None:
-        """Initialize the KV cache in all workers.
+        """在所有 worker 中初始化 KV cache。
         """
 
-        # NOTE: We log here to avoid multiple logs when number of workers is
-        # greater than one. We could log in the engine, but not all executors
-        # have GPUs.
+        # NOTE: 我们在这里记录日志，以避免 worker 数量大于一时出现重复日志。
+        # 我们可以在引擎中记录，但并非所有 executor 都有 GPU。
         logger.info("# GPU blocks: %d, # CPU blocks: %d", num_gpu_blocks, num_cpu_blocks)
 
         self.cache_config.num_gpu_blocks = num_gpu_blocks
@@ -146,7 +145,7 @@ class SPMDGPUExecutor(ExecutorBase):
                 f'after init cache memory allocated: {torch.cuda.memory_allocated() / 1e9}GB, reserved: {torch.cuda.memory_reserved() / 1e9}GB'
             )
 
-    # NOTE(sgm): This will not profile & capture the model(CUDAGraph) when rebuilding KVCache
+    # NOTE(sgm): 重建 KVCache 时不会对模型进行性能分析或捕获（CUDAGraph）
     def init_cache_engine(self) -> None:
         self.worker._init_cache_engine()
 
@@ -157,8 +156,8 @@ class SPMDGPUExecutor(ExecutorBase):
         all_outputs = self.worker.execute_model(execute_model_req=execute_model_req)
 
         # NOTE(sgm):
-        # Each GPU in vllm under verl has its own spmd_gpu_executor, therefore all GPUs should return the outputs
-        # In vllm with ray, only the driver worker returns the sampling results.
+        # verl 下的 vllm 中每个 GPU 都有自己的 spmd_gpu_executor，因此所有 GPU 都应返回输出
+        # 而在使用 Ray 的 vllm 中，只有 driver worker 返回采样结果。
         return all_outputs
 
     def add_lora(self, lora_request: LoRARequest) -> bool:
@@ -173,11 +172,10 @@ class SPMDGPUExecutor(ExecutorBase):
         return self.worker.list_loras()
 
     def check_health(self) -> None:
-        # SPMDExecutor will always be healthy as long as
-        # it's running.
+        # 只要 SPMDExecutor 还在运行，它就始终是健康的。
         return
 
-    # NOTE(sgm) add for verl to pass the abstract class test, not used
+    # NOTE(sgm) 为 verl 添加以通过抽象类测试，并未使用
     from vllm.prompt_adapter.request import PromptAdapterRequest
 
     def add_prompt_adapter(self, prompt_adapter_request: PromptAdapterRequest) -> bool:
@@ -202,7 +200,7 @@ class SPMDGPUExecutor(ExecutorBase):
             "prompt_adapter_id must be greater than 0."
         return self.worker.remove_prompt_adapter(prompt_adapter_id)
 
-    # NOTE(sgm): add for verl
+    # NOTE(sgm): 为 verl 添加
     def offload_model_weights(self) -> None:
         self.worker.offload_model_weights()
 
@@ -215,20 +213,19 @@ def initialize_cluster(
     engine_use_ray: bool = False,
     ray_address: Optional[str] = None,
 ) -> Tuple[str, Optional[None]]:
-    """Initialize the distributed cluster probably with Ray.
+    """初始化分布式集群（可能会使用 Ray）。
 
     Args:
-        parallel_config: The configurations for parallel execution.
+        parallel_config: 并行执行的配置。
 
     Returns:
-        The `distributed_init_method` is the address for initializing the
-        distributed backend.
+        `distributed_init_method` 是用于初始化分布式后端的地址。
     """
 
-    # Initialize cluster locally.
+    # 在本地初始化集群。
     port = get_open_port()
-    # We need to setup the distributed init method to make sure
-    # the distributed megatron code (e.g., get world size) works correctly.
+    # 我们需要设置分布式初始化方法，以确保
+    # 分布式 megatron 代码（例如获取 world size）正常工作。
     # distributed_init_method = f"tcp://localhost:{port}"
     distributed_init_method = 'env://'
     return distributed_init_method
@@ -240,14 +237,14 @@ def get_open_port():
         return s.getsockname()[1]
 
 
-# TODO(sgm): not implemented async executor yet
+# TODO(sgm): 尚未实现 async executor
 class SPMDGPUExecutorAsync(SPMDGPUExecutor, ExecutorAsyncBase):
 
     async def execute_model_async(self, execute_model_req: ExecuteModelRequest) -> List[SamplerOutput]:
-        """Executes one model step on the given sequences."""
+        """在给定的序列上执行一步模型推理。"""
         raise NotImplementedError
 
     async def check_health_async(self) -> None:
-        """Checks if the executor is healthy. If not, it should raise an
-        exception."""
+        """检查 executor 是否健康。如果不健康，应当抛出
+        异常。"""
         self.check_health()

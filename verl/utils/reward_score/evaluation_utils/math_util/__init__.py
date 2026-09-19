@@ -1,9 +1,9 @@
 """
-Answer checker API that uses sympy to simplify expressions and check for equality.
+使用 sympy 化简表达式并检查相等性的答案校验 API。
 
-Call grade_answer(given_answer: str, ground_truth: str).
+调用 grade_answer(given_answer: str, ground_truth: str)。
 
-FROM: https://github.com/openai/prm800k/blob/main/prm800k/grading/grader.py
+来源：https://github.com/openai/prm800k/blob/main/prm800k/grading/grader.py
 """
 import re
 import sympy
@@ -15,24 +15,24 @@ from .grader import math_equal
 # import math_normalize
 # from grader import math_equal
 
-# sympy might hang -- we don't care about trying to be lenient in these cases
+# sympy 可能会挂起 —— 在这种情况下我们不追求宽松处理
 BAD_SUBSTRINGS = ["^{", "^("]
 BAD_REGEXES = ["\^[0-9]+\^", "\^[0-9][0-9]+"]
 TUPLE_CHARS = "()[]"
 
 def timeout(timeout_seconds: int = 8):  # noqa: C901
-    """A decorator that applies a timeout to the decorated function.
+    """为被装饰的函数应用超时限制的装饰器。
 
     Args:
-        timeout_seconds (int): Number of seconds before timing out the decorated function.
-            Defaults to 10 seconds.
+        timeout_seconds (int): 被装饰函数超时前的秒数。
+            默认为 10 秒。
 
     Notes:
-        On Unix systems, uses a signal-based alarm approach which is more efficient as it doesn't require spawning a new process.
-        On Windows systems, uses a multiprocessing-based approach since signal.alarm is not available. This will incur a huge performance penalty.
+        在 Unix 系统上，使用基于信号的 alarm 方式，效率更高，因为无需生成新进程。
+        在 Windows 系统上，由于没有 signal.alarm，使用基于 multiprocessing 的方式。这会带来巨大的性能开销。
     """
     if os.name == "posix":
-        # Unix-like approach: signal.alarm
+        # 类 Unix 方式：signal.alarm
         import signal
 
         def decorator(func):
@@ -46,7 +46,7 @@ def timeout(timeout_seconds: int = 8):  # noqa: C901
                 try:
                     return func(*args, **kwargs)
                 finally:
-                    # Cancel the alarm and restore previous handler
+                    # 取消 alarm 并恢复之前的 handler
                     signal.alarm(0)
                     signal.signal(signal.SIGALRM, old_handler)
 
@@ -55,7 +55,7 @@ def timeout(timeout_seconds: int = 8):  # noqa: C901
         return decorator
 
 def _sympy_parse(expr: str):
-    """Parses an expression with sympy."""
+    """使用 sympy 解析表达式。"""
     py_expr = expr.replace("^", "**")
     return sympy_parser.parse_expr(
         py_expr,
@@ -64,13 +64,13 @@ def _sympy_parse(expr: str):
 
 
 def _parse_latex(expr: str) -> str:
-    """Attempts to parse latex to an expression sympy can read."""
+    """尝试将 latex 解析为 sympy 可读取的表达式。"""
     expr = expr.replace("\\tfrac", "\\frac")
     expr = expr.replace("\\dfrac", "\\frac")
-    expr = expr.replace("\\frac", " \\frac")  # Play nice with mixed numbers.
+    expr = expr.replace("\\frac", " \\frac")  # 以便更好地处理带分数。
     expr = latex2text.LatexNodes2Text().latex_to_text(expr)
 
-    # Replace the specific characters that this parser uses.
+    # 替换该解析器使用的特定字符。
     expr = expr.replace("√", "sqrt")
     expr = expr.replace("π", "pi")
     expr = expr.replace("∞", "inf")
@@ -117,16 +117,16 @@ def _str_to_int(x: str) -> bool:
 
 def _inject_implicit_mixed_number(step: str):
     """
-    Automatically make a mixed number evalable
+    自动将带分数转换为可求值的形式
     e.g. 7 3/4 => 7+3/4
     """
     p1 = re.compile("([0-9]) +([0-9])")
-    step = p1.sub("\\1+\\2", step)  ## implicit mults
+    step = p1.sub("\\1+\\2", step)  ## 隐式乘法
     return step
 
 
 def _strip_properly_formatted_commas(expr: str):
-    # We want to be careful because we don't want to strip tuple commas
+    # 我们要小心，因为不能去掉元组中的逗号
     p1 = re.compile("(\d)(,)(\d\d\d)($|\D)")
     while True:
         next_expr = p1.sub("\\1\\3\\4", expr)
@@ -137,11 +137,11 @@ def _strip_properly_formatted_commas(expr: str):
 
 
 def _normalize(expr: str) -> str:
-    """Normalize answer expressions."""
+    """对答案表达式进行归一化。"""
     if expr is None:
         return None
 
-    # Remove enclosing `\text{}`.
+    # 移除外层的 `\text{}`。
     m = re.search("^\\\\text\{(?P<text>.+?)\}$", expr)
     if m is not None:
         expr = m.group("text")
@@ -192,17 +192,17 @@ def _normalize(expr: str) -> str:
         except:
             pass
 
-    # edge case with mixed numbers and negative signs
+    # 带分数和负号的边界情况
     expr = re.sub("- *", "-", expr)
 
     expr = _inject_implicit_mixed_number(expr)
     # expr = expr.replace(" ", "")
 
-    # # if we somehow still have latex braces here, just drop them
+    # # 如果此时仍然存在 latex 花括号，则直接去掉
     # expr = expr.replace("{", "")
     # expr = expr.replace("}", "")
 
-    # don't be case sensitive for text answers
+    # 对文本答案不区分大小写
     expr = expr.lower()
 
     if _str_is_int(expr):
@@ -219,7 +219,7 @@ def count_unknown_letters_in_expr(expr: str):
 
 
 def should_allow_eval(expr: str):
-    # we don't want to try parsing unknown text or functions of more than two variables
+    # 我们不希望尝试解析未知文本或超过两个变量的函数
     if count_unknown_letters_in_expr(expr) > 2:
         return False
 
@@ -253,7 +253,7 @@ def are_equal_under_sympy(ground_truth_normalized: str, given_normalized: str):
 
 def split_tuple(expr: str):
     """
-    Split the elements in a tuple/interval, while handling well-formatted commas in large numbers
+    拆分元组/区间中的元素，同时正确处理大数中格式良好的逗号
     """
     expr = _strip_properly_formatted_commas(expr)
     if len(expr) == 0:
@@ -267,10 +267,10 @@ def split_tuple(expr: str):
 
 def grade_answer(given_answer: str, ground_truth: str) -> bool:
     """
-    The answer will be considered correct if:
-    (a) it normalizes to the same string as the ground truth answer
-    OR
-    (b) sympy can simplify the difference between the expressions to 0
+    在以下情况下答案将被视为正确：
+    (a) 归一化后与标准答案的字符串相同
+    或者
+    (b) sympy 能将两个表达式的差化简为 0
     """
     if given_answer is None:
         return False
@@ -278,7 +278,7 @@ def grade_answer(given_answer: str, ground_truth: str) -> bool:
     ground_truth_normalized_mathd = math_normalize.normalize_answer(ground_truth)
     given_answer_normalized_mathd = math_normalize.normalize_answer(given_answer)
 
-    # be at least as lenient as mathd
+    # 至少与 mathd 一样宽松
     if ground_truth_normalized_mathd == given_answer_normalized_mathd:
         return True
 
@@ -308,11 +308,11 @@ def grade_answer(given_answer: str, ground_truth: str) -> bool:
     else:
         for ground_truth_elem, given_elem in zip(ground_truth_elems, given_elems):
             if _is_frac(ground_truth_elem) and _is_frac(given_elem):
-                # if fractions aren't reduced, then shouldn't be marked as correct
-                # so, we don't want to allow sympy.simplify in this case
+                # 如果分式未约分，则不应判定为正确
+                # 因此在这种情况下不允许使用 sympy.simplify
                 is_correct = ground_truth_elem == given_elem
             elif _str_is_int(ground_truth_elem) != _str_is_int(given_elem):
-                # if the ground truth answer is an integer, we require the given answer to be a strict match (no sympy.simplify)
+                # 如果标准答案是整数，则要求给出的答案严格匹配（不使用 sympy.simplify）
                 is_correct = False
             else:
                 try:
@@ -383,7 +383,7 @@ def match_answer(response):
             if response.endswith("\n"):
                 response = response[:-2]
 
-    # Find boxed
+    # 查找 boxed
     ans_boxed = _last_boxed_only_string(response)
     if ans_boxed:
         is_matched = True
@@ -402,8 +402,8 @@ def match_answer(response):
             if response.endswith("\n"):
                 response = response[:-2]
 
-    is_matched = is_matched if any([c.isdigit() for c in response]) else False  # answer must have a digit
-    # Grade
+    is_matched = is_matched if any([c.isdigit() for c in response]) else False  # 答案中必须包含数字
+    # 判定
     return is_matched, response
 
 import multiprocessing
@@ -464,7 +464,7 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
     # print("="*20)
     # print("\n\n")
     # breakpoint()
-    # grade simple algebra questions. if succeed, return; otherwise, proceed to more complex grading
+    # 对简单的代数题进行判分。若成功则返回；否则进入更复杂的判分流程
     # if not check_correctness_math(extracted_model_output, ground_truth):
     try:
         if grade_answer(extracted_model_output, ground_truth):
@@ -492,9 +492,9 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
     return is_correct, format_correctness, extracted_model_output
 
 # """
-# Answer checker API that uses sympy to simplify expressions and check for equality.
+# 使用 sympy 化简表达式并检查相等性的答案校验 API。
 
-# Call grade_answer(given_answer: str, ground_truth: str).
+# 调用 grade_answer(given_answer: str, ground_truth: str)。
 
 # FROM: https://github.com/openai/prm800k/blob/main/prm800k/grading/grader.py
 # """
@@ -508,14 +508,14 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 # # import math_normalize
 # # from grader import math_equal
 
-# # sympy might hang -- we don't care about trying to be lenient in these cases
+# # sympy 可能会挂起 —— 在这种情况下我们不追求宽松处理
 # BAD_SUBSTRINGS = ["^{", "^("]
 # BAD_REGEXES = ["\^[0-9]+\^", "\^[0-9][0-9]+"]
 # TUPLE_CHARS = "()[]"
 
 
 # def _sympy_parse(expr: str):
-#     """Parses an expression with sympy."""
+#     """使用 sympy 解析表达式。"""
 #     py_expr = expr.replace("^", "**")
 #     return sympy_parser.parse_expr(
 #         py_expr,
@@ -524,13 +524,13 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 
 
 # def _parse_latex(expr: str) -> str:
-#     """Attempts to parse latex to an expression sympy can read."""
+#     """尝试将 latex 解析为 sympy 可读取的表达式。"""
 #     expr = expr.replace("\\tfrac", "\\frac")
 #     expr = expr.replace("\\dfrac", "\\frac")
-#     expr = expr.replace("\\frac", " \\frac")  # Play nice with mixed numbers.
+#     expr = expr.replace("\\frac", " \\frac")  # 以便更好地处理带分数。
 #     expr = latex2text.LatexNodes2Text().latex_to_text(expr)
 
-#     # Replace the specific characters that this parser uses.
+#     # 替换该解析器使用的特定字符。
 #     expr = expr.replace("√", "sqrt")
 #     expr = expr.replace("π", "pi")
 #     expr = expr.replace("∞", "inf")
@@ -577,16 +577,16 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 
 # def _inject_implicit_mixed_number(step: str):
 #     """
-#     Automatically make a mixed number evalable
+#     自动将带分数转换为可求值的形式
 #     e.g. 7 3/4 => 7+3/4
 #     """
 #     p1 = re.compile("([0-9]) +([0-9])")
-#     step = p1.sub("\\1+\\2", step)  ## implicit mults
+#     step = p1.sub("\\1+\\2", step)  ## 隐式乘法
 #     return step
 
 
 # def _strip_properly_formatted_commas(expr: str):
-#     # We want to be careful because we don't want to strip tuple commas
+#     # 我们要小心，因为不能去掉元组中的逗号
 #     p1 = re.compile("(\d)(,)(\d\d\d)($|\D)")
 #     while True:
 #         next_expr = p1.sub("\\1\\3\\4", expr)
@@ -597,11 +597,11 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 
 
 # def _normalize(expr: str) -> str:
-#     """Normalize answer expressions."""
+#     """对答案表达式进行归一化。"""
 #     if expr is None:
 #         return None
 
-#     # Remove enclosing `\text{}`.
+#     # 移除外层的 `\text{}`。
 #     m = re.search("^\\\\text\{(?P<text>.+?)\}$", expr)
 #     if m is not None:
 #         expr = m.group("text")
@@ -652,17 +652,17 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 #         except:
 #             pass
 
-#     # edge case with mixed numbers and negative signs
+#     # 带分数和负号的边界情况
 #     expr = re.sub("- *", "-", expr)
 
 #     expr = _inject_implicit_mixed_number(expr)
 #     # expr = expr.replace(" ", "")
 
-#     # # if we somehow still have latex braces here, just drop them
+#     # # 如果此时仍然存在 latex 花括号，则直接去掉
 #     # expr = expr.replace("{", "")
 #     # expr = expr.replace("}", "")
 
-#     # don't be case sensitive for text answers
+#     # 对文本答案不区分大小写
 #     expr = expr.lower()
 
 #     if _str_is_int(expr):
@@ -679,7 +679,7 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 
 
 # def should_allow_eval(expr: str):
-#     # we don't want to try parsing unknown text or functions of more than two variables
+#     # 我们不希望尝试解析未知文本或超过两个变量的函数
 #     if count_unknown_letters_in_expr(expr) > 2:
 #         return False
 
@@ -713,7 +713,7 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 
 # def split_tuple(expr: str):
 #     """
-#     Split the elements in a tuple/interval, while handling well-formatted commas in large numbers
+#     拆分元组/区间中的元素，同时正确处理大数中格式良好的逗号
 #     """
 #     expr = _strip_properly_formatted_commas(expr)
 #     if len(expr) == 0:
@@ -728,10 +728,10 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 
 # def grade_answer(given_answer: str, ground_truth: str) -> bool:
 #     """
-#     The answer will be considered correct if:
-#     (a) it normalizes to the same string as the ground truth answer
-#     OR
-#     (b) sympy can simplify the difference between the expressions to 0
+#     在以下情况下答案将被视为正确：
+#     (a) 归一化后与标准答案的字符串相同
+#     或者
+#     (b) sympy 能将两个表达式的差化简为 0
 #     """
 #     if given_answer is None:
 #         return False
@@ -739,7 +739,7 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 #     ground_truth_normalized_mathd = math_normalize.normalize_answer(ground_truth)
 #     given_answer_normalized_mathd = math_normalize.normalize_answer(given_answer)
 
-#     # be at least as lenient as mathd
+#     # 至少与 mathd 一样宽松
 #     if ground_truth_normalized_mathd == given_answer_normalized_mathd:
 #         return True
 
@@ -769,11 +769,11 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 #     else:
 #         for ground_truth_elem, given_elem in zip(ground_truth_elems, given_elems):
 #             if _is_frac(ground_truth_elem) and _is_frac(given_elem):
-#                 # if fractions aren't reduced, then shouldn't be marked as correct
-#                 # so, we don't want to allow sympy.simplify in this case
+#                 # 如果分式未约分，则不应判定为正确
+#                 # 因此在这种情况下不允许使用 sympy.simplify
 #                 is_correct = ground_truth_elem == given_elem
 #             elif _str_is_int(ground_truth_elem) != _str_is_int(given_elem):
-#                 # if the ground truth answer is an integer, we require the given answer to be a strict match (no sympy.simplify)
+#                 # 如果标准答案是整数，则要求给出的答案严格匹配（不使用 sympy.simplify）
 #                 is_correct = False
 #             else:
 #                 is_correct = are_equal_under_sympy(ground_truth_elem, given_elem)
@@ -841,7 +841,7 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 #             if response.endswith("\n"):
 #                 response = response[:-2]
 
-#     # Find boxed
+#     # 查找 boxed
 #     ans_boxed = _last_boxed_only_string(response)
 #     if ans_boxed:
 #         is_matched = True
@@ -860,8 +860,8 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 #             if response.endswith("\n"):
 #                 response = response[:-2]
 
-#     is_matched = is_matched if any([c.isdigit() for c in response]) else False  # answer must have a digit
-#     # Grade
+#     is_matched = is_matched if any([c.isdigit() for c in response]) else False  # 答案中必须包含数字
+#     # 判定
 #     return is_matched, response
 
 # import multiprocessing
@@ -927,7 +927,7 @@ def evaluate_math(model_output: str, ground_truth: str) -> bool:
 #     # print("="*20)
 #     # print("\n\n")
 #     # breakpoint()
-#     # grade simple algebra questions. if succeed, return; otherwise, proceed to more complex grading
+#     # 对简单的代数题进行判分。若成功则返回；否则进入更复杂的判分流程
 #     if not check_correctness_math(extracted_model_output, ground_truth):
 #         if grade_answer(extracted_model_output, ground_truth):
 #             return True, format_correctness, extracted_model_output

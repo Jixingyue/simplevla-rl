@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-A Ray logger will receive logging info from different processes.
+Ray 日志器，用于接收来自不同进程的日志信息。
 """
 import numbers
 import json
@@ -45,7 +45,7 @@ def concat_dict_to_str(dict: Dict, step):
 #             print(concat_dict_to_str(data, step=step), flush=True)
 
 class LocalLogger:
-    """A logger that writes data to a local file and optionally prints to console."""
+    """一个将数据写入本地文件并可选打印到控制台的日志器。"""
     
     def __init__(self, 
                  remote_logger=None, 
@@ -54,49 +54,49 @@ class LocalLogger:
                  log_dir: str = "logs",
                  filename_prefix: str = "run"):
         """
-        Initialize the LocalLogger.
+        初始化 LocalLogger。
         
-        Args:
-            remote_logger: Legacy parameter (not used)
-            enable_wandb: Legacy parameter (not used)
-            print_to_console: Whether to print logs to console
-            log_dir: Directory where log files will be stored
-            filename_prefix: Prefix for the log filename
+        参数:
+            remote_logger: 旧参数（未使用）
+            enable_wandb: 旧参数（未使用）
+            print_to_console: 是否将日志打印到控制台
+            log_dir: 日志文件存储目录
+            filename_prefix: 日志文件名前缀
         """
         self.print_to_console = print_to_console
         if print_to_console:
             print('Using LocalLogger is deprecated. The constructor API will change')
         
-        # Create logs directory if it doesn't exist
+        # 如果日志目录不存在则创建
         os.makedirs(log_dir, exist_ok=True)
         
-        # Generate unique filename with timestamp
+        # 生成带时间戳的唯一文件名
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{filename_prefix}_{timestamp}.log"
         self.log_path = os.path.join(log_dir, filename)
         
-        # Initialize the log file with a header
+        # 写入日志文件头部进行初始化
         with open(self.log_path, 'w') as f:
             f.write(f"# Log started at {datetime.now().isoformat()}\n")
             f.write("# Format: {timestamp}\t{step}\t{data_json}\n")
     
     def flush(self):
-        """Implement flush method for compatibility."""
+        """实现 flush 方法以保持兼容性。"""
         pass
     
     def log(self, data: Dict[str, Any], step: int) -> None:
         """
-        Log data to file and optionally console.
+        将数据记录到文件，并可选输出到控制台。
         
-        Args:
-            data: Dictionary containing metrics/data to log
-            step: Current step number
+        参数:
+            data: 包含待记录指标/数据的字典
+            step: 当前步数
         """
-        # Console output
+        # 控制台输出
         if self.print_to_console:
             print(concat_dict_to_str(data, step=step), flush=True)
         
-        # File output
+        # 文件输出
         timestamp = datetime.now().isoformat()
         data_str = json.dumps(data)
         log_line = f"{timestamp}\t{step}\t{data_str}\n"
@@ -109,5 +109,5 @@ class LocalLogger:
                 print(f"Error writing to log file: {e}")
     
     def get_log_path(self) -> str:
-        """Return the path to the log file."""
+        """返回日志文件的路径。"""
         return self.log_path

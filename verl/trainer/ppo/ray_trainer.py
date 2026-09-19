@@ -13,8 +13,8 @@
 # limitations under the License.
 
 """
-Main RL training loop: data loading, VLA rollout, model updates, evaluation, checkpointing
-RL algorithm-specific advantage computation
+RL 主训练循环：数据加载、VLA rollout、模型更新、评估、checkpoint 保存
+RL 算法相关的优势（advantage）计算
 """
 import os
 import statistics
@@ -63,9 +63,9 @@ class ResourcePoolManager:
 
     def create_resource_pool(self):
         for resource_pool_name, process_on_nodes in self.resource_pool_spec.items():
-            # max_colocate_count means the number of WorkerGroups (i.e. processes) in each RayResourcePool
-            # For FSDP backend, we recommend using max_colocate_count=1 that merge all WorkerGroups into one.
-            # For Megatron backend, we recommend using max_colocate_count>1 that can utilize different WorkerGroup for differnt models
+            # max_colocate_count 表示每个 RayResourcePool 中 WorkerGroup（即进程）的数量
+            # 对于 FSDP 后端，建议使用 max_colocate_count=1，将所有 WorkerGroup 合并为一个。
+            # 对于 Megatron 后端，建议使用 max_colocate_count>1，以便为不同模型使用不同的 WorkerGroup
             resource_pool = RayResourcePool(process_on_nodes=process_on_nodes,
                                             use_gpu=True,
                                             max_colocate_count=1,
@@ -73,7 +73,7 @@ class ResourcePoolManager:
             self.resource_pool_dict[resource_pool_name] = resource_pool
 
     def get_resource_pool(self, role: Role) -> RayResourcePool:
-        """Get the resource pool of the worker_cls"""
+        """获取 worker_cls 对应的资源池"""
         return self.resource_pool_dict[self.mapping[role]]
 
 
@@ -98,7 +98,7 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
     # 只保留 < finish_step 的 token 位置，避免 padding/越界部分参与 KL/reward
     response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, response_len)
 
-    # ---- Compute KL divergence ----
+    # ---- 计算 KL 散度 ----
     if 'ref_log_prob' in data.batch.keys():
         kld = core_algos.kl_penalty(data.batch['old_log_probs'],
                                     data.batch['ref_log_prob'],
@@ -109,11 +109,11 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
         beta = 0
         kld = torch.zeros_like(response_mask, dtype=torch.float32)
 
-    # reward shaping
+    # 奖励塑形（reward shaping）
     token_level_rewards = token_level_scores - beta * kld
 
-    current_kl = masked_mean(kld, mask=response_mask, axis=-1)  # average over response length
-    current_kl = torch.mean(current_kl, dim=0).item()  # average over batch
+    current_kl = masked_mean(kld, mask=response_mask, axis=-1)  # 在 response 长度维度上取平均
+    current_kl = torch.mean(current_kl, dim=0).item()  # 在 batch 维度上取平均
 
     # # 自适应KL，训练更稳定
     # https://github.com/huggingface/trl/blob/951ca1841f29114b969b57b26c7d3e80a39f75a0/trl/trainer/ppo_trainer.py#L837
@@ -140,7 +140,7 @@ def compute_advantage(data: DataProto, gamma, lam, adv_estimator, config):
 
     token_level_rewards = data.batch['token_level_rewards'] if 'token_level_rewards' in list(data.batch.keys()) else data.batch['token_level_scores']
 
-    # TODO: add other ways to estimate advantages
+    # TODO: 添加其他估计优势（advantage）的方式
     if adv_estimator == 'rloo':
         # prompt_ids = data.batch['prompts']
         # prompt_length = prompt_ids.shape[-1]
@@ -220,37 +220,37 @@ def reduce_metrics(metrics: dict):
 
 
 def compute_data_metrics(batch,config):
-    # log statistics
+    # 记录统计信息
     sequence_score = batch.batch['token_level_scores'].sum(-1)
     sequence_reward = batch.batch['token_level_rewards'].sum(-1)
     advantages = batch.batch['advantages']
     returns = batch.batch['returns']
 
-    # response mask
+    # response 掩码
     finish_step = batch.batch['finish_step'] * config.actor_rollout_ref.model.action_token_len 
     steps = torch.arange(batch.batch['responses'].size(1)*batch.batch['responses'].size(2), device=advantages.device)  # (traj_len,)
     steps_expanded = steps.unsqueeze(0).expand(batch.batch['responses'].size(0), -1)
     response_mask = steps_expanded < finish_step.unsqueeze(1)  # (batch_size, traj_len)
 
     metrics = {
-        # score
+        # 分数（score）
         'critic/score/mean': torch.mean(sequence_score).detach().item(),
         'critic/score/max': torch.max(sequence_score).detach().item(),
         'critic/score/min': torch.min(sequence_score).detach().item(),
-        # reward
+        # 奖励（reward）
         'critic/rewards/mean': torch.mean(sequence_reward).detach().item(),
         'critic/rewards/max': torch.max(sequence_reward).detach().item(),
         'critic/rewards/min': torch.min(sequence_reward).detach().item(),
-        # adv
+        # 优势（advantage）
         'critic/advantages/mean': masked_mean(advantages, response_mask).detach().item(),
         'critic/advantages/max': torch.max(advantages[response_mask.bool()]).detach().item(),
         'critic/advantages/min': torch.min(advantages[response_mask.bool()]).detach().item(),
-        # returns
+        # 回报（return）
         'critic/returns/mean': masked_mean(returns, response_mask).detach().item(),
         'critic/returns/max': torch.max(returns[response_mask.bool()]).detach().item(),
         'critic/returns/min': torch.min(returns[response_mask.bool()]).detach().item(),
-        # response length
-        # TODO: add response length
+        # response 长度
+        # TODO: 添加 response 长度
     }
     return metrics
 
@@ -283,7 +283,7 @@ class RayTrainer(object):
         self.use_rm = Role.RewardModel in role_worker_mapping
         self.ray_worker_group_cls = ray_worker_group_cls
 
-        # KL controller: fixed/adaptive
+        # KL 控制器：固定/自适应
         if self.use_reference_policy:
             if config.algorithm.kl_ctrl.type == 'fixed':
                 self.kl_ctrl = core_algos.FixedKLController(kl_coef=config.algorithm.kl_ctrl.kl_coef)
@@ -300,7 +300,7 @@ class RayTrainer(object):
         self._create_dataloader()
 
     def _create_dataloader(self):
-        # TODO: we have to make sure the batch size is divisible by the dp size
+        # TODO: 我们必须确保 batch size 可以被 dp size 整除
         from torch.utils.data import DataLoader
         from verl.utils.dataset.rob_dataset import LIBERO_Dataset, Robotwin_Dataset, collate_fn
 
@@ -366,8 +366,8 @@ class RayTrainer(object):
 
             test_batch = test_batch.union(test_output_gen_batch)
 
-            # evaluate using reward_function
-            # for certain reward function (e.g. sandbox), the generation can overlap with reward
+            # 使用 reward_function 评估
+            # 对于某些奖励函数（例如 sandbox），生成可以与奖励计算重叠
             verifier_score, reward_metrics, format_metrics, reward_format_metrics = self.val_reward_fn.verify(test_batch)
             reward_tensor=torch.tensor(verifier_score, dtype=torch.float32).unsqueeze(-1)
 
@@ -386,7 +386,7 @@ class RayTrainer(object):
 
         reward_tensor = torch.cat(reward_tensor_lst, dim=0).sum(-1).cpu()  # (batch_size,)
         data_sources = np.concatenate(data_source_lst, axis=0)
-        # evaluate test_score based on data source
+        # 根据 data source 评估 test_score
         data_source_reward = {}
         for i in range(reward_tensor.shape[0]):
             data_source = data_sources[i]
@@ -403,12 +403,12 @@ class RayTrainer(object):
         return metric_dict
 
     def init_workers(self):
-        """Init resource pool and worker group"""
+        """初始化资源池和 worker group"""
         self.resource_pool_manager.create_resource_pool()
 
         self.resource_pool_to_cls = {pool: {} for pool in self.resource_pool_manager.resource_pool_dict.values()}
 
-        # create actor and rollout
+        # 创建 actor 和 rollout
         if self.hybrid_engine:
             resource_pool = self.resource_pool_manager.get_resource_pool(Role.ActorRollout)
             actor_rollout_cls = RayClassWithInitArgs(cls=self.role_worker_mapping[Role.ActorRollout],
@@ -418,7 +418,7 @@ class RayTrainer(object):
         else:
             raise NotImplementedError
 
-        # create critic
+        # 创建 critic
         if self.config.algorithm.adv_estimator == 'gae':
             resource_pool = self.resource_pool_manager.get_resource_pool(Role.Critic)
             critic_cls = RayClassWithInitArgs(cls=self.role_worker_mapping[Role.Critic], config=self.config.critic)
@@ -433,7 +433,7 @@ class RayTrainer(object):
         else:
             raise NotImplementedError
 
-        # create reference policy if needed
+        # 如有需要，创建参考策略（reference policy）
         if self.use_reference_policy:
             resource_pool = self.resource_pool_manager.get_resource_pool(Role.RefPolicy)
             ref_policy_cls = RayClassWithInitArgs(self.role_worker_mapping[Role.RefPolicy],
@@ -441,17 +441,17 @@ class RayTrainer(object):
                                                   role='ref')
             self.resource_pool_to_cls[resource_pool]['ref'] = ref_policy_cls
 
-        # create a reward model if reward_fn is None
+        # 如果 reward_fn 为 None，则创建奖励模型
         if self.use_rm:
-            # we create a RM here
+            # 我们在这里创建 RM
             resource_pool = self.resource_pool_manager.get_resource_pool(Role.RewardModel)
             rm_cls = RayClassWithInitArgs(self.role_worker_mapping[Role.RewardModel], config=self.config.reward_model)
             self.resource_pool_to_cls[resource_pool]['rm'] = rm_cls
 
-        # initialize WorkerGroup
-        # NOTE: if you want to use a different resource pool for each role, which can support different parallel size,
-        # you should not use `create_colocated_worker_cls`. Instead, directly pass different resource pool to different worker groups.
-        # See https://github.com/volcengine/verl/blob/master/examples/ray/tutorial.ipynb for more information.
+        # 初始化 WorkerGroup
+        # NOTE: 如果你想为每个角色使用不同的资源池（以支持不同的并行规模），
+        # 就不应使用 `create_colocated_worker_cls`，而是直接将不同的资源池传给不同的 worker group。
+        # 更多信息参见 https://github.com/volcengine/verl/blob/master/examples/ray/tutorial.ipynb
         all_wg = {}
         self.wg_dicts = []
         for resource_pool, class_dict in self.resource_pool_to_cls.items():
@@ -459,7 +459,7 @@ class RayTrainer(object):
             wg_dict = self.ray_worker_group_cls(resource_pool=resource_pool, ray_cls_with_init=worker_dict_cls)
             spawn_wg = wg_dict.spawn(prefix_set=class_dict.keys())
             all_wg.update(spawn_wg)
-            # keep the referece of WorkerDict to support ray >= 2.31. Ref: https://github.com/ray-project/ray/pull/45699
+            # 保留 WorkerDict 的引用以支持 ray >= 2.31。参考：https://github.com/ray-project/ray/pull/45699
             self.wg_dicts.append(wg_dict)
 
         if self.use_critic:
@@ -474,13 +474,13 @@ class RayTrainer(object):
             self.rm_wg = all_wg['rm']
             self.rm_wg.init_model()
 
-        # we should create rollout at the end so that vllm can have a better estimation of kv cache memory
+        # 我们应在最后创建 rollout，以便 vLLM 能更好地估计 kv cache 内存
         self.actor_rollout_wg = all_wg['actor_rollout']
         self.actor_rollout_wg.init_model()
 
     def fit(self):
         """
-        The training loop of VLA-RL
+        VLA-RL 的训练循环
 
         """
         from verl.utils.tracking import Tracking
@@ -589,7 +589,7 @@ class RayTrainer(object):
                             
                     metrics['timing/verify'] += timer.last
 
-                    # =============== 3) filter（accuracy filtering and score logging） ===============
+                    # =============== 3) filter（准确率过滤与分数记录） ===============
                     with Timer(name='acc&trunc_filter', text="{name}: {seconds:.1f} seconds") as timer:
                         if self.config.data.filter_accuracy or self.config.data.filter_truncated:
                             print(f"before filtering: {len(roll_batch)}")
@@ -627,9 +627,9 @@ class RayTrainer(object):
                 batch = valid_batch
                 print(f'rollout batch size: {len(batch)}')
 
-                # =============== 4) compute advantage ===============
+                # =============== 4) 计算 advantage ===============
                 if self.use_reference_policy:
-                    # compute reference log_prob
+                    # 计算 reference log_prob
                     with Timer(name='ref', text="{name}: {seconds:.1f} seconds") as timer:
                         ref_log_prob = self.ref_policy_wg.compute_ref_log_prob(batch)
                         batch = batch.union(ref_log_prob)
@@ -649,16 +649,16 @@ class RayTrainer(object):
                 metrics['timing/reward_model'] = timer.last
 
                 with Timer(name='adv', text="{name}: {seconds:.1f} seconds") as timer:
-                    # directly reuse previously computed rewards; but with reward shaping
+                    # 直接复用之前计算好的奖励；但会进行 reward shaping
                     reward_tensor_dict, reward_metrics = self.reward_fn(batch)
                     batch.batch['token_level_scores'] = reward_tensor_dict['all']
                     for k, v in reward_metrics.items():
                         metrics['train_reward/' + k] = v
-                    # decomposed rewards:
+                    # 分解的奖励：
                     for k,v in reward_tensor_dict.items():
                         batch.batch[k]=v
 
-                    # compute rewards. apply_kl_penalty if available
+                    # 计算奖励。如果可用则应用 apply_kl_penalty
                     batch, kl_metrics = apply_kl_penalty(batch,
                                                          kl_ctrl=self.kl_ctrl,
                                                          kl_penalty=self.config.algorithm.kl_penalty,
@@ -666,7 +666,7 @@ class RayTrainer(object):
                                                          action_chunks_len=self.config.actor_rollout_ref.model.action_chunks_len,)
                     metrics.update(kl_metrics)
 
-                    # compute advantages, executed on the driver process
+                    # 计算 advantages，在 driver 进程上执行
                     batch = compute_advantage(batch,
                                               self.config.algorithm.gamma,
                                               self.config.algorithm.lam,
@@ -674,11 +674,11 @@ class RayTrainer(object):
                                               config = self.config)
                 metrics['timing/adv'] = timer.last
 
-                # critic is disabled
+                # critic 已被禁用
 
-                # implement critic warmup
+                # 实现 critic warmup
                 if self.config.trainer.critic_warmup <= global_steps:
-                    # update actor
+                    # 更新 actor
                     with Timer(name='update_actor', text="{name}: {seconds:.1f} seconds") as timer:
                         batch.meta_info['is_filtered'] = True
                         batch.meta_info['train_mode'] = False
@@ -690,7 +690,7 @@ class RayTrainer(object):
                     metrics.update(actor_output_metrics)
                     metrics.update(entropy_output_metrics)
 
-                # validate
+                # 验证
                 if self.val_reward_fn is not None and (global_steps + 1) % self.config.trainer.test_freq == 0:
                     with Timer(name='testing', text="{name}: {seconds:.1f} seconds") as timer:
                         val_metrics: dict = self._validate(global_steps=global_steps+1)
@@ -699,13 +699,13 @@ class RayTrainer(object):
                     metrics.update(val_metrics)
                     logger.log(data=val_metrics, step=global_steps)
 
-                # collect metrics
+                # 收集 metrics
                 with Timer(name='logging1', text="{name}: {seconds:.1f} seconds") as timer:
                     data_metrics = compute_data_metrics(batch=batch, config = self.config)
                 with Timer(name='logging2', text="{name}: {seconds:.1f} seconds") as timer:
                     metrics.update(data_metrics)
                 with Timer(name='logging3', text="{name}: {seconds:.1f} seconds") as timer:
-                    # TODO: make a canonical logger that supports various backend
+                    # TODO: 实现一个支持多种后端的统一 logger
                     logger.log(data=metrics, step=global_steps)
 
                 if self.config.trainer.save_freq > 0 and (global_steps + 1) % self.config.trainer.save_freq == 0:
@@ -730,7 +730,7 @@ class RayTrainer(object):
 
                 global_steps += 1
 
-        # perform validation after training
+        # 训练结束后进行验证
         if self.val_reward_fn is not None:
             val_metrics = self._validate(global_steps=global_steps)
             pprint(f'Final validation metrics: {val_metrics}')
@@ -738,15 +738,15 @@ class RayTrainer(object):
 
     def filter_format(self, reward_tensor, batch, n_samples):
         """
-        Filter responses based on accuracy and truncation criteria.
+        根据准确率和截断标准过滤回复。
         
         Args:
-            reward_tensor: Tensor containing accuracy scores
-            batch: DataProto batch containing responses
-            n_samples: Number of responses per prompt
+            reward_tensor: 包含准确率分数的张量
+            batch: 包含回复的 DataProto batch
+            n_samples: 每个 prompt 的回复数量
         
         Returns:
-            DataProto: Filtered batch
+            DataProto: 过滤后的 batch
         """
         if self.config.data.filter_format:
             reward_matrix = reward_tensor.sum(-1).reshape(-1, n_samples)
@@ -756,17 +756,17 @@ class RayTrainer(object):
 
             acc_mask = (acc_tensor >= 1)
         else:
-            # If accuracy filtering disabled, keep all samples
+            # 如果未启用准确率过滤，则保留所有样本
             acc_mask = torch.ones(len(batch) // n_samples, dtype=torch.bool, device=reward_tensor.device)
-        # Then do truncation filtering if enabled
+        # 如果启用，接下来进行截断过滤
 
-        # Combine both masks
+        # 组合两个掩码
         combined_mask = acc_mask
 
-        # Expand mask to cover all samples for each prompt
+        # 将掩码扩展以覆盖每个 prompt 的所有样本
         final_mask = combined_mask.repeat_interleave(n_samples)
 
-        # Apply the mask to the batch
+        # 将掩码应用到 batch
         filtered_batch = batch.slice(final_mask)
 
         print(f"Filtered format batch size: {len(filtered_batch)} (from original size: {len(batch)})")
@@ -775,17 +775,17 @@ class RayTrainer(object):
 
     def filter(self, reward_tensor, batch, n_samples):
         """
-        Filter responses based on accuracy and truncation criteria.
+        根据准确率和截断标准过滤回复。
         
         Args:
-            reward_tensor: Tensor containing accuracy scores
-            batch: DataProto batch containing responses
-            n_samples: Number of responses per prompt
+            reward_tensor: 包含准确率分数的张量
+            batch: 包含回复的 DataProto batch
+            n_samples: 每个 prompt 的回复数量
         
         Returns:
-            DataProto: Filtered batch
+            DataProto: 过滤后的 batch
         """
-        # First do accuracy filtering if enabled
+        # 如果启用，先进行准确率过滤
         if self.config.data.filter_accuracy:
             reward_matrix = reward_tensor.sum(-1).reshape(-1, n_samples)
             acc_tensor = torch.mean(reward_matrix, dim=-1)
@@ -795,42 +795,42 @@ class RayTrainer(object):
             acc_mask = (acc_tensor >= self.config.data.accuracy_lower_bound) & (
                         acc_tensor <= self.config.data.accuracy_upper_bound)
         else:
-            # If accuracy filtering disabled, keep all samples
+            # 如果未启用准确率过滤，则保留所有样本
             acc_mask = torch.ones(len(batch) // n_samples, dtype=torch.bool, device=reward_tensor.device)
-        # Then do truncation filtering if enabled
+        # 如果启用，接下来进行截断过滤
         if self.config.data.filter_truncated:
             responses = batch.batch['responses']
             attention_mask = batch.batch['attention_mask']
             response_mask = attention_mask[:, -responses.size(1):]
 
-            # Calculate response lengths
+            # 计算 response 长度
             response_lengths = response_mask.sum(-1)  # (batch_size,)
             response_lengths = response_lengths.reshape(-1, n_samples)  # (num_prompts, n_samples)
 
-            # Get max possible length from config
+            # 从 config 中获取最大可能长度
             max_len = self.config.data.max_response_length
 
-            # Check if any response in the group hits max length (indicating possible truncation)
+            # 检查组内是否有 response 达到最大长度（表明可能被截断）
             has_truncated = (response_lengths >= max_len).any(dim=-1)
 
-            # Print distribution of truncated vs non-truncated
+            # 打印截断与非截断的分布
             truncated_counts = Counter(has_truncated.tolist())
             print("Truncation distribution:", 
                 f"Truncated: {truncated_counts[True] if True in truncated_counts else 0}, "
                 f"Non-truncated: {truncated_counts[False] if False in truncated_counts else 0}")
-            # Keep only prompts where no response was truncated
+            # 只保留没有 response 被截断的 prompt
             trunc_mask = ~has_truncated
         else:
-            # If truncation filtering disabled, keep all samples
+            # 如果未启用截断过滤，则保留所有样本
             trunc_mask = torch.ones(len(batch) // n_samples, dtype=torch.bool, device=reward_tensor.device)
 
-        # Combine both masks
+        # 组合两个掩码
         combined_mask = acc_mask & trunc_mask
 
-        # Expand mask to cover all samples for each prompt
+        # 将掩码扩展以覆盖每个 prompt 的所有样本
         final_mask = combined_mask.repeat_interleave(n_samples)
 
-        # Apply the mask to the batch
+        # 将掩码应用到 batch
         filtered_batch = batch.slice(final_mask)
 
         print(f"Filtered batch size: {len(filtered_batch)} (from original size: {len(batch)})")
@@ -839,7 +839,7 @@ class RayTrainer(object):
     def add_to_buffer(self, batch, batch_size, n_samples):
         buffer_length = len(batch) // n_samples - batch_size
         # buffer_batch = batch.slice(range(batch_size * n_samples, (buffer_length + batch_size) * n_samples, n_samples))
-        # # notice that we only add prompts to buffer, and slicing strategy should be exactly consistent to what is in ray_trainer.py
+        # # 注意：我们只把 prompt 加入 buffer，并且切片策略必须与 ray_trainer.py 中的完全一致
         # buffer_batch = buffer_batch.select(batch_keys=['input_ids', 'attention_mask', 'position_ids'])
         # buffer_batch.slice_batch(start=0, length=self.config.data.max_prompt_length, dim=1)
         buffer_mask = torch.ones(buffer_length + batch_size, dtype=torch.bool)

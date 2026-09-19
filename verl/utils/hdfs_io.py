@@ -25,15 +25,15 @@ _HDFS_BIN_PATH = shutil.which('hdfs')
 
 
 def exists(path: str, **kwargs) -> bool:
-    r"""Works like os.path.exists() but supports hdfs.
+    r"""功能类似于 os.path.exists()，但支持 hdfs。
 
-    Test whether a path exists. Returns False for broken symbolic links.
+    测试路径是否存在。对于失效的符号链接返回 False。
 
     Args:
-        path (str): path to test
+        path (str): 要测试的路径
 
     Returns:
-        bool: True if the path exists, False otherwise
+        bool: 如果路径存在则返回 True，否则返回 False
     """
     if _is_non_local(path):
         return _exists(path, **kwargs)
@@ -41,32 +41,31 @@ def exists(path: str, **kwargs) -> bool:
 
 
 def _exists(file_path: str):
-    """ hdfs capable to check whether a file_path is exists """
+    """ 支持 hdfs 检查 file_path 是否存在 """
     if file_path.startswith("hdfs"):
         return _run_cmd(_hdfs_cmd(f"-test -e {file_path}")) == 0
     return os.path.exists(file_path)
 
 
 def makedirs(name, mode=0o777, exist_ok=False, **kwargs) -> None:
-    r"""Works like os.makedirs() but supports hdfs.
+    r"""功能类似于 os.makedirs()，但支持 hdfs。
 
-    Super-mkdir; create a leaf directory and all intermediate ones.  Works like
-    mkdir, except that any intermediate path segment (not just the rightmost)
-    will be created if it does not exist. If the target directory already
-    exists, raise an OSError if exist_ok is False. Otherwise no exception is
-    raised.  This is recursive.
+    超级 mkdir；创建一个叶子目录及其所有中间目录。工作方式类似
+    mkdir，区别在于任何中间路径段（不仅仅是最后一段）在不存在时
+    都会被创建。如果目标目录已存在，当 exist_ok 为 False 时抛出 OSError，
+    否则不抛出异常。该操作是递归的。
 
     Args:
-        name (str): directory to create
-        mode (int): file mode bits
-        exist_ok (bool): if True, do not raise an exception if the directory already exists
-        kwargs: keyword arguments for hdfs
+        name (str): 要创建的目录
+        mode (int): 文件权限位
+        exist_ok (bool): 如果为 True，当目录已存在时不抛出异常
+        kwargs: hdfs 的关键字参数
 
     """
     if _is_non_local(name):
         # TODO(haibin.lin):
-        # - handle OSError for hdfs(?)
-        # - support exist_ok for hdfs(?)
+        # - 处理 hdfs 的 OSError(?)
+        # - 为 hdfs 支持 exist_ok(?)
         _mkdir(name, **kwargs)
     else:
         os.makedirs(name, mode=mode, exist_ok=exist_ok)
@@ -82,26 +81,25 @@ def _mkdir(file_path: str) -> bool:
 
 
 def copy(src: str, dst: str, **kwargs) -> bool:
-    r"""Works like shutil.copy() for file, and shutil.copytree for dir, and supports hdfs.
+    r"""对文件功能类似于 shutil.copy()，对目录功能类似于 shutil.copytree，并支持 hdfs。
 
-    Copy data and mode bits ("cp src dst"). Return the file's destination.
-    The destination may be a directory.
-    If source and destination are the same file, a SameFileError will be
-    raised.
+    复制数据和权限位（"cp src dst"）。返回文件的目标路径。
+    目标可以是一个目录。
+    如果源和目标是同一个文件，将抛出 SameFileError。
 
     Arg:
-        src (str): source file path
-        dst (str): destination file path
-        kwargs: keyword arguments for hdfs copy
+        src (str): 源文件路径
+        dst (str): 目标文件路径
+        kwargs: hdfs copy 的关键字参数
 
     Returns:
-        str: destination file path
+        str: 目标文件路径
 
     """
     if _is_non_local(src) or _is_non_local(dst):
         # TODO(haibin.lin):
-        # - handle SameFileError for hdfs files(?)
-        # - return file destination for hdfs files
+        # - 处理 hdfs 文件的 SameFileError(?)
+        # - 返回 hdfs 文件的目标路径
         return _copy(src, dst)
     else:
         if os.path.isdir(src):

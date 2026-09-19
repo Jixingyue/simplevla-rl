@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Implement base data transfer protocol between any two functions, modules.
-We can subclass Protocol to define more detailed batch info with specific keys
+实现任意两个函数、模块之间的基础数据传输协议。
+我们可以通过继承 Protocol 来定义更详细的 batch 信息及特定 key
 """
 
 import numpy as np
@@ -37,7 +37,7 @@ except:
 
 
 def union_tensor_dict(tensor_dict1: TensorDict, tensor_dict2: TensorDict) -> TensorDict:
-    """Union two tensordicts."""
+    """合并两个 tensordict。"""
     assert tensor_dict1.batch_size == tensor_dict2.batch_size, \
         f'Two tensor dict must have identical batch size. Got {tensor_dict1.batch_size} and {tensor_dict2.batch_size}'
     for key in tensor_dict2.keys():
@@ -89,7 +89,7 @@ def collate_fn(x: list['DataProtoItem']):
 
 @dataclass
 class DataProtoItem:
-    # TODO(zhangchi.usc1992) add consistency check
+    # TODO(zhangchi.usc1992) 添加一致性检查
     batch: TensorDict = None
     non_tensor_batch: Dict = field(default_factory=dict)
     meta_info: Dict = field(default_factory=dict)
@@ -98,17 +98,17 @@ class DataProtoItem:
 @dataclass
 class DataProto:
     """
-    A DataProto is a data structure that aims to provide a standard protocol for data exchange between functions.
-    It contains a batch (TensorDict) and a meta_info (Dict). The batch is a TensorDict https://pytorch.org/tensordict/.
-    TensorDict allows you to manipulate a dictionary of Tensors like a single Tensor. Ideally, the tensors with the
-    same batch size should be put inside batch.
+    DataProto 是一种数据结构，旨在为函数之间的数据交换提供标准协议。
+    它包含一个 batch（TensorDict）和一个 meta_info（Dict）。batch 是一个 TensorDict https://pytorch.org/tensordict/。
+    TensorDict 允许你像操作单个 Tensor 一样操作一个由 Tensor 组成的字典。理想情况下，具有相同 batch size 的
+    张量应放入 batch 中。
     """
     batch: TensorDict = None
     non_tensor_batch: Dict = field(default_factory=dict)
     meta_info: Dict = field(default_factory=dict)
 
     def __post_init__(self):
-        # perform necessary checking
+        # 执行必要的检查
         self.check_consistency()
 
     def __len__(self):
@@ -126,7 +126,7 @@ class DataProto:
 
     def slice_batch(self, start, length, dim=0):
         """
-        Note that this operation is in-place
+        注意该操作是原地（in-place）进行的
         """
         for key, val in self.batch.items():
             self.batch[key] = val.narrow(start=start, length=length, dim=dim)
@@ -152,14 +152,14 @@ class DataProto:
         self.meta_info = meta_info
 
     def check_consistency(self):
-        """Check the consistency of the DataProto. Mainly for batch and non_tensor_batch
-        We expose this function as a public one so that user can call themselves directly
+        """检查 DataProto 的一致性。主要针对 batch 和 non_tensor_batch。
+        我们将该函数公开，以便用户可以直接自行调用。
         """
         if self.batch is not None:
             assert len(self.batch.batch_size) == 1, 'only support num_batch_dims=1'
 
         if len(self.non_tensor_batch) != 0:
-            # TODO: we can actually lift this restriction if needed
+            # TODO: 如果需要，我们实际上可以解除这个限制
             assert len(self.batch.batch_size) == 1, 'only support num_batch_dims=1 when non_tensor_batch is not empty.'
 
             batch_size = self.batch.batch_size[0]
@@ -187,9 +187,9 @@ class DataProto:
 
     @classmethod
     def from_dict(cls, tensors: Dict[str, torch.Tensor], non_tensors=None, meta_info=None, num_batch_dims=1):
-        """Create a DataProto from a dict of tensors. This assumes that
-        1. All the tensor in tensors have the same dim0
-        2. Only dim0 is the batch dim
+        """从一个张量字典创建 DataProto。这里假设：
+        1. tensors 中所有张量具有相同的 dim0
+        2. 只有 dim0 是 batch 维度
         """
         assert len(tensors) > 0, 'tensors must not be empty'
         assert num_batch_dims > 0, 'num_batch_dims must be greater than zero'
@@ -203,7 +203,7 @@ class DataProto:
 
         assert isinstance(non_tensors, dict)
 
-        # get and check batch size
+        # 获取并检查 batch size
         batch_size = None
         pivot_key = None
         for key, tensor in tensors.items():
@@ -222,13 +222,13 @@ class DataProto:
         return cls(batch=tensor_dict, non_tensor_batch=non_tensors, meta_info=meta_info)
 
     def to(self, device) -> 'DataProto':
-        """move the batch to device
+        """将 batch 移动到指定设备
 
         Args:
-            device (torch.device, str): torch device
+            device (torch.device, str): torch 设备
 
         Returns:
-            DataProto: the current DataProto
+            DataProto: 当前的 DataProto
 
         """
         if self.batch is not None:
@@ -236,16 +236,16 @@ class DataProto:
         return self
 
     def select(self, batch_keys=None, non_tensor_batch_keys=None, meta_info_keys=None, deepcopy=False) -> 'DataProto':
-        """Select a subset of the DataProto via batch_keys and meta_info_keys
+        """通过 batch_keys 和 meta_info_keys 选择 DataProto 的一个子集
 
         Args:
-            batch_keys (list, optional): a list of strings indicating the keys in batch to select
-            meta_info_keys (list, optional): a list of keys indicating the meta info to select
+            batch_keys (list, optional): 字符串列表，指示要选择的 batch 中的键
+            meta_info_keys (list, optional): 键列表，指示要选择的 meta info
 
         Returns:
-            DataProto: the DataProto with the selected batch_keys and meta_info_keys
+            DataProto: 包含所选 batch_keys 和 meta_info_keys 的 DataProto
         """
-        # TODO (zhangchi.usc1992) whether to copy
+        # TODO (zhangchi.usc1992) 是否要进行复制
         if batch_keys is not None:
             batch_keys = tuple(batch_keys)
             sub_batch = self.batch.select(*batch_keys)
@@ -271,14 +271,14 @@ class DataProto:
         return DataProto(batch=sub_batch, non_tensor_batch=non_tensor_batch, meta_info=sub_meta_info)
 
     def pop(self, batch_keys=None, non_tensor_batch_keys=None, meta_info_keys=None) -> 'DataProto':
-        """Pop a subset of the DataProto via `batch_keys` and `meta_info_keys`
+        """通过 `batch_keys` 和 `meta_info_keys` 从 DataProto 中弹出（pop）一个子集
 
         Args:
-            batch_keys (list, optional): a list of strings indicating the keys in batch to pop
-            meta_info_keys (list, optional): a list of keys indicating the meta info to pop
+            batch_keys (list, optional): 字符串列表，指示要从 batch 中弹出的键
+            meta_info_keys (list, optional): 键列表，指示要弹出的 meta info
 
         Returns:
-            DataProto: the DataProto with the poped batch_keys and meta_info_keys
+            DataProto: 包含被弹出的 batch_keys 和 meta_info_keys 的 DataProto
         """
         assert batch_keys is not None
         if meta_info_keys is None:
@@ -287,12 +287,12 @@ class DataProto:
             non_tensor_batch_keys = []
 
         tensors = {}
-        # tensor batch
+        # 张量 batch
         for key in batch_keys:
             assert key in self.batch.keys()
             tensors[key] = self.batch.pop(key)
         non_tensors = {}
-        # non tensor batch
+        # 非张量 batch
         for key in non_tensor_batch_keys:
             assert key in self.non_tensor_batch.keys()
             non_tensors[key] = self.non_tensor_batch.pop(key)
@@ -304,7 +304,7 @@ class DataProto:
 
     def rename(self, old_keys=None, new_keys=None) -> 'DataProto':
         """
-        Note that this function only rename the key in the batch
+        注意该函数仅重命名 batch 中的键
         """
 
         def validate_input(keys):
@@ -329,17 +329,17 @@ class DataProto:
         return self
 
     def union(self, other: 'DataProto') -> 'DataProto':
-        """Union with another DataProto. Union batch and meta_info separately.
-        Throw an error if
-        - there are conflict keys in batch and they are not equal
-        - the batch size of two data batch is not the same
-        - there are conflict keys in meta_info and they are not the same.
+        """与另一个 DataProto 求并集（union）。分别对 batch 和 meta_info 进行 union。
+        在以下情况下抛出错误：
+        - batch 中存在冲突的键且它们不相等
+        - 两个 data batch 的 batch size 不相同
+        - meta_info 中存在冲突的键且它们不相同。
 
         Args:
-            other (DataProto): another DataProto to union
+            other (DataProto): 用于 union 的另一个 DataProto
 
         Returns:
-            DataProto: the DataProto after union
+            DataProto: union 之后的 DataProto
         """
         self.batch = union_tensor_dict(self.batch, other.batch)
         self.non_tensor_batch = union_numpy_dict(self.non_tensor_batch, other.non_tensor_batch)
@@ -347,22 +347,22 @@ class DataProto:
         return self
 
     def make_iterator(self, mini_batch_size, epochs, seed=None, dataloader_kwargs=None):
-        """Make an iterator from the DataProto. This is built upon that TensorDict can be used as a normal Pytorch
-        dataset. See https://pytorch.org/tensordict/tutorials/data_fashion for more details.
+        """从 DataProto 构造一个迭代器。这建立在 TensorDict 可以作为普通 Pytorch
+        dataset 使用的基础上。详见 https://pytorch.org/tensordict/tutorials/data_fashion。
 
         Args:
-            mini_batch_size (int): mini-batch size when iterating the dataset. We require that
+            mini_batch_size (int): 遍历数据集时的 mini-batch 大小。我们要求
                 ``batch.batch_size[0] % mini_batch_size == 0``
-            epochs (int): number of epochs when iterating the dataset.
-            dataloader_kwargs: internally, it returns a DataLoader over the batch.
-                The dataloader_kwargs is the kwargs passed to the DataLoader
+            epochs (int): 遍历数据集时的 epoch 数。
+            dataloader_kwargs: 内部会返回一个基于 batch 的 DataLoader。
+                dataloader_kwargs 是传递给 DataLoader 的 kwargs
 
         Returns:
-            Iterator: an iterator that yields a mini-batch data at a time. The total number of iteration steps is
+            Iterator: 每次产出一个 mini-batch 数据的迭代器。总迭代步数为
             ``self.batch.batch_size * epochs // mini_batch_size``
         """
         assert self.batch.batch_size[0] % mini_batch_size == 0, f"{self.batch.batch_size[0]} % {mini_batch_size} != 0"
-        # we can directly create a dataloader from TensorDict
+        # 我们可以直接从 TensorDict 创建 dataloader
         if dataloader_kwargs is None:
             dataloader_kwargs = {}
 
@@ -388,13 +388,13 @@ class DataProto:
         return iter(get_data())
 
     def chunk(self, chunks: int) -> List['DataProto']:
-        """Split the batch among dim=0 into chunks. The meta_info is passed to each DataProto after split.
+        """沿 dim=0 将 batch 切分成若干块。切分后 meta_info 会传递给每个 DataProto。
 
         Args:
-            chunks (int): the number of chunks to split on dim=0
+            chunks (int): 沿 dim=0 切分的块数
 
         Returns:
-            List[DataProto]: a list of DataProto after splitting
+            List[DataProto]: 切分后得到的 DataProto 列表
         """
         if self.batch is not None:
             batch_lst = self.batch.chunk(chunks=chunks, dim=0)
@@ -420,14 +420,14 @@ class DataProto:
 
     @staticmethod
     def concat(data: List['DataProto']) -> 'DataProto':
-        """Concat a list of DataProto. The batch is concatenated among dim=0.
-        The meta_info is assumed to be identical and will use the first one.
+        """拼接一个 DataProto 列表。batch 沿 dim=0 进行拼接。
+        假定各 meta_info 完全相同，将使用第一个 DataProto 的 meta_info。
 
         Args:
-            data (List[DataProto]): list of DataProto
+            data (List[DataProto]): DataProto 列表
 
         Returns:
-            DataProto: concatenated DataProto
+            DataProto: 拼接后的 DataProto
         """
         batch_lst = []
         for batch in data:
@@ -445,7 +445,7 @@ class DataProto:
 
     def reorder(self, indices):
         """
-        Note that this operation is in-place
+        注意该操作是原地（in-place）进行的
         """
         indices_np = indices.detach().numpy()
         self.batch = self.batch[indices]
@@ -458,15 +458,15 @@ import ray
 @dataclass
 class DataProtoFuture:
     """
-    DataProtoFuture aims to eliminate actual data fetching on driver. By doing so, the driver doesn't have to wait
-    for data so that asynchronous execution becomes possible. 
-    DataProtoFuture contains a list of futures from another WorkerGroup of size world_size.
-    - collect_fn is a Callable that reduces the list of futures to a DataProto
-    - dispatch_fn is a Callable that partitions the DataProto into a list of DataProto of size world_size and then select
+    DataProtoFuture 旨在消除 driver 上的实际数据获取（fetching）。这样一来，driver 无需等待
+    数据，从而可以实现异步执行。 
+    DataProtoFuture 包含一个来自另一个 WorkerGroup 的 future 列表，其大小为 world_size。
+    - collect_fn 是一个 Callable，用于将 future 列表归约为一个 DataProto
+    - dispatch_fn 是一个 Callable，用于将 DataProto 划分为大小为 world_size 的 DataProto 列表，然后再进行选择
 
-    Potential issue: we can optimize dispatch_fn(collect_fn) such that only needed data is fetched on destination
-    - DataProtoFuture only supports directly passing from the output of a method to another input. You can't perform any
-    operation on the DataProtoFuture in driver.
+    潜在问题：我们可以优化 dispatch_fn(collect_fn)，使得只在目的地获取所需的数据
+    - DataProtoFuture 只支持从某个方法的输出直接传递到另一个输入。你不能在 driver 中对
+    DataProtoFuture 执行任何操作。
     """
     collect_fn: Callable
     futures: List[ray.ObjectRef]
@@ -482,7 +482,7 @@ class DataProtoFuture:
 
         arg_future_lst = []
         for i in range(chunks):
-            # note that we can't directly pass i and chunks
+            # 注意我们不能直接传递 i 和 chunks
             def dispatch_fn(x, i, chunks):
                 return x.chunk(chunks=chunks)[i]
 
@@ -493,10 +493,10 @@ class DataProtoFuture:
         return arg_future_lst
 
     def get(self):
-        output = ray.get(self.futures)  # dp_size.
+        output = ray.get(self.futures)  # 得到 dp_size 个结果。
         for o in output:
             assert isinstance(o, DataProto)
-        output = self.collect_fn(output)  # select dp, concat
+        output = self.collect_fn(output)  # 选择 dp，concat
         if self.dispatch_fn is not None:
-            output = self.dispatch_fn(output)  # split in batch dim, select using dp
+            output = self.dispatch_fn(output)  # 沿 batch 维度切分，使用 dp 进行选择
         return output

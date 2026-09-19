@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Single Process PRM
+单进程 PRM
 """
 import itertools
 from typing import Iterable
@@ -46,7 +46,7 @@ class DataParallelPRIME(BasePPOActor):
         reward_optimizer: torch.optim.Optimizer = None,
         prime_loss_fn='ce',
     ):
-        """When optimizer is None, it is Reference Policy"""
+        """当 optimizer 为 None 时，即为参考策略（Reference Policy）"""
         super().__init__(config)
         self.reward_module = reward_module
         self.reference_module = reference_module
@@ -61,8 +61,8 @@ class DataParallelPRIME(BasePPOActor):
         self.compute_entropy_from_logits = torch.compile(verl_F.entropy_from_logits, dynamic=True)
 
     def _make_minibatch_iterator(self, data: DataProto) -> Iterable[DataProto]:
-        """Make minibatch iterator for updating the actor
-        See PPO paper for details. https://arxiv.org/abs/1707.06347
+        """构建用于更新 actor 的 minibatch 迭代器
+        详情参见 PPO 论文 https://arxiv.org/abs/1707.06347
         """
         select_keys = ['responses', 'input_ids', 'attention_mask', 'position_ids', 'acc', 'old_log_probs']
         data = data.select(batch_keys=select_keys)
@@ -95,18 +95,18 @@ class DataParallelPRIME(BasePPOActor):
                     input_ids.unsqueeze(-1), attention_mask)  # input_ids_rmpad (total_nnz, ...)
                 input_ids_rmpad = input_ids_rmpad.transpose(0, 1)  # (1, total_nnz)
 
-                # unpad the position_ids to align the rotary
+                # 对 position_ids 进行 unpad 以对齐 rotary
                 position_ids_rmpad = index_first_axis(rearrange(position_ids.unsqueeze(-1), "b s ... -> (b s) ..."),
                                                       indices).transpose(0, 1)
                 input_ids_rmpad_rolled = torch.roll(input_ids_rmpad, shifts=-1, dims=1)
-                # only pass input_ids and position_ids to enable flash_attn_varlen
+                # 仅传入 input_ids 和 position_ids 以启用 flash_attn_varlen
                 output = module(input_ids=input_ids_rmpad,
                                            attention_mask=None,
                                            position_ids=position_ids_rmpad,
-                                           use_cache=False)  # prevent model thinks we are generating
+                                           use_cache=False)  # 防止模型认为我们正在进行生成
                 logits_rmpad = output.logits.squeeze(0)  # (total_nnz, vocab_size)
 
-                # if use_sp: ((total_nnz / sp) + pad) ; if not use_sp: (batch, seqlen)
+                # 若使用 sp: ((total_nnz / sp) + pad)；若未使用 sp: (batch, seqlen)
                 entropy_rmpad = self.compute_entropy_from_logits(logits_rmpad)  # ((total_nnz / sp) + pad)
                 log_probs = logprobs_from_logits(logits=logits_rmpad, labels=input_ids_rmpad_rolled)
 
@@ -119,7 +119,7 @@ class DataParallelPRIME(BasePPOActor):
                                            batch=batch_size,
                                            seqlen=seqlen)
 
-                # only return response part:
+                # 仅返回 response 部分：
                 entropy = full_entropy.squeeze(-1)[:, -response_length - 1:-1]  # (bsz, response_length)
                 log_probs = full_log_probs.squeeze(-1)[:, -response_length - 1:-1]  # (bsz, response_length)
             else:
@@ -139,9 +139,9 @@ class DataParallelPRIME(BasePPOActor):
         max_positions = micro_batch['attention_mask'][:, -response_length:].sum(-1)
 
         ref_log_probs.to(log_probs.dtype)
-        q = log_probs[:, -response_length:] - ref_log_probs[:, -response_length:]  # this is actually diff of q
+        q = log_probs[:, -response_length:] - ref_log_probs[:, -response_length:]  # 这实际上是 q 的差值
 
-        # reward computation does not need gradient. only q needs
+        # reward 计算不需要梯度，只有 q 需要
         with torch.no_grad():
             step_ends = []
             if self.config.prime_granularity == 'token':
@@ -154,7 +154,7 @@ class DataParallelPRIME(BasePPOActor):
                 raise NotImplementedError
 
             token_level_score = torch.zeros_like(micro_batch['input_ids'][:, -response_length:]).to(torch.float32)
-            # the strategy of translating q to reward function:
+            # 将 q 转换为 reward 的策略：
             for i, step_end in enumerate(step_ends):
                 for j in range(len(step_end)):
                     step_range = [min(step_end[j - 1] + 1, response_length - 1) if j > 0 else 0,
@@ -164,7 +164,7 @@ class DataParallelPRIME(BasePPOActor):
         return token_level_score, q
 
     def update_policy(self, data: DataProto):
-        # make sure we are in training mode
+        # 确保处于训练模式
         self.reward_module.train()
         beta = self.config.prime_model.get('beta_train', 0.05)
         n_samples = data.meta_info['n_samples']
@@ -184,21 +184,21 @@ class DataParallelPRIME(BasePPOActor):
         metrics = {}
         token_level_scores = []
         for batch_idx, data in enumerate(dataloader):
-            # split batch into micro_batches
+            # 将 batch 切分为 micro_batch
             # batch = data.batch#.cuda()
             mini_batch = data
             if self.config.use_dynamic_bsz:
                 max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
                 micro_batches, _ = rearrange_micro_batches(batch=mini_batch, max_token_len=max_token_len)
             else:
-                # split batch into micro_batches
+                # 将 batch 切分为 micro_batch
                 micro_batches = mini_batch.split(self.config.ppo_micro_batch_size if "ppo_micro_batch_size" in self.config else self.config.micro_batch_size)
                 # micro_batches = data.batch.split(self.config.micro_batch_size)
 
             self.reward_optimizer.zero_grad()
 
             for data in micro_batches:
-                data = data.cuda()  # actor device is cpu when using offload
+                data = data.cuda()  # 使用 offload 时 actor 设备位于 CPU
                 batch_attention_mask = data['attention_mask']
                 batch_eos_mask = batch_attention_mask[:, prompt_length:]
                 batch_acc = data['acc']
@@ -272,11 +272,11 @@ class DataParallelPRIME(BasePPOActor):
             append_to_dict(metrics, data)
             torch.cuda.empty_cache()
 
-        if self.config.prime_norm == 'batch_norm':  # this method will still consider the relative value of rewards. The key is to control the absolute value of RETURN from being too high. so the normalization is done by controlling the maximum of reverse cumulative sum
+        if self.config.prime_norm == 'batch_norm':  # 该方法仍会考虑 reward 的相对值。关键在于控制 RETURN 的绝对值不要过高，因此归一化是通过控制反向累积和的最大值来实现的
             reverse_cumsum = torch.cumsum(token_level_scores.flip(dims=[1]),dim=-1).flip(dims=[1])
             token_level_scores = token_level_scores/(reverse_cumsum.abs().max()+1e-6)
         else:
-            # no normalization, the reward will be normalized by beta_train
+            # 不做归一化，reward 将通过 beta_train 进行缩放
             token_level_scores = token_level_scores * beta
         torch.cuda.synchronize()
         torch.distributed.barrier()

@@ -27,12 +27,12 @@ class MemoryBuffer:
                                 requires_grad=False)
 
     def zero(self):
-        """Reset the buffer to zero."""
+        """将缓冲区重置为零。"""
         self.data.zero_()
 
     def get(self, shape, start_index):
-        """Return a tensor with the input `shape` as a view into the
-        1-D data starting at `start_index`."""
+        """返回一个以输入 `shape` 为形状的视图，对应从 `start_index` 开始的
+        一维数据。"""
         end_index = start_index + shape.numel()
         assert end_index <= self.numel, \
             'requested tensor is out of the buffer range.'

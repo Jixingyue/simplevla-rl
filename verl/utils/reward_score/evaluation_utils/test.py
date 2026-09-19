@@ -2,15 +2,15 @@ from math_util import evaluate_math
 from code_util import evaluate_code
 import json
 # from math_verify import parse, verify
-# Parse the gold and answer
-# If you know that gold will only contain latex or expr (no latex env), use
+# 解析标准答案和模型答案
+# 如果你知道 gold 只包含 latex 或 expr（不含 latex 环境），可以使用
 # parse(gold, extraction_config=[LatexExtractionConfig()]) or parse(gold, extraction_config=[ExprExtractionConfig()])
 
 # gold = parse("$(1,4.5)$")
 # answer = parse("$(1,\\frac{9}{2})$")
 # import os
 # print(os.name)
-# Order here is important!
+# 这里的顺序很重要！
 # verify(gold, answer)
 
 # print(verify(gold, answer))
@@ -101,12 +101,12 @@ def standardize_medical_data(a,y,z):
 #     data = sys.stdin.read().split()
 #     it = iter(data)
     
-#     # Read start and target positions
+#     # 读取起点和终点位置
 #     x0, y0, x1, y1 = int(next(it)), int(next(it)), int(next(it)), int(next(it))
     
 #     n = int(next(it))
 #     allowed = set()
-#     # The total number of allowed cells is at most 10^5.
+#     # 允许的格子总数最多为 10^5。
 #     for _ in range(n):
 #         r = int(next(it))
 #         a = int(next(it))
@@ -114,7 +114,7 @@ def standardize_medical_data(a,y,z):
 #         for c in range(a, b + 1):
 #             allowed.add((r, c))
     
-#     # Directions for the king (8 neighboring cells)
+#     # 国王的移动方向（8 个相邻格子）
 #     directions = [(-1, -1), (-1, 0), (-1, 1),
 #                   (0, -1),           (0, 1),
 #                   (1, -1),  (1, 0),  (1, 1)]
@@ -122,10 +122,10 @@ def standardize_medical_data(a,y,z):
 #     start = (x0, y0)
 #     target = (x1, y1)
     
-#     # BFS initialization
+#     # BFS 初始化
 #     queue = deque()
 #     queue.append((x0, y0, 0))
-#     # Mark the starting cell as visited by removing it from allowed set.
+#     # 从 allowed 集合中移除起点，以标记其为已访问。
 #     allowed.discard(start)
     
 #     while queue:

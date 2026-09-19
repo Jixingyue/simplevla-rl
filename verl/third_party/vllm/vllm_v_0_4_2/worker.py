@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/worker/worker.py
-"""A GPU worker class."""
+"""一个 GPU worker 类。"""
 import os
 import gc
 from typing import Dict, List, Tuple, Optional, Union
@@ -27,7 +27,7 @@ from vllm.sequence import SamplerOutput, ExecuteModelRequest
 from vllm.worker.cache_engine import CacheEngine
 from vllm.distributed.device_communicators import pynccl_utils
 from vllm.distributed.device_communicators.custom_all_reduce import (init_custom_ar)
-# TODO(sgm): check why vllm has similar file in vllm.model_executor.parallel_utils.parallel_state
+# TODO(sgm): 检查为什么 vllm 在 vllm.model_executor.parallel_utils.parallel_state 中有类似的文件
 from vllm.distributed import get_tensor_model_parallel_cpu_group, init_distributed_environment, get_tensor_model_parallel_group
 from vllm.worker.worker import Worker, _check_if_gpu_supports_dtype
 
@@ -40,16 +40,16 @@ from .config import ModelConfig, LoadConfig, LoadFormat
 
 
 class Worker(Worker):
-    """A worker class that executes (a partition of) the model on a GPU.
+    """在 GPU 上执行（模型分区的）worker 类。
 
-    Each worker is associated with a single GPU. The worker is responsible for
-    maintaining the KV cache and executing the model on the GPU. In case of
-    distributed inference, each worker is assigned a partition of the model.
+    每个 worker 与单个 GPU 相关联。worker 负责维护
+    KV cache 并在 GPU 上执行模型。在分布式推理的
+    情况下，每个 worker 被分配模型的一个分区。
     """
 
     def __init__(
         self,
-        model: Union[nn.Module, Dict], # model itself or its parameter dict
+        model: Union[nn.Module, Dict], # 模型本身或其参数字典
         model_config: ModelConfig,
         parallel_config: ParallelConfig,
         scheduler_config: SchedulerConfig,
@@ -63,7 +63,7 @@ class Worker(Worker):
         vision_language_config: Optional[VisionLanguageConfig] = None,
         is_driver_worker: bool = False,
     ) -> None:
-        # self.model = model  # will be replaced in the init_model
+        # self.model = model  # 将在 init_model 中被替换
         self.model_config = model_config
         self.parallel_config = parallel_config
         self.scheduler_config = scheduler_config
@@ -94,25 +94,25 @@ class Worker(Worker):
             vision_language_config=vision_language_config,
         )
 
-        # Uninitialized cache engine. Will be initialized by
-        # init_cache_engine.
+        # 未初始化的 cache engine。将由
+        # init_cache_engine 初始化。
         self.cache_engine: CacheEngine = None
         self.gpu_cache: List[torch.Tensor] = None
 
-        # NOTE(sgm): For offloading inference engine params
+        # NOTE(sgm): 用于卸载推理引擎参数
         self.cpu_model = None
 
     def init_device(self) -> None:
         if self.device_config.device.type == "cuda":
-            # torch.distributed.all_reduce does not free the input tensor until
-            # the synchronization point. This causes the memory usage to grow
-            # as the number of all_reduce calls increases. This env var disables
-            # this behavior.
-            # Related issue:
+            # torch.distributed.all_reduce 在同步点之前
+            # 不会释放输入张量。这导致内存占用随着
+            # all_reduce 调用次数的增加而增长。这个环境变量可以禁用
+            # 此行为。
+            # 相关 issue：
             # https://discuss.pytorch.org/t/cuda-allocation-lifetime-for-inputs-to-distributed-all-reduce/191573
             os.environ["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
 
-            # NOTE(sgm): Modify for verl, Env vars will be set by TORCHRUN.
+            # NOTE(sgm): 为 verl 修改，环境变量将由 TORCHRUN 设置。
             self.rank = self.rank if self.rank is not None else int(os.getenv("RANK", "-1"))
             local_rank = int(os.getenv("LOCAL_RANK", "0"))
             self.device = torch.device(f"cuda:{local_rank}")
@@ -120,7 +120,7 @@ class Worker(Worker):
                 raise ValueError("Invalid or unspecified rank.")
             torch.cuda.set_device(self.device)
 
-            # Use the world_size set by TORCHRUN
+            # 使用由 TORCHRUN 设置的 world_size
             world_size = int(os.getenv("WORLD_SIZE", "-1"))
             assert world_size != -1, "The world_size is set to -1, not initialized by TORCHRUN"
             self.parallel_config.world_size = world_size
@@ -131,37 +131,37 @@ class Worker(Worker):
         else:
             raise RuntimeError(f"Not support device type: {self.device_config.device}")
 
-        # Initialize the distributed environment.
+        # 初始化分布式环境。
         init_worker_distributed_environment(self.parallel_config, self.rank, self.distributed_init_method,
                                             self.local_rank)
-        # Set random seed.
+        # 设置随机种子。
         set_random_seed(self.model_config.seed)
         # self.model = get_model(actor_model=self.model, model_config=self.model_config)
 
     @torch.inference_mode()
     def determine_num_available_blocks(self) -> Tuple[int, int]:
-        """Profiles the peak memory usage of the model to determine how many
-        KV blocks may be allocated without OOMs.
+        """通过分析模型的峰值内存占用来确定在不发生 OOM 的
+        情况下可以分配多少个 KV block。
 
-        The engine will first conduct a profiling of the existing memory usage.
-        Then, it calculate the maximum possible number of GPU and CPU blocks
-        that can be allocated with the remaining free memory.
+        引擎会首先对现有的内存占用进行分析。
+        然后，它计算在剩余空闲内存下可以分配的
+        GPU 和 CPU block 的最大可能数量。
 
         .. tip::
-            You may limit the usage of GPU memory
-            by adjusting the `gpu_memory_utilization` parameter.
+            你可以通过调整 `gpu_memory_utilization` 参数
+            来限制 GPU 内存的使用。
         """
-        # Profile the memory usage of the model and get the maximum number of
-        # cache blocks that can be allocated with the remaining free memory.
+        # 分析模型的内存占用，并计算使用剩余空闲内存
+        # 可以分配的 cache block 的最大数量。
         torch.cuda.empty_cache()
         # torch.cuda.reset_peak_memory_stats()
 
-        # Execute a forward pass with dummy inputs to profile the memory usage
-        # of the model.
+        # 使用虚拟输入执行一次前向传播，以分析
+        # 模型的内存占用。
         self.model_runner.profile_run()
 
-        # Calculate the number of blocks that can be allocated with the
-        # profiled peak memory.
+        # 根据分析得到的峰值内存，计算可以分配的
+        # block 数量。
         torch.cuda.synchronize()
         free_gpu_memory, total_gpu_memory = torch.cuda.mem_get_info()
         peak_memory = total_gpu_memory - free_gpu_memory
@@ -171,7 +171,7 @@ class Worker(Worker):
 
         cache_block_size = self.get_cache_block_size_bytes()
 
-        # NOTE(sgm) use the remaining memory
+        # NOTE(sgm) 使用剩余内存
         num_gpu_blocks = int((free_gpu_memory * self.cache_config.gpu_memory_utilization) // cache_block_size)
         # num_gpu_blocks = int((total_gpu_memory * self.cache_config.gpu_memory_utilization - peak_memory) // cache_block_size)
 
@@ -181,7 +181,7 @@ class Worker(Worker):
         if self.model_runner.lora_manager:
             self.model_runner.remove_all_loras()
 
-        # NOTE(sgm): Add for verl, synchronize number of blocks with all the rank
+        # NOTE(sgm): 为 verl 添加，将 block 数量与所有 rank 同步
         num_gpu_blocks = torch.tensor([num_gpu_blocks], device='cuda')
         num_cpu_blocks = torch.tensor([num_cpu_blocks], device='cuda')
         torch.distributed.all_reduce(num_gpu_blocks,
@@ -201,7 +201,7 @@ class Worker(Worker):
             super()._init_cache_engine()
 
     def free_cache_engine(self):
-        # ensure `enforce_eager=True`
+        # 确保 `enforce_eager=True`
         self.cache_engine = None
         self.gpu_cache = None
 
@@ -213,7 +213,7 @@ class Worker(Worker):
         else:
             seq_group_metadata_list = execute_model_req.seq_group_metadata_list
 
-        # NOTE(sgm): each SPMD rank will have identical input
+        # NOTE(sgm): 每个 SPMD rank 将拥有相同的输入
         assert seq_group_metadata_list is not None
         assert execute_model_req is not None
         num_seq_groups = len(seq_group_metadata_list)
@@ -223,22 +223,22 @@ class Worker(Worker):
 
         self.cache_swap(blocks_to_swap_in, blocks_to_swap_out, blocks_to_copy)
 
-        # If there is no input, we don't need to execute the model.
+        # 如果没有输入，我们不需要执行模型。
         if num_seq_groups == 0:
             return []
 
         output = self.model_runner.execute_model(seq_group_metadata_list, self.gpu_cache)
 
-        # Worker only supports single-step execution. Wrap the output in a list
-        # to conform to interface.
+        # Worker 只支持单步执行。将输出包装在列表中
+        # 以符合接口规范。
         return [output]
 
-    # assume the input is .state_dict()
+    # 假设输入是 .state_dict()
     def sync_model_weights(self, actor_weights: Dict, load_format: str):
         if load_format in [LoadFormat.MEGATRON, LoadFormat.AUTO]:
             load_megatron_weights(actor_weights, self.model_runner.model)
         elif load_format == LoadFormat.HF:
-            # full model state dict without no sharding
+            # 不带分片的完整模型 state dict
             load_hf_weights(actor_weights, self.model_runner.model)
         elif load_format == LoadFormat.DTENSOR:
             load_dtensor_weights(actor_weights, self.model_runner.model)
@@ -260,14 +260,14 @@ def init_worker_distributed_environment(
     distributed_init_method: Optional[str] = "env://",
     local_rank: int = -1,
 ) -> None:
-    """Initialize the distributed environment."""
-    # NOTE(sgm) use tcp://localhost:xxxx will hang in HF setting without megatron
+    """初始化分布式环境。"""
+    # NOTE(sgm) 在没有 megatron 的 HF 设置中使用 tcp://localhost:xxxx 会挂起
     init_distributed_environment(parallel_config.world_size, rank, distributed_init_method, local_rank)
 
     ensure_model_parallel_initialized(tensor_model_parallel_size=parallel_config.tensor_parallel_size,
                                       pipeline_model_parallel_size=parallel_config.pipeline_parallel_size)
 
-    # TODO(sgm): check whether need this
+    # TODO(sgm): 检查是否需要这个
     # if pynccl_utils.is_initialized():
     #     pynccl_world_size = pynccl_utils.get_world_size()
     #     if pynccl_world_size != parallel_config.world_size:
@@ -282,11 +282,11 @@ def init_worker_distributed_environment(
     #     pynccl_utils.init_process_group(
     #         group=get_tensor_model_parallel_cpu_group())
 
-    # # Initialize a custom fast all-reduce implementation.
+    # # 初始化自定义的快速 all-reduce 实现。
     # if not parallel_config.disable_custom_all_reduce:
     #     init_custom_ar()
 
-    # A small all_reduce for warmup.
+    # 用于预热的小型 all_reduce。
     torch.distributed.all_reduce(torch.zeros(1).cuda())
     # if pynccl_utils.is_initialized():
     #     pynccl_utils.all_reduce(torch.zeros(1).cuda())

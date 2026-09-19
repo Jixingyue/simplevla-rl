@@ -23,7 +23,7 @@ from vllm.transformers_utils.tokenizers import *
 
 
 class TokenizerGroup:
-    """A group of tokenizers that can be used for LoRA adapters."""
+    """一组可用于 LoRA adapter 的 tokenizer。"""
 
     def __init__(self, tokenizer: PreTrainedTokenizer, enable_lora: bool, max_num_seqs: int,
                  max_input_length: Optional[int]):
@@ -53,7 +53,7 @@ class TokenizerGroup:
         if not lora_request or not self.enable_lora:
             return self.tokenizer
         if lora_request.lora_int_id not in self.lora_tokenizers:
-            # TODO(sgm): the lora tokenizer is also passed, but may be different
+            # TODO(sgm): lora tokenizer 也会被传入，但可能有所不同
             tokenizer = self.tokenizer
             # tokenizer = (get_lora_tokenizer(
             #     lora_request, **self.tokenizer_config) or self.tokenizer)
@@ -62,7 +62,7 @@ class TokenizerGroup:
         else:
             return self.lora_tokenizers.get(lora_request.lora_int_id)
 
-    # FIXME(sgm): for simplicity, we assign the special token here
+    # FIXME(sgm): 为简单起见，我们在这里直接指定特殊 token
     @property
     def pad_token_id(self):
         return self.tokenizer.pad_token_id

@@ -1,4 +1,4 @@
-# Borrowed from: https://huggingface.co/spaces/codeparrot/apps_metric/blob/main/utils.py
+# 借鉴自: https://huggingface.co/spaces/codeparrot/apps_metric/blob/main/utils.py
 
 
 import multiprocessing
@@ -9,7 +9,7 @@ import traceback
 import os,sys
 
 def _temp_run(sample, generation, debug, result,metadata_list,timeout):
-    # test is run silently. If it is killed, nothing will be printed
+    # 测试以静默方式运行。若进程被杀掉，则不会有任何输出
    
     with open(os.devnull, 'w') as devnull:
         sys.stdout = devnull
@@ -19,15 +19,14 @@ def _temp_run(sample, generation, debug, result,metadata_list,timeout):
             result.append(res)
             metadata_list.append(metadata)
         except Exception as e:
-            # print(e) # some tracebacks are extremely long.
+            # print(e) # 某些 traceback 信息极其长。
             traceback.print_exc(10)
             result.append([-1 for i in range(len(sample['inputs']))])
             metadata_list.append({})
 
 def check_correctness(in_outs: Optional[dict], generation, timeout=10, debug=True):
-    """Check correctness of code generation with a global timeout.
-    The global timeout is to catch some extreme/rare cases not handled by the timeouts
-    inside `run_test`"""
+    """以全局超时机制检查代码生成的正确性。
+    设置全局超时是为了捕捉 `run_test` 内部的超时机制无法处理的极端/罕见情况"""
     
     manager = multiprocessing.Manager()
     result = manager.list()
@@ -39,7 +38,7 @@ def check_correctness(in_outs: Optional[dict], generation, timeout=10, debug=Tru
         p.kill()
         # p.terminate()
     if not result:
-        # consider that all tests failed
+        # 认为所有测试均失败
         result = [[-1 for i in range(len(in_outs["inputs"]))]]
         if debug:
             print(f"global timeout")

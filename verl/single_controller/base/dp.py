@@ -18,7 +18,7 @@ from verl.single_controller.base.worker import Worker
 class DPEngineWorker(Worker):
 
     def __init__(self, *args, **kwargs):
-        # todo: extract _world_size etc. from kwargs and inject in super().__init__()
+        # todo: 从 kwargs 中提取 _world_size 等参数，并在 super().__init__() 中注入
         Worker.__init__(self, *args, **kwargs)
 
     def init(self):

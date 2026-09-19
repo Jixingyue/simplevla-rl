@@ -19,11 +19,11 @@ import torch.distributed as dist
 
 
 def _megatron_calc_layer_map(config):
-    """Calculate the mapping of global layer_idx to local layer_idx
-    Returns:
+    """计算全局 layer_idx 到局部 layer_idx 的映射
+    返回:
         layer_map (Dict: int -> tuple(int, int, int)):
-            mapping from the global layer index to
-            a tuple of (pp_rank, virtual_pp_rank, layer_idx inside model)
+            从全局层索引到
+            (pp_rank, virtual_pp_rank, 模型内 layer_idx) 元组的映射
     """
     import megatron
     from megatron.core import mpu
@@ -49,7 +49,7 @@ def _megatron_calc_layer_map(config):
 
 
 def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params_dtype, is_value_model=False):
-    """Load merged state_dict to sharded Megatron module in training.
+    """将合并后的 state_dict 加载到训练中的分片 Megatron 模块。
     """
     import megatron
     from megatron.core import mpu
@@ -95,7 +95,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
         assert len(gpt_model_module.model.layers) == num_layers_per_model
 
     def _broadcast_tensor(tensor, name) -> torch.Tensor:
-        """broadcast tensor from rank0 across mp_group"""
+        """跨 mp_group 从 rank0 广播张量"""
         nonlocal state_dict
         nonlocal mp_group
         if torch.distributed.get_rank() == 0:
@@ -113,7 +113,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
         tensor_shape = obj_list[0]
 
         if tensor_shape is None:
-            # all or none ranks in the mp_group should reach here
+            # mp_group 中的所有 rank 应同时到达这里，或都不到达
             print_rank_0(f"tensor:[{name}] not in state_dict, skip load")
             return
 
@@ -129,7 +129,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
         dist.broadcast(tensor, src=0, group=mp_group)
 
     def _broadcast_tp_shard_tensor_vocab(tensor, name, chunk_dim=0, mutate_func=None) -> torch.Tensor:
-        """broadcast tensor in tp shards across mp_group"""
+        """跨 mp_group 以 tp 分片广播张量"""
         nonlocal state_dict
         nonlocal mp_group
         tp_rank = mpu.get_tensor_model_parallel_rank()
@@ -152,7 +152,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
         dist.broadcast_object_list(obj_list, src=0, group=mp_group)
         chunk_shape = obj_list[0]
         if chunk_shape is None:
-            # all or none ranks in the mp_group should reach here
+            # mp_group 中的所有 rank 应同时到达这里，或都不到达
             print_rank_0(f"tp_shard tensor:[{name}] not in state_dict, skip loading")
             return
 
@@ -176,7 +176,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
                 tensor.data.copy_(sync_tensor)
 
     def _broadcast_tp_shard_tensor(tensor, name, chunk_dim=0, mutate_func=None) -> torch.Tensor:
-        """broadcast tensor in tp shards across mp_group"""
+        """跨 mp_group 以 tp 分片广播张量"""
         nonlocal state_dict
         nonlocal mp_group
         tp_rank = mpu.get_tensor_model_parallel_rank()
@@ -198,7 +198,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
         dist.broadcast_object_list(obj_list, src=0, group=mp_group)
         chunk_shape = obj_list[0]
         if chunk_shape is None:
-            # all or none ranks in the mp_group should reach here
+            # mp_group 中的所有 rank 应同时到达这里，或都不到达
             print_rank_0(f"tp_shard tensor:[{name}] not in state_dict, skip loading")
             return
 
@@ -222,7 +222,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
                 tensor.data.copy_(sync_tensor)
 
     def _broadcast_tp_shard_tensor_gate_up(tensor, gate_name, up_name) -> torch.Tensor:
-        """broadcast tensor in tp shards across mp_group"""
+        """跨 mp_group 以 tp 分片广播张量"""
         nonlocal state_dict
         nonlocal mp_group
         tp_rank = mpu.get_tensor_model_parallel_rank()
@@ -251,7 +251,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
         dist.broadcast_object_list(obj_list, src=0, group=mp_group)
         chunk_shape = obj_list[0]
         if chunk_shape is None:
-            # all or none ranks in the mp_group should reach here
+            # mp_group 中的所有 rank 应同时到达这里，或都不到达
             print_rank_0(f"tp_shard tensor:[{gate_name, up_name}] not in state_dict, skip loading")
             return
 
@@ -276,7 +276,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
                 tensor.data.copy_(sync_tensor)
 
     def _broadcast_tp_shard_tensor_qkv(tensor, q_name, k_name, v_name) -> torch.Tensor:
-        """broadcast tensor in tp shards across mp_group"""
+        """跨 mp_group 以 tp 分片广播张量"""
         nonlocal state_dict
         nonlocal mp_group
         tp_rank = mpu.get_tensor_model_parallel_rank()
@@ -331,7 +331,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
         dist.broadcast_object_list(obj_list, src=0, group=mp_group)
         chunk_shape = obj_list[0]
         if chunk_shape is None:
-            # all or none ranks in the mp_group should reach here
+            # mp_group 中的所有 rank 应同时到达这里，或都不到达
             print_rank_0(f"tp_shard tensor:[{name}] not in state_dict, skip loading")
             return
 
@@ -355,7 +355,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
                 tensor.data.copy_(sync_tensor)
 
     if dp_rank == 0:
-        # Embeddings
+        # 嵌入层
         # -------------------
         print_rank_0("loading embeddings...")
         gpt_model_module = _get_gpt_model(models[0])
@@ -364,7 +364,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
             embed_tokens_weight = gpt_model_module.model.embed_tokens.weight
         _broadcast_tp_shard_tensor_vocab(embed_tokens_weight, "model.embed_tokens.weight")
 
-        # Transformer layers
+        # Transformer 层
         # -------------------
         layer_map = _megatron_calc_layer_map(config)
 
@@ -407,7 +407,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
                 f"{layer_name}.mlp.down_proj.weight",
                 chunk_dim=1,
             )
-        # Final Layernorm
+        # 最终 LayerNorm
         # -------------------
         print_rank_0("loading final layernorm...")
         gpt_model_module = _get_gpt_model(models[-1])
@@ -438,7 +438,7 @@ def load_state_dict_to_megatron_llama(state_dict, wrapped_models, config, params
         else:
             _broadcast_tp_shard_tensor(lm_head_weight, "lm_head.weight")
     dist.barrier()
-    # Broadcast weights inside data parallel groups
+    # 在数据并行组内部广播权重
     for wrapped_model in wrapped_models:
         broadcast_params(wrapped_model)
 

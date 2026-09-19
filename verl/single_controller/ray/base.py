@@ -231,7 +231,7 @@ class RayWorkerGroup(WorkerGroup):
             for local_rank in range(local_world_size):
                 rank += 1
 
-                # we pass in environment variable at option so that Worker can use environment variable to set
+                # 我们通过 option 传入环境变量，以便 Worker 能使用这些环境变量进行设置
                 env_vars = {
                     'WORLD_SIZE': str(world_size),
                     'RANK': str(rank),
@@ -255,7 +255,7 @@ class RayWorkerGroup(WorkerGroup):
                 if detached:
                     ray_cls_with_init.update_options({'lifetime': 'detached'})
 
-                # create a worker
+                # 创建一个 worker
                 worker = ray_cls_with_init(placement_group=pg,
                                            placement_group_bundle_idx=local_rank,
                                            use_gpu=use_gpu,
@@ -291,18 +291,18 @@ class RayWorkerGroup(WorkerGroup):
 
     def spawn(self, prefix_set):
         """
-        spawn to a dictionary of worker groups, each with a subset of method with prefix.
+        spawn 为一个 worker group 字典，每个 group 只包含带有指定前缀的部分方法。
 
         """
 
         def _rebind_actor_methods(worker_group, actor_name):
             """
-            bind the method with actor_prefix to its original name
+            将带有 actor_prefix 的方法绑定回其原始名称
             """
             prefix: str = actor_name + '_'
             for method_name in dir(worker_group):
                 if method_name.startswith(prefix):
-                    # only valid when Python >= 3.9
+                    # 仅在 Python >= 3.9 时有效
                     original_method_name = method_name.removeprefix(prefix)
                     method = getattr(worker_group, method_name)
                     setattr(worker_group, original_method_name, method)
@@ -366,8 +366,7 @@ class RayWorkerGroup(WorkerGroup):
 
 
 """
-Utilities that enables creating workers inside the same ray.Actor, 
-with code written in separate ray.Actors.
+一些工具函数，支持在同一个 ray.Actor 内创建多个 worker，而它们的代码可以像写在各自独立的 ray.Actor 中一样。
 """
 
 from unittest.mock import patch
@@ -377,15 +376,15 @@ import os
 
 def _bind_workers_method_to_parent(cls, key, user_defined_cls):
     """
-    Binds the methods of each worker to the WorkerDict. 
-    Note that we only bind public methods that are decorated by register
+    将每个 worker 的方法绑定到 WorkerDict 上。
+    注意我们只绑定由 register 装饰器修饰的公共方法
     """
     for method_name in dir(user_defined_cls):
         try:
             method = getattr(user_defined_cls, method_name)
             assert callable(method), f"{method_name} in {user_defined_cls} is not callable"
         except Exception as e:
-            # if it is a property, it will fail because Class doesn't have instance property
+            # 如果是 property，会失败，因为类本身没有实例属性
             continue
 
         if hasattr(method, MAGIC_ATTR):
@@ -393,13 +392,13 @@ def _bind_workers_method_to_parent(cls, key, user_defined_cls):
             def generate_function(name):
 
                 def func(self, *args, **kwargs):
-                    # dispatch to the actual worker
+                    # 分发到实际的 worker
                     return getattr(self.worker_dict[key], name)(*args, **kwargs)
 
                 return func
 
             func = generate_function(method_name)
-            # pass MAGIC_ATTR for outer worker group
+            # 为外层 worker group 传递 MAGIC_ATTR
             setattr(func, MAGIC_ATTR, getattr(method, MAGIC_ATTR))
             try:
                 method_name_with_prefix = key + '_' + method_name
@@ -417,8 +416,7 @@ def _unwrap_ray_remote(cls):
 
 def create_colocated_worker_cls(class_dict: dict[str, RayClassWithInitArgs]):
     """
-    This function should return a class instance that delegates the calls to every 
-    cls in cls_dict
+    该函数应返回一个类实例，把调用委托给 cls_dict 中的每一个 cls
     """
     cls_dict = {}
     init_args_dict = {}
@@ -434,7 +432,7 @@ def create_colocated_worker_cls(class_dict: dict[str, RayClassWithInitArgs]):
 
     assert cls_dict.keys() == init_args_dict.keys()
 
-    # TODO: create a class with customizable name
+    # TODO: 创建一个可自定义名称的类
     class WorkerDict(worker_cls):
 
         def __init__(self):
@@ -442,12 +440,12 @@ def create_colocated_worker_cls(class_dict: dict[str, RayClassWithInitArgs]):
             self.worker_dict = {}
             for key, user_defined_cls in cls_dict.items():
                 user_defined_cls = _unwrap_ray_remote(user_defined_cls)
-                # directly instantiate the class without remote
+                # 直接实例化该类而不走 remote
                 with patch.dict(os.environ, {'DISABLE_WORKER_INIT': '1'}):
                     self.worker_dict[key] = user_defined_cls(*init_args_dict[key].get('args', ()),
                                                              **init_args_dict[key].get('kwargs', {}))
 
-    # now monkey-patch the methods from inner class to WorkerDict
+    # 现在把内部类的方法 monkey-patch 到 WorkerDict 上
     for key, user_defined_cls in cls_dict.items():
         user_defined_cls = _unwrap_ray_remote(user_defined_cls)
         _bind_workers_method_to_parent(WorkerDict, key, user_defined_cls)

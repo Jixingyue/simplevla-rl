@@ -13,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utilities for using tensor_parallel in megatron
+在 megatron 中使用 tensor_parallel 的工具函数
 """
 from typing import Dict
 import torch
@@ -122,27 +122,27 @@ class _VocabParallelEntropy(torch.autograd.Function):
 
 
 def vocab_parallel_entropy(vocab_parallel_logits: torch.Tensor) -> torch.Tensor:
-    """Compute entropy when the logits are sharded in tp ranks
+    """当 logits 按 tp rank 分片时计算熵
     
-    Args:
+    参数：
         vocab_parallel_logits: (total_nnz, vocab_size // tp_size)
 
-    Returns: (total_nnz,)
+    返回：(total_nnz,)
         
     """
     return _VocabParallelEntropy.apply(vocab_parallel_logits)
 
 
 def vocab_parallel_log_probs_from_logits(logits, labels):
-    """TODO(zhangchi.usc1992): We may change the implementation later"""
+    """TODO(zhangchi.usc1992): 我们后续可能会修改该实现"""
     return -tensor_parallel.vocab_parallel_cross_entropy(vocab_parallel_logits=logits, target=labels)
 
 
 def vocab_parallel_log_probs_from_logits_response_rmpad(input_ids, attention_mask, logits_rmpad, response_length):
-    """Similar to log_probs_from_logits_response_rmpad, but the logits_rmpad is now spliited across tensor parallel region.
-    This will further reduce the peak memory usage during training
+    """与 log_probs_from_logits_response_rmpad 类似，但 logits_rmpad 现在在张量并行区域内被切分。
+    这将进一步降低训练时的峰值内存占用
 
-    Args:
+    参数：
         input_ids: [batch_size, seqlen]
         attention_mask: [batch_size, seqlen]
         logits_rmpad: [total_nnz, vocab_size // tp_size]
@@ -167,19 +167,19 @@ def vocab_parallel_log_probs_from_logits_response_rmpad(input_ids, attention_mas
 
 
 def vocab_parallel_compute_entropy_loss(logits, eos_mask):
-    """Compute Categorical entropy loss
+    """计算类别熵损失
 
-    Args:
+    参数：
         logits: `(torch.Tensor)`
             shape: (bs, response_length, vocab_size)
         eos_mask: `(torch.Tensor)`
             shape: (bs, response_length)
 
-    Returns:
-        entropy: a scalar torch.Tensor
+    返回：
+        entropy: 一个标量 torch.Tensor
 
     """
-    # compute entropy
+    # 计算熵
     entropy = vocab_parallel_entropy(logits)
     entropy_loss = verl_F.masked_mean(entropy, mask=eos_mask)
     return entropy_loss

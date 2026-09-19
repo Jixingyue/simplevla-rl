@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Single Process Actor
+单进程 Actor
 """
 
 import itertools
@@ -44,7 +44,7 @@ class RobDataParallelPPOActor(BasePPOActor):
         actor_module: nn.Module,
         actor_optimizer: torch.optim.Optimizer = None,
     ):
-        """When optimizer is None, it is Reference Policy"""
+        """当 optimizer 为 None 时，即为参考策略（Reference Policy）"""
         super().__init__(config)
         self.actor_module = actor_module
         self.actor_optimizer = actor_optimizer
@@ -65,10 +65,10 @@ class RobDataParallelPPOActor(BasePPOActor):
     
     def generate_traj_mask(self, end_step, traj_len):
         """
-        Args:
+        参数:
             end_step: (batch_size,), 
             traj_len: 
-        Returns:
+        返回:
             mask: (batch_size, traj_len),
         """
         steps = torch.arange(traj_len, device=end_step.device)  # (traj_len,)
@@ -78,11 +78,11 @@ class RobDataParallelPPOActor(BasePPOActor):
     
     def apply_mask_with_grad_control(self, log_probs, entropy, mask):
         """
-        Args:
+        参数:
             log_probs: (batch_size, traj_len, ...)
             entropy:   (batch_size, traj_len, ...)
             mask:      (batch_size, traj_len)
-        Returns:
+        返回:
             log_probs_masked: 
             entropy_masked:   
         """
@@ -106,7 +106,7 @@ class RobDataParallelPPOActor(BasePPOActor):
         """
         micro_batch:
         
-        Returns: 
+        返回: 
             entropy: # (bs, response_len)
             log_probs: # (bs, response_len)
         """
@@ -148,11 +148,11 @@ class RobDataParallelPPOActor(BasePPOActor):
                                         attention_mask=attention_mask_unpad,
                                         pixel_values=pixel_values,
                                         proprio=proprio,
-                                        )  # prevent model thinks we are generating
+                                        )  # 防止模型认为我们正在进行生成
                 
                 assert self.actor_module.vocab_size == 32000
                 start_index = self.actor_module.vocab_size - 256 
-                logits = logits[..., -256-64:-64]  # Shape: [batch_size, seq_len, 256]
+                logits = logits[..., -256-64:-64]  # 形状: [batch_size, seq_len, 256]
                 responses = responses - start_index
                 #assert (0<=responses<=255).all()
             
@@ -175,7 +175,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 output = self.actor_module(input_ids=input_ids_unpad,
                                     attention_mask=attention_mask_unpad,
                                     pixel_values=pixel_values,
-                                    use_cache=False)  # prevent model thinks we are generating
+                                    use_cache=False)  # 防止模型认为我们正在进行生成
                 logits = output.logits
                 
                 logits = logits[:, -response_length - 1:-1]  # (bsz, response_length)
@@ -219,7 +219,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 
                 assert self.actor_module.vocab_size == 32000
                 start_index = self.actor_module.vocab_size - 256 
-                logits = logits[..., -256-64:-64]  # Shape: [batch_size, seq_len, 256]
+                logits = logits[..., -256-64:-64]  # 形状: [batch_size, seq_len, 256]
                 responses = responses - start_index
                 
                 logits = logits.div(temperature) 
@@ -239,7 +239,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 output = self.actor_module(input_ids=input_ids_unpad,
                                         attention_mask=attention_mask_unpad,
                                         pixel_values=pixel_values,
-                                        use_cache=False)  # prevent model thinks we are generating
+                                        use_cache=False)  # 防止模型认为我们正在进行生成
                 logits = output.logits
                 #
                 
@@ -300,7 +300,7 @@ class RobDataParallelPPOActor(BasePPOActor):
             
                 assert self.actor_module.vocab_size == 32000
                 start_index = self.actor_module.vocab_size - 256 
-                logits = logits[..., -256-64:-64]  # Shape: [batch_size, seq_len, 256]
+                logits = logits[..., -256-64:-64]  # 形状: [batch_size, seq_len, 256]
             
                 logits = logits.div(temperature) 
             
@@ -317,7 +317,7 @@ class RobDataParallelPPOActor(BasePPOActor):
                 output = self.actor_module(input_ids=input_ids_unpad,
                                         attention_mask=attention_mask_unpad,
                                         pixel_values=pixel_values,
-                                        use_cache=False)  # prevent model thinks we are generating
+                                        use_cache=False)  # 防止模型认为我们正在进行生成
                 logits = output.logits
                 #
                 
@@ -346,28 +346,28 @@ class RobDataParallelPPOActor(BasePPOActor):
         return grad_norm
 
     def compute_log_prob(self, data: DataProto) -> torch.Tensor:
-        """Compute the log probability of the responses given input_ids, attention_mask and position_ids
+        """根据 input_ids、attention_mask 和 position_ids 计算 response 的 log 概率
 
-        Args:
-            data (DataProto): a DataProto containing keys
+        参数:
+            data (DataProto): 包含以下键的 DataProto
 
-                ``input_ids``: tensor of shape [batch_size, sequence_length]. torch.int64. Note that input_ids is the
-                concatenation of prompt and response. Note that ``sequence_length = prompt_length + response_length``.
+                ``input_ids``: 形状为 [batch_size, sequence_length] 的张量。torch.int64。注意 input_ids 是
+                prompt 和 response 的拼接。注意 ``sequence_length = prompt_length + response_length``。
 
-                ``attention_mask``: tensor of shape [batch_size, sequence_length]. torch.int64.
+                ``attention_mask``: 形状为 [batch_size, sequence_length] 的张量。torch.int64。
 
-                ``position_ids``: tensor of shape [batch_size, sequence_length]. torch.int64.
+                ``position_ids``: 形状为 [batch_size, sequence_length] 的张量。torch.int64。
 
-                ``responses``:  tensor of shape [batch_size, response_length]. torch.int64.
+                ``responses``:  形状为 [batch_size, response_length] 的张量。torch.int64。
 
-        Returns:
-            torch.Tensor: the log_prob tensor
+        返回:
+            torch.Tensor: log_prob 张量
         """
         
         self.actor_module.eval()
 
         micro_batch_size = data.meta_info['micro_batch_size'] #256
-        temperature = data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error # 1
+        temperature = data.meta_info['temperature']  # temperature 必须放在 data.meta_info 中，以避免隐蔽错误 # 1
         use_dynamic_bsz = data.meta_info['use_dynamic_bsz'] #trues
         self.pad_token_id = data.meta_info['pad_token_id']
         
@@ -377,7 +377,7 @@ class RobDataParallelPPOActor(BasePPOActor):
         batch = data.select(batch_keys=select_keys).batch
 
         if use_dynamic_bsz:
-            # split using dynamic bsz
+            # 使用动态 batch size 进行切分
             max_token_len = data.meta_info['max_token_len'] * self.ulysses_sequence_parallel_size
             micro_batches, indices = rearrange_micro_batches(batch=batch, max_token_len=max_token_len)
         else:
@@ -403,7 +403,7 @@ class RobDataParallelPPOActor(BasePPOActor):
 
         assert self.config.ppo_mini_batch_size % self.config.ppo_micro_batch_size == 0
         self.gradient_accumulation = self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size
-        temperature = data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error
+        temperature = data.meta_info['temperature']  # temperature 必须放在 data.meta_info 中，以避免隐蔽错误
 
         select_keys = ['responses', 'input_ids', 'attention_mask', 'pixel_values', 'old_log_probs', 'advantages',"finish_step"]
         if self.config.use_proprio:
@@ -411,24 +411,24 @@ class RobDataParallelPPOActor(BasePPOActor):
         batch = data.select(batch_keys=select_keys).batch
         assert self.config.ppo_micro_batch_size == 1
 
-        # Split to make minibatch iterator for updating the actor
-        # See PPO paper for details. https://arxiv.org/abs/1707.06347
+        # 切分以构建用于更新 actor 的 minibatch 迭代器
+        # 详情参见 PPO 论文 https://arxiv.org/abs/1707.06347
         dataloader = batch.split(self.config.ppo_mini_batch_size)
         metrics = {}
         for batch_idx, data in enumerate(dataloader):
-            # split batch into micro_batches
+            # 将 batch 切分为 micro_batch
             mini_batch = data
             if self.config.use_dynamic_bsz:
                 max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
                 micro_batches, _ = rearrange_micro_batches(batch=mini_batch, max_token_len=max_token_len)
             else:
-                # split batch into micro_batches
+                # 将 batch 切分为 micro_batch
                 micro_batches = mini_batch.split(self.config.ppo_micro_batch_size)
 
             self.actor_optimizer.zero_grad()
 
             for test_idx, data in enumerate(micro_batches):
-                data = data.cuda()  # actor device is cpu when using offload
+                data = data.cuda()  # 使用 offload 时 actor 设备位于 CPU
                 responses = data['responses']
                 
                 response_length = responses.size(1) *  responses.size(2)
@@ -542,31 +542,31 @@ class RobDataParallelPPOActor(BasePPOActor):
 
         assert self.config.ppo_mini_batch_size % self.config.ppo_micro_batch_size == 0
         self.gradient_accumulation = self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size
-        temperature = bacth_data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error
+        temperature = bacth_data.meta_info['temperature']  # temperature 必须放在 data.meta_info 中，以避免隐蔽错误
 
         select_keys = ['responses', 'input_ids', 'attention_mask', 'pixel_values', "finish_step"]
         if self.config.use_proprio:
             select_keys.append("proprio")
         batch = bacth_data.select(batch_keys=select_keys).batch
 
-        # Split to make minibatch iterator for updating the actor
-        # See PPO paper for details. https://arxiv.org/abs/1707.06347
+        # 切分以构建用于更新 actor 的 minibatch 迭代器
+        # 详情参见 PPO 论文 https://arxiv.org/abs/1707.06347
         dataloader = batch.split(self.config.ppo_mini_batch_size)
         print("dataloader_length:", len(dataloader))
         
         metrics = {}
         for batch_idx, data in enumerate(dataloader):
-            # split batch into micro_batches
+            # 将 batch 切分为 micro_batch
             mini_batch = data
             if self.config.use_dynamic_bsz:
                 max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
                 micro_batches, _ = rearrange_micro_batches(batch=mini_batch, max_token_len=max_token_len)
             else:
-                # split batch into micro_batches
+                # 将 batch 切分为 micro_batch
                 micro_batches = mini_batch.split(self.config.ppo_micro_batch_size)
 
             for data in micro_batches:
-                data = data.cuda()  # actor device is cpu when using offload
+                data = data.cuda()  # 使用 offload 时 actor 设备位于 CPU
                 responses = data['responses']
                 response_length = responses.size(1) *  responses.size(2)
                 finish_step = data['finish_step'] * self.config.action_token_len

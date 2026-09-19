@@ -1,4 +1,4 @@
-"""Utils for evaluating OpenVLA or fine-tuned OpenVLA policies."""
+"""用于评估 OpenVLA 或微调后 OpenVLA 策略的工具函数。"""
 
 import filecmp
 import json
@@ -16,22 +16,22 @@ import torch
 from PIL import Image
 from transformers import AutoConfig, AutoImageProcessor, AutoModelForVision2Seq, AutoProcessor
 
-# Apply JSON numpy patch for serialization
+# 应用 json_numpy 补丁以支持序列化
 json_numpy.patch()
 
-# Configure NumPy print settings
+# 配置 NumPy 打印选项
 np.set_printoptions(formatter={"float": lambda x: "{0:0.3f}".format(x)})
 
 
 def update_auto_map(pretrained_checkpoint: str) -> None:
     """
-    Update the AutoMap configuration in the checkpoint config.json file.
+    更新 checkpoint config.json 文件中的 AutoMap 配置。
 
-    This loads the config.json file inside the checkpoint directory and overwrites
-    the AutoConfig and AutoModelForVision2Seq fields to use OpenVLA-specific classes.
+    该函数会加载 checkpoint 目录中的 config.json 文件，并将
+    AutoConfig 和 AutoModelForVision2Seq 字段改写为 OpenVLA 特定的类。
 
     Args:
-        pretrained_checkpoint: Path to the checkpoint directory
+        pretrained_checkpoint: checkpoint 目录的路径
     """
     if not os.path.isdir(pretrained_checkpoint):
         return
@@ -41,13 +41,13 @@ def update_auto_map(pretrained_checkpoint: str) -> None:
         print(f"Warning: No config.json found at {config_path}")
         return
 
-    # Create timestamped backup
+    # 创建带时间戳的备份
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     backup_path = os.path.join(pretrained_checkpoint, f"config.json.back.{timestamp}")
     shutil.copy2(config_path, backup_path)
     print(f"Created backup of original config at: {os.path.abspath(backup_path)}")
 
-    # Read and update the config
+    # 读取并更新配置
     with open(config_path, "r") as f:
         config = json.load(f)
 
@@ -56,7 +56,7 @@ def update_auto_map(pretrained_checkpoint: str) -> None:
         "AutoModelForVision2Seq": "modeling_prismatic.OpenVLAForActionPrediction",
     }
 
-    # Write back the updated config
+    # 写回更新后的配置
     with open(config_path, "w") as f:
         json.dump(config, f, indent=2)
 
@@ -68,38 +68,38 @@ def update_auto_map(pretrained_checkpoint: str) -> None:
 
 def check_identical_files(path1: Union[str, Path], path2: Union[str, Path]) -> bool:
     """
-    Check if two files are identical in content.
+    检查两个文件的内容是否完全相同。
 
     Args:
-        path1: Path to the first file
-        path2: Path to the second file
+        path1: 第一个文件的路径
+        path2: 第二个文件的路径
 
     Returns:
-        bool: True if files are identical, False otherwise
+        bool: 如果文件相同则返回 True，否则返回 False
     """
     path1, path2 = Path(path1), Path(path2)
 
-    # First check if file sizes match
+    # 先检查文件大小是否一致
     if path1.stat().st_size != path2.stat().st_size:
         return False
 
-    # Check if contents match
+    # 检查内容是否一致
     return filecmp.cmp(path1, path2, shallow=False)
 
 
 def _handle_file_sync(curr_filepath: str, checkpoint_filepath: str, file_type: str) -> None:
     """
-    Handle syncing of files between current directory and checkpoint.
+    处理当前目录与 checkpoint 之间的文件同步。
 
-    Creates backups if files exist but differ, and copies current versions to checkpoint.
+    如果文件已存在但内容不同，则创建备份，并将当前版本复制到 checkpoint。
 
     Args:
-        curr_filepath: Path to the current file version
-        checkpoint_filepath: Path where the file should be in the checkpoint
-        file_type: Description of the file type for logging
+        curr_filepath: 当前文件版本的路径
+        checkpoint_filepath: 文件在 checkpoint 中应有的路径
+        file_type: 用于日志记录的文件类型描述
     """
     if os.path.exists(checkpoint_filepath):
-        # Check if existing files are identical
+        # 检查已有文件是否相同
         match = check_identical_files(curr_filepath, checkpoint_filepath)
 
         if not match:
@@ -110,13 +110,13 @@ def _handle_file_sync(curr_filepath: str, checkpoint_filepath: str, file_type: s
                 f"Checkpoint: {checkpoint_filepath}\n"
             )
 
-            # Create timestamped backup
+            # 创建带时间戳的备份
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             backup_path = f"{checkpoint_filepath}.back.{timestamp}"
             shutil.copy2(checkpoint_filepath, backup_path)
             print(f"Created backup of original checkpoint file at: {os.path.abspath(backup_path)}")
 
-            # Copy current version to checkpoint directory
+            # 将当前版本复制到 checkpoint 目录
             shutil.copy2(curr_filepath, checkpoint_filepath)
             print(f"Copied current version to checkpoint at: {os.path.abspath(checkpoint_filepath)}")
             print(
@@ -124,7 +124,7 @@ def _handle_file_sync(curr_filepath: str, checkpoint_filepath: str, file_type: s
                 "\n------------------------------------------------------------------------------------------------\n"
             )
     else:
-        # If file doesn't exist in checkpoint directory, copy it
+        # 如果 checkpoint 目录中不存在该文件，则复制过去
         shutil.copy2(curr_filepath, checkpoint_filepath)
         print(
             "\n------------------------------------------------------------------------------------------------\n"
@@ -137,20 +137,20 @@ def _handle_file_sync(curr_filepath: str, checkpoint_filepath: str, file_type: s
 
 def check_model_logic_mismatch(pretrained_checkpoint: str) -> None:
     """
-    Check and sync model logic files between current code and checkpoint.
+    检查并同步当前代码与 checkpoint 之间的模型逻辑文件。
 
-    Handles the relationship between current and checkpoint versions of both
-    modeling_prismatic.py and configuration_prismatic.py:
-    - If checkpoint file exists and differs: creates backup and copies current version
-    - If checkpoint file doesn't exist: copies current version
+    处理 modeling_prismatic.py 和 configuration_prismatic.py 的当前版本
+    与 checkpoint 版本之间的关系：
+    - 如果 checkpoint 文件存在且不同：创建备份并复制当前版本
+    - 如果 checkpoint 文件不存在：复制当前版本
 
     Args:
-        pretrained_checkpoint: Path to the checkpoint directory
+        pretrained_checkpoint: checkpoint 目录的路径
     """
     if not os.path.isdir(pretrained_checkpoint):
         return
 
-    # Find current files
+    # 查找当前文件
     curr_files = {"modeling_prismatic.py": None, "configuration_prismatic.py": None}
 
     for root, _, files in os.walk("./prismatic/"):
@@ -158,7 +158,7 @@ def check_model_logic_mismatch(pretrained_checkpoint: str) -> None:
             if filename in files and curr_files[filename] is None:
                 curr_files[filename] = os.path.join(root, filename)
 
-    # Check and handle each file
+    # 检查并处理每个文件
     for filename, curr_filepath in curr_files.items():
         if curr_filepath is None:
             print(f"WARNING: `{filename}` is not found anywhere in the current directory.")

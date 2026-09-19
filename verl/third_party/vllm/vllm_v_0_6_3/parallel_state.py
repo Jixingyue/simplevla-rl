@@ -1,9 +1,9 @@
 # Copyright 2024 Bytedance Ltd. and/or its affiliates
 # Copyright 2023 The vLLM team.
-# Adapted from
+# 改编自
 # https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/parallel_state.py
 # Copyright (c) 2022, NVIDIA CORPORATION. All rights reserved.
-"""Model and data parallel groups."""
+"""模型并行和数据并行分组。"""
 import os
 from typing import Optional
 
@@ -20,21 +20,21 @@ from vllm.logger import init_logger
 
 logger = init_logger(__name__)
 """
-This version is strongly tied with Megatron to implement HybridEngine and weight sharing between vllm and Megatron.
-- We assume the Megatron tp+dp+pp world is already established before calling this function.
+该版本与 Megatron 深度耦合，以实现 HybridEngine 以及 vllm 与 Megatron 之间的权重共享。
+- 我们假定在调用此函数之前，Megatron 的 tp+dp+pp 并行世界已经建立。
 
 """
 
-# Device mesh for using DTensor
+# 用于 DTensor 的 device mesh
 _DEVICE_MESH = None
 
-# Tensor model parallel group that the current rank belongs to.
+# 当前 rank 所属的张量模型并行组。
 _TP = None
-# Pipeline model parallel group that the current rank belongs to.
+# 当前 rank 所属的流水线模型并行组。
 _PP = None
 
 
-# This method is for initializing the ParallelGroup when using HybridEngine
+# 该方法用于在使用 HybridEngine 时初始化 ParallelGroup
 def initialize_parallel_state(
     distributed_init_method: str = "env://",
     backend: str = "nccl",
@@ -42,24 +42,23 @@ def initialize_parallel_state(
     num_tp_per_train_tp: int = 1,
     pipeline_model_parallel_size: int = 1,
 ):
-    # torch.distributed.all_reduce does not free the input tensor until
-    # the synchronization point. This causes the memory usage to grow
-    # as the number of all_reduce calls increases. This env var disables
-    # this behavior.
-    # Related issue:
+    # torch.distributed.all_reduce 在到达同步点之前不会释放输入张量。
+    # 这会导致内存占用随着 all_reduce 调用次数的增加而增长。
+    # 该环境变量禁用了这一行为。
+    # 相关 issue：
     # https://discuss.pytorch.org/t/cuda-allocation-lifetime-for-inputs-to-distributed-all-reduce/191573
     os.environ["TORCH_NCCL_AVOID_RECORD_STREAMS"] = "1"
 
-    # NOTE(sgm): Modify for verl, Env vars will be set by TORCHRUN.
+    # NOTE(sgm): 为 verl 修改，环境变量将由 TORCHRUN 设置。
     rank = int(os.getenv("RANK", "-1"))
     local_rank = int(os.getenv("LOCAL_RANK", "0"))
 
-    # Use the world_size set by TORCHRUN
+    # 使用 TORCHRUN 设置的 world_size
     world_size = int(os.getenv("WORLD_SIZE", "-1"))
     assert world_size != -1, "The world_size is set to -1, not initialized by TORCHRUN"
     init_distributed_environment(world_size, rank, distributed_init_method, local_rank, backend)
     if torch.distributed.get_world_size() > 1:
-        # NOTE: build a sepearate inference group with infer tp & micro dp
+        # NOTE: 使用 infer tp 和 micro dp 构建一个独立的推理组
         initialize_model_parallel_for_vllm(
             tensor_model_parallel_size=tensor_model_parallel_size,
             num_tensor_model_parallel_groups_per_train_tp=num_tp_per_train_tp,
@@ -73,11 +72,10 @@ def ensure_model_parallel_initialized(
     pipeline_model_parallel_size: int = 1,
     backend: Optional[str] = None,
 ) -> None:
-    """Helper to initialize model parallel groups if they are not initialized,
-    or ensure tensor-parallel and pipeline-parallel sizes are equal to expected
-    values if the model parallel groups are initialized.
+    """辅助函数：若模型并行组尚未初始化则进行初始化；
+    若已初始化，则确保张量并行和流水线并行的大小与期望值一致。
     """
-    # get the backend of _DEVICE_WORLD_GROUP
+    # 获取 _DEVICE_WORLD_GROUP 的 backend
     backend = backend or torch.distributed.get_backend(get_world_group().device_group)
     if not model_parallel_is_initialized():
         initialize_model_parallel(tensor_model_parallel_size, pipeline_model_parallel_size, backend)
@@ -94,9 +92,9 @@ def ensure_model_parallel_initialized(
         f"{pipeline_model_parallel_size=}")
 
 
-# TODO(sgm): deviate from the v0.5.4, not pp now
+# TODO(sgm): 与 v0.5.4 不同，现在不支持 pp
 def model_parallel_is_initialized():
-    """Check if tensor and pipeline parallel groups are initialized."""
+    """检查张量并行组和流水线并行组是否已初始化。"""
     return ps._TP is not None
     # and _PIPELINE_MODEL_PARALLEL_GROUP is not None)
 
@@ -108,7 +106,7 @@ def initialize_model_parallel_for_vllm(
 ) -> None:
     pass
 
-    # Get world size and rank. Ensure some consistencies.
+    # 获取 world size 和 rank。确保一些一致性。
     assert torch.distributed.is_initialized()
 
     assert isinstance(tensor_model_parallel_size, int)
@@ -116,7 +114,7 @@ def initialize_model_parallel_for_vllm(
     # assert num_tensor_model_parallel_groups_per_train_tp == 1 and not different_tp_group
     # assert num_tensor_model_parallel_groups_per_train_tp > 1 and different_tp_group
 
-    # Build the tensor model-parallel groups.
+    # 构建张量模型并行组。
     assert ps._TP is None, "tensor model parallel group is already initialized"
 
     global _TP
@@ -131,7 +129,7 @@ def initialize_model_parallel_for_vllm(
 
     if num_tensor_model_parallel_groups_per_train_tp == 1:
         # if tensor_model_parallel_size == train_tensor_parallel_size:
-        # using the same tp group as Megatron/vllm
+        # 使用与 Megatron/vllm 相同的 tp 组
         assert _TP is None, "tensor model parallel group is already initialized"
         group_ranks = []
         for i in range(num_tensor_model_parallel_groups):
@@ -141,17 +139,17 @@ def initialize_model_parallel_for_vllm(
             group_ranks=group_ranks,
             local_rank=get_world_group().local_rank,
             backend=backend,
-            use_custom_allreduce=False,  # TODO: check why True is not work in Ray trainer
+            use_custom_allreduce=False,  # TODO: 检查为什么在 Ray trainer 中设为 True 不起作用
             use_message_queue_broadcaster=True,
         )
         ps._TP = _TP
-        # _MICRO_DATA_PARALLEL_GROUP is move to hybrid engine
+        # _MICRO_DATA_PARALLEL_GROUP 已移至 hybrid engine
     else:
-        # initialize a micro_dp group and a tp group
-        # assume training tp=4, infer tp=2, then, weight is partitioned as
-        # [1], [2], [3], [4] for training and [1,2], [1,2], [3,4], [3,4] for inference
+        # 初始化一个 micro_dp 组和一个 tp 组
+        # 假设训练 tp=4，推理 tp=2，那么权重的划分方式为：
+        # 训练时 [1], [2], [3], [4]，推理时 [1,2], [1,2], [3,4], [3,4]
 
-        # Build the inference tp groups
+        # 构建推理 tp 组
         # train_tp = train_tensor_parallel_size
         train_tp = num_tensor_model_parallel_groups_per_train_tp * tensor_model_parallel_size
         # num_tensor_model_parallel_groups_per_train_tp = train_tp // tensor_model_parallel_size
@@ -169,12 +167,12 @@ def initialize_model_parallel_for_vllm(
             group_ranks=group_ranks,
             local_rank=get_world_group().local_rank,
             backend=backend,
-            use_custom_allreduce=False,  # TODO: check why True is not work in Ray trainer
+            use_custom_allreduce=False,  # TODO: 检查为什么在 Ray trainer 中设为 True 不起作用
             use_message_queue_broadcaster=True,
         )
         ps._TP = _TP
 
-    # Build the pipeline model-parallel groups.
+    # 构建流水线模型并行组。
     # global _PIPELINE_MODEL_PARALLEL_GROUP
     # global _PIPELINE_GLOBAL_RANKS
     # assert ps._PIPELINE_MODEL_PARALLEL_GROUP is None, ("pipeline model parallel group is already initialized")
@@ -182,8 +180,8 @@ def initialize_model_parallel_for_vllm(
     # ps._PIPELINE_MODEL_PARALLEL_GROUP = mpu.get_pipeline_model_parallel_group()
     # ps._PIPELINE_GLOBAL_RANKS = mpu.get_pipeline_model_parallel_ranks()
 
-    # TODO: init using device mesh (not support hybrid engine now)
-    # Build the pipeline model-parallel groups.
+    # TODO: 使用 device mesh 初始化（目前不支持 hybrid engine）
+    # 构建流水线模型并行组。
     num_pipeline_model_parallel_groups: int = world_size // pipeline_model_parallel_size
     global _PP
     assert _PP is None, "pipeline model parallel group is already initialized"
@@ -191,9 +189,9 @@ def initialize_model_parallel_for_vllm(
     for i in range(num_pipeline_model_parallel_groups):
         ranks = list(range(i, world_size, num_pipeline_model_parallel_groups))
         group_ranks.append(ranks)
-    # pipeline parallel does not need custom allreduce
+    # 流水线并行不需要 custom allreduce
     _PP = init_model_parallel_group(group_ranks, get_world_group().local_rank, backend, use_custom_allreduce=False)
-    ps._PP = _PP  # for verl
+    ps._PP = _PP  # 为 verl 添加
 
 
 def initialize_model_parallel(
@@ -202,37 +200,32 @@ def initialize_model_parallel(
     backend: Optional[str] = None,
 ) -> None:
     """
-    NOTE: This method is a hack from the open-sourced version without
-    asertion of world_size = tp * pp
+    NOTE: 该方法是对开源版本的一个改动，去掉了 world_size = tp * pp 的断言。
 
-    Initialize model parallel groups.
+    初始化模型并行组。
 
     Arguments:
-        tensor_model_parallel_size: number of GPUs used for tensor model
-            parallelism.
-        pipeline_model_parallel_size: number of GPUs used for pipeline model
-            parallelism.
+        tensor_model_parallel_size: 用于张量模型并行的 GPU 数量。
+        pipeline_model_parallel_size: 用于流水线模型并行的 GPU 数量。
 
-    Let's say we have a total of 8 GPUs denoted by g0 ... g7 and we
-    use 2 GPUs to parallelize the model tensor, and 4 GPUs to parallelize
-    the model pipeline. The present function will
-    create 4 tensor model-parallel groups and 2 pipeline model-parallel groups:
-        4 tensor model-parallel groups:
+    假设我们总共有 8 个 GPU，记为 g0 ... g7，使用 2 个 GPU 做
+    模型张量并行，4 个 GPU 做模型流水线并行。本函数将创建
+    4 个张量模型并行组和 2 个流水线模型并行组：
+        4 个张量模型并行组：
             [g0, g1], [g2, g3], [g4, g5], [g6, g7]
-        2 pipeline model-parallel groups:
+        2 个流水线模型并行组：
             [g0, g2, g4, g6], [g1, g3, g5, g7]
-    Note that for efficiency, the caller should make sure adjacent ranks
-    are on the same DGX box. For example if we are using 2 DGX-1 boxes
-    with a total of 16 GPUs, rank 0 to 7 belong to the first box and
-    ranks 8 to 15 belong to the second box.
+    注意，出于效率考虑，调用方应确保相邻的 rank 位于同一台
+    DGX 机器上。例如，如果我们使用 2 台各 16 卡的 DGX-1 机器，
+    rank 0 到 7 属于第一台机器，rank 8 到 15 属于第二台机器。
     """
-    # Get world size and rank. Ensure some consistencies.
+    # 获取 world size 和 rank。确保一些一致性。
     assert torch.distributed.is_initialized()
     world_size: int = torch.distributed.get_world_size()
     backend = backend or torch.distributed.get_backend(ps.get_world_group().device_group)
 
-    # NOTE(sgm) we don't assert world_size == tp * pp
-    # DP is not managed by vllm but by the VeRL WorkerGroup
+    # NOTE(sgm) 我们不断言 world_size == tp * pp
+    # DP 不是由 vllm 管理的，而是由 veRL WorkerGroup 管理
     # if (world_size !=
     #         tensor_model_parallel_size * pipeline_model_parallel_size):
     #     raise RuntimeError(
@@ -249,18 +242,18 @@ def initialize_model_parallel(
         ranks = list(range(i * tensor_model_parallel_size, (i + 1) * tensor_model_parallel_size))
         group_ranks.append(ranks)
 
-    # message queue broadcaster is only used in tensor model parallel group
+    # message queue broadcaster 仅在张量模型并行组中使用
     _TP = init_model_parallel_group(
         group_ranks,
         get_world_group().local_rank,
         backend,
-        use_custom_allreduce=False,  # TODO: check why True is not work in Ray trainer
+        use_custom_allreduce=False,  # TODO: 检查为什么在 Ray trainer 中设为 True 不起作用
         use_message_queue_broadcaster=True,
     )
     ps._TP = _TP
 
-    # TODO: init using device mesh (not support hybrid engine now)
-    # Build the pipeline model-parallel groups.
+    # TODO: 使用 device mesh 初始化（目前不支持 hybrid engine）
+    # 构建流水线模型并行组。
     num_pipeline_model_parallel_groups: int = world_size // pipeline_model_parallel_size
     global _PP
     assert _PP is None, "pipeline model parallel group is already initialized"
@@ -268,13 +261,13 @@ def initialize_model_parallel(
     for i in range(num_pipeline_model_parallel_groups):
         ranks = list(range(i, world_size, num_pipeline_model_parallel_groups))
         group_ranks.append(ranks)
-    # pipeline parallel does not need custom allreduce
+    # 流水线并行不需要 custom allreduce
     _PP = init_model_parallel_group(group_ranks, get_world_group().local_rank, backend, use_custom_allreduce=False)
-    ps._PP = _PP  # for verl
+    ps._PP = _PP  # 为 verl 添加
 
 
 """
-Device mesh utilities
+Device mesh 工具函数
 """
 
 
@@ -284,29 +277,28 @@ def get_device_mesh():
 
 
 """
-Tensor model parallel utilities
+张量模型并行工具函数
 """
 
 
 def get_tensor_model_parallel_group():
-    """Get the tensor model parallel group the caller rank belongs to."""
+    """获取调用方 rank 所属的张量模型并行组。"""
     assert _TP is not None, "tensor model parallel group is not initialized"
     return _TP.device_group
 
 
 def get_tensor_model_parallel_world_size():
-    """Return world size for the tensor model parallel group."""
+    """返回张量模型并行组的 world size。"""
     return torch.distributed.get_world_size(group=get_tensor_model_parallel_group())
 
 
 def get_tensor_model_parallel_rank():
-    """Return my rank for the tensor model parallel group."""
+    """返回调用方在张量模型并行组中的 rank。"""
     return torch.distributed.get_rank(group=get_tensor_model_parallel_group())
 
 
 def get_tensor_model_parallel_src_rank():
-    """Calculate the global rank corresponding to the first local rank
-    in the tensor model parallel group."""
+    """计算张量模型并行组中第一个 local rank 对应的全局 rank。"""
     global_rank = torch.distributed.get_rank()
     local_world_size = get_tensor_model_parallel_world_size()
     return (global_rank // local_world_size) * local_world_size

@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utilities for DeepSpeed Ulysses Sequence Parallelism.
-DeepSpeed Ulysses Paper: https://arxiv.org/abs/2309.14509
-Inspired from: https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/sequence/layer.py
+DeepSpeed Ulysses 序列并行的工具函数。
+DeepSpeed Ulysses 论文: https://arxiv.org/abs/2309.14509
+灵感来源: https://github.com/microsoft/DeepSpeed/blob/master/deepspeed/sequence/layer.py
 """
 from typing import Any, Optional, List, Tuple
 
@@ -28,7 +28,7 @@ _ULYSSES_SEQUENCE_PARALLEL_GROUP = None
 
 def set_ulysses_sequence_parallel_group(group: dist.ProcessGroup):
     """
-    Set ulysses sequence parallel process group.
+    设置 ulysses 序列并行的进程组。
     """
     global _ULYSSES_SEQUENCE_PARALLEL_GROUP
     _ULYSSES_SEQUENCE_PARALLEL_GROUP = group
@@ -36,7 +36,7 @@ def set_ulysses_sequence_parallel_group(group: dist.ProcessGroup):
 
 def get_ulysses_sequence_parallel_group() -> Optional[dist.ProcessGroup]:
     """
-    Get ulysses sequence parallel process group.
+    获取 ulysses 序列并行的进程组。
     """
     global _ULYSSES_SEQUENCE_PARALLEL_GROUP
     return _ULYSSES_SEQUENCE_PARALLEL_GROUP
@@ -44,7 +44,7 @@ def get_ulysses_sequence_parallel_group() -> Optional[dist.ProcessGroup]:
 
 def get_ulysses_sequence_parallel_world_size(group: ProcessGroup = None) -> int:
     """
-    Get ulysses sequence parallel world size.
+    获取 ulysses 序列并行的 world size。
     """
     group = get_ulysses_sequence_parallel_group() if group is None else group
     return dist.get_world_size(group) if group else 1
@@ -52,7 +52,7 @@ def get_ulysses_sequence_parallel_world_size(group: ProcessGroup = None) -> int:
 
 def get_ulysses_sequence_parallel_rank(group: ProcessGroup = None) -> int:
     """
-    Get ulysses sequence parallel rank.
+    获取 ulysses 序列并行的 rank。
     """
     group = get_ulysses_sequence_parallel_group() if group is None else group
     return dist.get_rank(group) if group else 0
@@ -66,9 +66,9 @@ def gather_seq_scatter_heads(
     group: ProcessGroup = None,
 ) -> Tensor:
     """
-    A func to sync embedding input with alltoall in sequence parallel
-    gather sequence dimension and scatter head dim:
-    e.g. seq_dim: 1, head_dim: 2
+    在序列并行中通过 alltoall 同步 embedding 输入的函数。
+    聚合（gather）序列维度并切分（scatter）head 维度：
+    例如 seq_dim: 1, head_dim: 2
     [bsz, seq/n, h, ...] -> [bsz, seq, h/n, ...]
     """
     group = get_ulysses_sequence_parallel_group() if group is None else group
@@ -84,9 +84,9 @@ def gather_seq_scatter_heads(
 
 def gather_heads_scatter_seq(x: Tensor, head_dim: int, seq_dim: int, group: ProcessGroup = None) -> Tensor:
     """
-    A func to sync attention result with alltoall in sequence parallel
-    gather head dimension and scatter seq dim:
-    e.g. seq_dim: 1, head_dim: 2
+    在序列并行中通过 alltoall 同步注意力结果的函数。
+    聚合（gather）head 维度并切分（scatter）序列维度：
+    例如 seq_dim: 1, head_dim: 2
     [bsz, seq, h/n, ...] -> [bsz, seq/n, h, ...]
     """
     group = get_ulysses_sequence_parallel_group() if group is None else group
@@ -118,11 +118,11 @@ def slice_input_tensor(x: Tensor, dim: int, padding: bool = True, group: Process
     sp_world_size = dist.get_world_size(group)
     sp_rank = get_ulysses_sequence_parallel_rank()
     dim_size = x.size(dim)
-    # pad before slice
+    # 在切片前先填充
     if padding and dim_size % sp_world_size:
         padding_size = sp_world_size - (dim_size % sp_world_size)
         x = _pad_tensor(x, dim, padding_size)
-    # slice the input tensor
+    # 对输入张量做切片
     parts = x.size(dim) // sp_world_size
     slc = [slice(None)] * len(x.shape)
     slc[dim] = slice(sp_rank * parts, (sp_rank + 1) * parts)
@@ -216,7 +216,7 @@ class Gather(torch.autograd.Function):
 
         local_shape = list(local_tensor.size())
         split_size = local_shape[0]
-        part_size = local_shape[gather_dim]  # store original size
+        part_size = local_shape[gather_dim]  # 保存原始大小
         ctx.part_size = part_size
 
         output = all_gather_tensor(local_tensor, group, async_op)
@@ -253,23 +253,23 @@ def ulysses_pad_and_slice_inputs(input_ids_rmpad: torch.Tensor,
                                  position_ids_rmpad: Optional[torch.Tensor] = None,
                                  sp_size: int = 1):
     """
-    Pad and slice input_ids to be divisible by sp_size
-    Pad position_ids to be divisible by sp_size.
+    对 input_ids 进行填充（pad）和切片（slice），使其能被 sp_size 整除。
+    对 position_ids 进行填充，使其能被 sp_size 整除。
 
-    Note both input_ids_rmpad and position_ids_rmpad will be padded,
-    but only input_ids will be sliced.
+    注意 input_ids_rmpad 和 position_ids_rmpad 都会被填充，
+    但只有 input_ids 会被切片。
 
-    The is the utility of pre-forward for ulysses sequence parallelism
+    这是 ulysses 序列并行 pre-forward 阶段使用的工具函数。
 
     Args:
-        input_ids_rmpad: shape of [bsz, seqlen]
-        position_ids_rmpad: shape of [bsz, seqlen], where bsz must be 1
-        sp_size (int): ulysses sequence parallelism size
+        input_ids_rmpad: 形状为 [bsz, seqlen]
+        position_ids_rmpad: 形状为 [bsz, seqlen]，其中 bsz 必须为 1
+        sp_size (int): ulysses 序列并行的大小
 
     Returns:
-        torch.Tensor: padded and sliced input_ids
-        torch.Tensor: padded and sliced position_ids
-        int: pad size 
+        torch.Tensor: 填充并切片后的 input_ids
+        torch.Tensor: 填充并切片后的 position_ids
+        int: 填充大小
     """
     if position_ids_rmpad is not None:
         assert position_ids_rmpad.size(0) == 1
@@ -283,6 +283,6 @@ def ulysses_pad_and_slice_inputs(input_ids_rmpad: torch.Tensor,
         if position_ids_rmpad is not None:
             pad_pos_ids = torch.arange(pad_size, device=position_ids_rmpad.device).unsqueeze(0)
             position_ids_rmpad = torch.cat((position_ids_rmpad, pad_pos_ids), dim=-1)
-    # we don't need to slice position ids
+    # 我们不需要对 position ids 做切片
     input_ids_rmpad = slice_input_tensor(input_ids_rmpad, dim=1, padding=False)
     return input_ids_rmpad, position_ids_rmpad, pad_size

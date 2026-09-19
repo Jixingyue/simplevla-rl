@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Megatron Reward Model.
+Megatron Reward Model。
 """
 
 from tensordict import TensorDict
@@ -57,11 +57,11 @@ class MegatronRewardModel(BasePPORewardModel):
 
     def re_encode_by_rm_tokenizer(self, data: DataProto) -> DataProto:
         assert self.use_different_tokenizer, 're-encode need rm tokenizer not be None!'
-        # need to use rm tokenizer to re-generate input_ids, attention_mask and position_ids
-        # 1. remove pad for each sequence
-        # 2. decode by sft_tokenizer, remove sft system prompts
-        # 3. encode by rm_tokenizer with rm system prompts, get rm_input_ids
-        # 4. generate attention_mask and position_ids
+        # 需要使用 rm tokenizer 重新生成 input_ids、attention_mask 和 position_ids
+        # 1. 对每条序列去除 pad
+        # 2. 用 sft_tokenizer 解码，去除 sft system prompts
+        # 3. 用 rm_tokenizer 编码并加上 rm system prompts，得到 rm_input_ids
+        # 4. 生成 attention_mask 和 position_ids
         input_ids = data.batch['input_ids']  # (bs, seq_len)
         attention_mask = data.batch['attention_mask']
         position_ids = data.batch['position_ids']
@@ -73,34 +73,34 @@ class MegatronRewardModel(BasePPORewardModel):
         print_decode = True
         ori_seqlen = ori_seqlen + 128
         for id, mask in zip(input_ids, attention_mask):
-            # 1. remove pad for each sequence
+            # 1. 对每条序列去除 pad
             non_zero_indices = torch.nonzero(mask).view(-1)
             begin_pos, end_pos = non_zero_indices[0].item(), non_zero_indices[-1].item()
             valid_id = id[begin_pos:end_pos + 1]
-            # 2. decode by sft_tokenizer, remove sft system prompts
+            # 2. 用 sft_tokenizer 解码，去除 sft system prompts
             decode_result = self.sft_tokenizer.decode(valid_id)
-            # workaround
+            # 变通方法
             decode_with_rm_chat = decode_result.replace("<|user|>\n", "[INST] ").replace(
                 "</s>\n<|assistant|>\n", " [/INST]").replace("</s> \n<|assistant|>\n", " [/INST]") + "</s>"
             if print_decode and torch.distributed.get_rank() == 0:
-                # only print first decode result
+                # 仅打印第一个解码结果
                 print(f'device {torch.cuda.current_device()}: sft decode result:\n{decode_result}\n \
                         \ndevice {torch.cuda.current_device()}: sft decode result with rm chat template:\n{decode_with_rm_chat}\n\n'
                      )
                 print_decode = False
-            # 3. encode by rm_tokenizer
+            # 3. 用 rm_tokenizer 编码
             rm_input_ids = self.rm_tokenizer(decode_with_rm_chat,
                                              return_tensors='pt')['input_ids'][0].to(input_ids.device)
-            # 4. generate attention_mask and position_ids
+            # 4. 生成 attention_mask 和 position_ids
             rm_attention_mask = torch.ones_like(rm_input_ids, device=input_ids.device)
             cur_seqlen = rm_input_ids.shape[-1]
-            # NOTE(gh): the later reward compute will process the shape (bs, seqlen_pad_128)
+            # NOTE(gh): 后续的 reward 计算将处理形状 (bs, seqlen_pad_128)
             if cur_seqlen > ori_seqlen:
                 print(f'warninig: rm encode seqlen {cur_seqlen} > sft encode seqlen {ori_seqlen}')
                 rm_input_ids = rm_input_ids[:ori_seqlen]
                 rm_attention_mask = rm_attention_mask[:ori_seqlen]
             else:
-                # right padding
+                # 右侧填充
                 rm_input_ids = pad_sequence_to_length(rm_input_ids, ori_seqlen, self.rm_tokenizer.pad_token_id)
                 rm_attention_mask = pad_sequence_to_length(rm_attention_mask, ori_seqlen, 0)
             rm_position_ids = torch.arange(0, ori_seqlen, device=input_ids.device)
@@ -111,8 +111,8 @@ class MegatronRewardModel(BasePPORewardModel):
         attention_mask_for_rm = torch.cat(attention_mask_for_rm, dim=0)
         position_ids_for_rm = torch.cat(position_ids_for_rm, dim=0)
 
-        # (bs, seqlen) will not change, but input_ids, attention_mask and position_ids will change
-        # NOTE(gh): need to replace into origin values after compute reward!
+        # (bs, seqlen) 不会改变，但 input_ids、attention_mask 和 position_ids 会改变
+        # NOTE(gh): 计算 reward 后需要替换回原始值！
         data.batch['input_ids'] = input_ids_for_rm
         data.batch['attention_mask'] = attention_mask_for_rm
         data.batch['position_ids'] = position_ids_for_rm
@@ -142,9 +142,9 @@ class MegatronRewardModel(BasePPORewardModel):
             else:
                 logits = torch.empty(
                     (input_ids.shape[0], input_ids.shape[1]),
-                    dtype=torch.bfloat16,  # TODO(sgm): check why is bfloat16
+                    dtype=torch.bfloat16,  # TODO(sgm): 检查为什么是 bfloat16
                     device=input_ids.device)
-            # broadcast across pp ranks
+            # 跨 pp rank 进行 broadcast
             torch.distributed.broadcast(tensor=logits,
                                         src=mpu.get_pipeline_model_parallel_last_rank(),
                                         group=mpu.get_pipeline_model_parallel_group(),
@@ -152,7 +152,7 @@ class MegatronRewardModel(BasePPORewardModel):
 
         # (bs, seqlen', hidden_size) -> (bs, seqlen', 1) -> (bs, seqlen')
         token_level_rewards = logits
-        # find the last token reward
+        # 找到最后一个 token 的 reward
         ends = attention_mask.cumsum(dim=-1).argmax(dim=-1).view(-1, 1)  # (bs, 1)
         rewards = torch.gather(token_level_rewards, dim=1, index=ends)  # (bs, 1)
 
@@ -164,7 +164,7 @@ class MegatronRewardModel(BasePPORewardModel):
 
         token_level_rewards = rewards.expand(attention_mask.shape[0], attention_mask.shape[1])  # (bs, ori_seqlen)
 
-        # assign last valid token reward to ori position
+        # 将最后一个有效 token 的 reward 赋给原始位置
         eos_mask_idx = torch.argmax(position_ids * attention_mask, dim=-1)  # (bs,)
         eos_mask = torch.zeros_like(attention_mask)
         eos_mask[torch.arange(batch_size), eos_mask_idx] = 1.
@@ -175,7 +175,7 @@ class MegatronRewardModel(BasePPORewardModel):
         if self.config.param_offload:
             self.offload_params_to_cpu()
         else:
-            # add empty cache after each compute
+            # 每次计算后清空缓存
             torch.cuda.empty_cache()
 
         batch = TensorDict({'rm_scores': token_level_rewards}, batch_size=input_ids.shape[0])
@@ -184,18 +184,18 @@ class MegatronRewardModel(BasePPORewardModel):
 
     def forward_batch(self, data: DataProto):
         """
-        We assume:
-        - The model takes input: (input_ids, attention_mask, position_ids). No rmpad for the input
-        - The communication shape is (total_nnz_pad_to_sp // tp_size, 1, hidden_size) if sequence parallel is enabled
+        我们假设：
+        - 模型接收输入: (input_ids, attention_mask, position_ids)。输入不做 rmpad
+        - 如果启用了序列并行，通信形状为 (total_nnz_pad_to_sp // tp_size, 1, hidden_size)
         """
-        # broadcast from last pp rank to all other pp ranks
-        # TODO: actually, we just need to control the sampling order.
+        # 从最后一个 pp rank broadcast 到所有其他 pp rank
+        # TODO: 实际上，我们只需要控制采样顺序。
         data.batch = data.batch.contiguous()
         broadcast_dict_tensor(data.batch,
                               src=mpu.get_pipeline_model_parallel_last_rank(),
                               group=mpu.get_pipeline_model_parallel_group())
 
-        # split into micro-batches
+        # 切分为 micro-batch
         if self.config is not None and 'ppo_micro_batch_size' in self.config:
             infer_batch_size = self.config.ppo_micro_batch_size
         else:
@@ -206,14 +206,14 @@ class MegatronRewardModel(BasePPORewardModel):
         n_micro_batch = len(batches)
         seq_len = batches[0]['input_ids'].shape[1]
 
-        # compute input shapes for pp stages
+        # 计算 pp stage 的输入形状
         input_shapes = compute_transformers_input_shapes(
             batches,
             meta_info={
                 'sequence_parallel': self.megatron_config.sequence_parallel,
                 'hidden_size': self.model_config.hidden_size
             })
-        # compute input shapes for pp stages
+        # 计算 pp stage 的输入形状
         forward_backward_func = get_forward_backward_func()
 
         def loss_func(output):
@@ -227,21 +227,21 @@ class MegatronRewardModel(BasePPORewardModel):
             output = model(input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids)
             return output, loss_func
 
-        # batch should be a list of batches inside micro-batches
+        # batch 应该是 micro-batch 内部的 batch 列表
         batch_generator = make_batch_generator(batches, vpp_size=len(self.reward_model_module))
 
-        # TODO: we may use the new schedule instead
-        # for flash-attn: (seq_len, batch_size, hidden_size) = (mbs*seq_len, 1, hidden_size)
+        # TODO: 我们可以改用新的 schedule
+        # 对于 flash-attn: (seq_len, batch_size, hidden_size) = (mbs*seq_len, 1, hidden_size)
         if mpu.get_pipeline_model_parallel_world_size() > 1:
             losses_reduced = forward_backward_func(
                 forward_step_func=forward_step,
                 data_iterator=batch_generator,
                 model=self.reward_model_module,
                 num_microbatches=n_micro_batch,
-                input_shapes=input_shapes,  # must set for flash-attn sequence packing
-                seq_length=infer_batch_size * seq_len,  # no use when input_shapes was set
-                hidden_size=self.model_config.hidden_size,  # no use when input_shapes was set
-                micro_batch_size=1,  # no use when input_shapes was set
+                input_shapes=input_shapes,  # 必须为 flash-attn 序列打包进行设置
+                seq_length=infer_batch_size * seq_len,  # 当设置了 input_shapes 时不使用
+                hidden_size=self.model_config.hidden_size,  # 当设置了 input_shapes 时不使用
+                micro_batch_size=1,  # 当设置了 input_shapes 时不使用
                 forward_only=True,
             )
         else:
@@ -250,12 +250,12 @@ class MegatronRewardModel(BasePPORewardModel):
                 data_iterator=batch_generator,
                 model=self.reward_model_module,
                 num_microbatches=n_micro_batch,
-                seq_length=infer_batch_size * seq_len,  # in use for pp = 1
-                hidden_size=self.model_config.hidden_size,  # in use for pp = 1
-                micro_batch_size=1,  # in use for pp = 1
+                seq_length=infer_batch_size * seq_len,  # 在 pp = 1 时使用
+                hidden_size=self.model_config.hidden_size,  # 在 pp = 1 时使用
+                micro_batch_size=1,  # 在 pp = 1 时使用
                 forward_only=True,
             )
-        # loss_reduces contains the stats returned from loss_func
+        # loss_reduces 包含 loss_func 返回的统计信息
 
         return losses_reduced
 

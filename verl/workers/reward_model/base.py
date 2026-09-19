@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-The base class for reward model
+reward model 的基类
 """
 
 from abc import ABC, abstractmethod
@@ -27,19 +27,19 @@ class BasePPORewardModel(ABC):
 
     @abstractmethod
     def compute_reward(self, data: DataProto) -> DataProto:
-        """Computing reward given input_ids. The transformers should output a tensor with shape
-           [batch_size, sequence_length], and the value at [EOS] mask should be gathered.
+        """给定 input_ids 计算 reward。transformers 应输出一个形状为
+           [batch_size, sequence_length] 的张量，并且应收集 [EOS] mask 处的值。
 
-        Args:
-            data: must contain keys "input_ids", "attention_mask" and "position_ids".
+        参数:
+            data: 必须包含键 "input_ids"、"attention_mask" 和 "position_ids"。
                 - input_ids: [batch_size, sequence_length]
                 - attention_mask: [batch_size, sequence_length]
                 - position_ids: [batch_size, sequence_length]
 
-        Returns: a data pass protocol containing "reward". Only the [EOS] position contains the reward.
-            Other position should have zero reward. Note that this may change in the future if we use
-            dense reward. So, we leave the interface for general case.
-            - reward: [batch_size, sequence_length].
+        返回: 一个包含 "reward" 的 data pass protocol。只有 [EOS] 位置包含 reward。
+            其他位置的 reward 应为零。注意，如果我们使用 dense reward，这在将来可能会改变。
+            因此，我们为一般情况保留此接口。
+            - reward: [batch_size, sequence_length]。
 
         """
         pass

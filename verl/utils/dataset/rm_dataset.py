@@ -28,12 +28,12 @@ def download_files_distributed(download_fn):
     import torch.distributed
     if torch.distributed.is_initialized():
         if torch.distributed.get_rank() == 0:
-            # download files
+            # 下载文件
             download_fn()
 
         torch.distributed.barrier()
     else:
-        # download anyway
+        # 无论如何都下载
         download_fn()
 
 
@@ -85,7 +85,7 @@ class RMDataset(Dataset):
     def _read_files_and_tokenize(self):
         dataframes = []
         for parquet_file in self.parquet_files:
-            # read parquet files and cache
+            # 读取 parquet 文件并缓存
             dataframe = pd.read_parquet(parquet_file)
             dataframes.append(dataframe)
         self.dataframe = pd.concat(dataframes)

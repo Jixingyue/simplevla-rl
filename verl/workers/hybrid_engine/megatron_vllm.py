@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-This file contains a Megatron style Hybrid Engine that shares the weights of the actor with the inference engine.
+本文件实现了一个 Megatron 风格的混合引擎（Hybrid Engine），将 actor 的权重共享给推理引擎。
 """
 
 import torch
@@ -42,21 +42,21 @@ class AllGatherPPModel:
         self._vpp_size = mpu.get_virtual_pipeline_model_parallel_world_size()
         self._model_chunk_size = self._vpp_size or 1
 
-        # each one holds a list of model_chunks in this pp stage
+        # 每个元素保存当前 pp 阶段的 model_chunks 列表
         self._pp_models = [None] * self.pp_size
 
         rank_list = list(range(self.pp_size))
-        # make current rank the last one to initialize
+        # 让当前 rank 最后初始化
         rank_list[self.pp_rank], rank_list[-1] = rank_list[-1], rank_list[self.pp_rank]
         self._this_rank_models = None
 
-        # store the parameter of each pp stage
+        # 存储每个 pp 阶段的参数
         self.memory_buffers = [None] * self.pp_size
         for cur_pp_rank in rank_list:
             print(
                 f'create pp model', f'torch allocated {torch.cuda.memory_allocated() / 1e9:.4f} GB, '
                 f'reserved {torch.cuda.memory_reserved() / 1e9:.4f} GB')
-            # since the last initialized rank is the current pp rank, after init, the pp rank is still correct
+            # 由于最后初始化的 rank 就是当前 pp rank，因此初始化完成后 pp rank 仍然正确
             mpu.set_pipeline_model_parallel_rank(cur_pp_rank)
             if cur_pp_rank != self.pp_rank:
                 models = get_model(model_provider, wrap_with_ddp=False)
@@ -64,7 +64,7 @@ class AllGatherPPModel:
                 assert len(models) == self._model_chunk_size, f"{len(models)} != {self._model_chunk_size}"
                 self.pp_models[cur_pp_rank] = models
             else:
-                # for regular model, we wrapped it with DDP
+                # 对于常规模型，我们用 DDP 对其进行包装
                 models = get_model(model_provider)
                 assert len(models) == self._model_chunk_size, f"{len(models)} != {self._model_chunk_size}"
                 self._this_rank_models = nn.ModuleList(models)
@@ -73,14 +73,14 @@ class AllGatherPPModel:
             self._build_param_buffer(cur_pp_rank)
             self._build_param_references(cur_pp_rank, maintain_weight=cur_pp_rank == self.pp_rank)
 
-            # TODO: after binding to the memory buffer, we can load the checkpoint here
+            # TODO: 绑定到内存缓冲区之后，可以在这里加载 checkpoint
             if cur_pp_rank != self.pp_rank:
                 for model in self.pp_models[cur_pp_rank]:
                     model.eval()
                 self._offload_params_to_cpu(cur_pp_rank)
 
     def _build_param_buffer(self, pp_rank):
-        """Build the parameter buffer in each pp rank"""
+        """在每个 pp rank 上构建参数缓冲区"""
         model = self.pp_models[pp_rank]
         weight_buffer_meta = get_weight_buffer_meta_from_module(model)
         self.memory_buffers[pp_rank] = build_memory_buffer(weight_buffer_meta)
@@ -96,31 +96,31 @@ class AllGatherPPModel:
                 buffer.data = buffer.data.to(torch.cuda.current_device(), non_blocking=True)
             else:
                 buffer.data = torch.empty_like(buffer.data, device='cuda')
-        # rebuild reference after loading to CUDA
+        # 加载到 CUDA 后重建引用
         self._build_param_references(pp_rank)
 
     def _offload_params_to_cpu(self, pp_rank, to_empty=False):
         assert pp_rank != self.pp_rank, f"unexpected to offload current pp rank [{pp_rank}] to cpu"
         for buffer in self.memory_buffers[pp_rank].values():
             if not to_empty:
-                # offload the whole memory buffer to CPU
+                # 将整个内存缓冲区 offload 到 CPU
                 buffer.data = buffer.data.to('cpu', non_blocking=True)
             else:
                 buffer.data = torch.empty_like(buffer.data, device='cpu')
         self._build_param_references(pp_rank)
 
     def load_params_to_cuda(self, to_empty=False):
-        """load all model params to cuda"""
+        """将所有模型参数加载到 cuda"""
         for cur_pp_rank in range(self.pp_size):
             if cur_pp_rank != self.pp_rank:
                 self._load_params_to_cuda(cur_pp_rank, to_empty=to_empty)
 
     def allgather_params(self):
-        """allgather params of all pp ranks. Return a list of handles"""
+        """对所有 pp rank 的参数执行 allgather。返回句柄列表"""
         for cur_pp_rank in range(self.pp_size):
             global_src = dist.get_global_rank(group=self.pp_group, group_rank=cur_pp_rank)
 
-            # NOTE(sgm): the async op may cause memory leakage of the memory_buffer/pp_models
+            # NOTE(sgm): 异步操作可能导致 memory_buffer/pp_models 发生内存泄漏
             for memory_buffer in self.memory_buffers[cur_pp_rank].values():
                 dist.broadcast(tensor=memory_buffer.data, src=global_src, group=self.pp_group, async_op=False)
 
@@ -155,17 +155,17 @@ class AllGatherPPModel:
             model.train()
 
     def offload_params_to_cpu(self, to_empty=False):
-        """offload params of models that are not of current pp rank to cpu"""
+        """将不属于当前 pp rank 的模型参数 offload 到 cpu"""
         for cur_pp_rank in range(self.pp_size):
             if cur_pp_rank != self.pp_rank:
                 self._offload_params_to_cpu(cur_pp_rank, to_empty=to_empty)
 
     def get_all_params(self):
-        """Get all the parameters of the models in all pp ranks
+        """获取所有 pp rank 上模型的全部参数
 
         Returns:
-            params: List[List[Dict[str, Tensor]]]: a list of parameters in all pp, where each is a list of dict
-                tensors of each model chunk
+            params: List[List[Dict[str, Tensor]]]: 所有 pp 中参数组成的列表，其中每个元素是
+                一个 dict 列表，对应每个 model chunk 的张量字典
 
         """
         params = []
@@ -174,9 +174,9 @@ class AllGatherPPModel:
             for model_chunk_idx in range(len(self.pp_models[pp_rank])):
                 params[pp_rank].append({})
                 pp_model = self.pp_models[pp_rank][model_chunk_idx]
-                pp_model = unwrap_model(pp_model, ((torchDDP, LocalDDP, Float16Module)))  # not use Float16Module
+                pp_model = unwrap_model(pp_model, ((torchDDP, LocalDDP, Float16Module)))  # 不使用 Float16Module
                 for name, param in pp_model.named_parameters():
-                    # NOTE(gh) workaround: should not get lora params for inference
+                    # NOTE(gh) 变通方案: 推理时不应获取 lora 参数
                     if 'lora' in name:
                         continue
                     params[pp_rank][model_chunk_idx][name] = param
@@ -209,12 +209,12 @@ class AllGatherPPModel:
 
 
 """
-Megatron Hybrid Engine:
-- During training, only the current pp stage holds the parameters
-- Before inference, broadcast the parameters of the current pp rank to all other pp ranks (all pp ranks holds all the parameters)
-- Bind the parameters to the inference engine
-- Do inference in tp. pp is treated as additional dp
-- After inference, all the parameters that doesn't belong to this pp rank is freed.
+Megatron 混合引擎：
+- 训练期间，只有当前 pp 阶段持有参数
+- 推理之前，将当前 pp rank 的参数广播给所有其他 pp rank（所有 pp rank 持有全部参数）
+- 将参数绑定到推理引擎
+- 在 tp 维度上做推理，pp 被视作额外的 dp
+- 推理结束后，释放所有不属于当前 pp rank 的参数
 """
 
 from .base import BaseShardingManager
@@ -230,8 +230,8 @@ import verl.utils.megatron.tensor_parallel as tp_utils
 from verl.third_party.vllm import parallel_state as vllm_ps
 from verl.third_party.vllm import LLM
 from verl.utils.model import normalize_pp_vpp_params
-# Micro Data parallel group. Micro data parallel group is additional dp group that origins from splitting training tp
-# into infer_tp and micro_tp. By default, we use order micro_dp - tp
+# 微数据并行组。微数据并行组是额外的 dp 组，源自将训练 tp 拆分为 infer_tp 和 micro_tp。
+# 默认情况下，我们采用 micro_dp - tp 的顺序
 _MICRO_DATA_PARALLEL_GROUP = None
 
 
@@ -243,14 +243,14 @@ class MegatronVLLMShardingManager(BaseShardingManager):
         self.model_config = model_config
         self.layer_name_mapping = layer_name_mapping
 
-        # initialize micro_dp group for vllm inference
+        # 为 vllm 推理初始化 micro_dp 组
         global _MICRO_DATA_PARALLEL_GROUP
         world_size = torch.distributed.get_world_size()
         rank = torch.distributed.get_rank()
         train_tensor_parallel_size = mpu.get_tensor_model_parallel_world_size()
         infer_tensor_parallel_size = vllm_ps.get_tensor_model_parallel_world_size()
 
-        # TODO(sgm): this may not be true for FSDP -> vLLM
+        # TODO(sgm): 对于 FSDP -> vLLM 的情况，这一点可能并不成立
         assert infer_tensor_parallel_size <= train_tensor_parallel_size, \
             'Not implemented for infer_tp > train_tp'
         assert train_tensor_parallel_size % infer_tensor_parallel_size == 0
@@ -266,18 +266,18 @@ class MegatronVLLMShardingManager(BaseShardingManager):
 
     def default_tp_concat_fn(self, name, param, infer_params, model_config):
         """
-        name: name of the parameter
-        param: training parameters
-        infer_params (List[torch.Tensor]): a list of parameters all-gathered from micro_dp_group
-        model_config: huggingface model_config
-        TODO(zhangchi.usc1992): currently, the implementation is adhoc. We can move this function to the model
-        definition so that it is model-agnostic. If the model doesn't implement this function, 
-        we can throw an error to force user disable TP HybridEngine.
+        name: 参数名
+        param: 训练参数
+        infer_params (List[torch.Tensor]): 从 micro_dp_group all-gather 得到的参数列表
+        model_config: huggingface 的 model_config
+        TODO(zhangchi.usc1992): 当前实现是针对特定场景临时写的。我们可以把这个函数移到模型
+        定义中，使其与具体模型无关。如果模型没有实现该函数，
+        我们可以抛出错误，强制用户禁用 TP HybridEngine。
         """
 
         if self.layer_name_mapping.get("qkv_layer_name") in name:
-            # if the tensor is qkv, for each param on tp, split into q, k, v
-            # concat q, k, v separately.
+            # 如果张量是 qkv，则对 tp 上的每个参数按 q、k、v 拆分
+            # 再分别对 q、k、v 进行拼接。
             q_lst = []
             k_lst = []
             v_lst = []
@@ -298,7 +298,7 @@ class MegatronVLLMShardingManager(BaseShardingManager):
             infer_params = torch.cat((q, k, v), dim=0)
 
         elif self.layer_name_mapping.get("gate_proj_layer_name") in name:
-            # if the tensor is gate and proj
+            # 如果张量是 gate 和 proj
             gate_lst = []
             up_lst = []
             for infer_param in infer_params:
@@ -310,18 +310,18 @@ class MegatronVLLMShardingManager(BaseShardingManager):
             infer_params = torch.cat((gate, up), dim=0)
 
         else:
-            # concat tensor
+            # 拼接张量
             infer_params = torch.cat(infer_params, dim=tp_utils.get_tensor_parallel_partition_dim(param))
 
         return infer_params
 
     def _post_process_params(self, params):
         """
-        For each param, if it is a tp-splited param, we all-gather from micro_dp group.
+        对每个参数，如果它是被 tp 拆分过的参数，则从 micro_dp 组执行 all-gather。
         """
-        # here the params are in train tp format. we iterate params and all-gather
-        # TODO(zhangchi.usc1992) We can consider copy non-tp weight to another infer buffer.
-        # In this way, all the params in the original memory_buffers and can be offload.
+        # 这里的参数是训练 tp 格式。我们遍历参数并执行 all-gather
+        # TODO(zhangchi.usc1992) 可以考虑把非 tp 权重复制到另一个推理缓冲区。
+        # 这样，原始 memory_buffers 中的所有参数都可以被 offload。
         micro_dp_size = get_micro_data_parallel_world_size()
         micro_dp_group = get_micro_data_parallel_group()
 
@@ -332,25 +332,25 @@ class MegatronVLLMShardingManager(BaseShardingManager):
         for name in params.keys():
             param = params[name]
             if tp_utils.is_tensor_parallel_param(param):
-                # allocate a new tensor with proper size
+                # 分配一个大小合适的新张量
                 infer_params = [torch.empty_like(param) for _ in range(micro_dp_size)]
                 torch.distributed.all_gather(infer_params, param, group=micro_dp_group)
                 infer_params = self.default_tp_concat_fn(name, param, infer_params, self.model_config)
-                # replace with original param
+                # 替换回原始参数
                 params[name] = infer_params
             origin_params[name] = param
 
         return origin_params
 
     def __enter__(self):
-        # create a new cuda space for parameters not in this pp rank
+        # 为不属于当前 pp rank 的参数创建新的 cuda 空间
         self.module.load_params_to_cuda()
-        # broadcast the parameters from pp rank to other ranks
+        # 将参数从当前 pp rank 广播给其他 rank
         self.module.allgather_params()
-        # obtain name to parameters in pp/vpp
+        # 获取 pp/vpp 中参数名到参数的映射
         params = self.module.get_all_params()
 
-        # bind the params to inference engine
+        # 将参数绑定到推理引擎
         self.params = normalize_pp_vpp_params(params=params,
                                               num_hidden_layers=self.model_config.num_hidden_layers,
                                               layer_name='layers')
@@ -358,11 +358,11 @@ class MegatronVLLMShardingManager(BaseShardingManager):
         self.inference_engine.sync_model_weights(self.params, load_format='megatron')
 
     def __exit__(self, exc_type, exc_value, traceback):
-        # offload parameters doesn't belong to this pp rank
+        # offload 不属于当前 pp rank 的参数
         self.module.offload_params_to_cpu()
 
-        # FIXME(sgm): the best practice is to delete the cuda tensor
-        # rebind the model weights, can be any cpu tensor
+        # FIXME(sgm): 最佳做法是删除 cuda 张量
+        # 重新绑定模型权重，可以是任意的 cpu 张量
         if get_micro_data_parallel_world_size() > 1:
             for name in self.params.keys():
                 self.params[name] = self.origin_params[name]
@@ -372,15 +372,15 @@ class MegatronVLLMShardingManager(BaseShardingManager):
 
         self.module.train()
 
-        # add empty cache after each compute
+        # 每次计算后添加空缓存清理
         torch.cuda.empty_cache()
 
     def preprocess_data(self, data: DataProto) -> DataProto:
-        # prompts are identical for each training tp. We select for each inference tp
+        # 每个训练 tp 上的 prompts 是相同的。我们为每个推理 tp 选取对应分片
         micro_dp_size = get_micro_data_parallel_world_size()
         micro_dp_rank = get_micro_data_parallel_rank()
 
-        # broadcast from tp=0 to other tp ranks
+        # 从 tp=0 广播到其他 tp rank
         broadcast_dict_tensor(data.batch,
                               src=mpu.get_tensor_model_parallel_src_rank(),
                               group=mpu.get_tensor_model_parallel_group())
@@ -393,7 +393,7 @@ class MegatronVLLMShardingManager(BaseShardingManager):
 
     def postprocess_data(self, data: DataProto) -> DataProto:
         meta_info = data.meta_info
-        # all gather batch among micro-dp groups
+        # 在 micro-dp 组内对 batch 执行 all gather
         micro_dp_size = get_micro_data_parallel_world_size()
         if micro_dp_size > 1:
             data.batch = allgather_dict_tensors(data.batch.contiguous(),
@@ -401,7 +401,7 @@ class MegatronVLLMShardingManager(BaseShardingManager):
                                                 group=get_micro_data_parallel_group(),
                                                 dim=0)
 
-        # all gather batch among pp group
+        # 在 pp 组内对 batch 执行 all gather
         if meta_info.get('allgather_pp_output', True):
             data.batch = allgather_dict_tensors(data.batch.contiguous(),
                                                 size=mpu.get_pipeline_model_parallel_world_size(),
@@ -411,7 +411,7 @@ class MegatronVLLMShardingManager(BaseShardingManager):
 
 
 """
-Micro Data parallel group
+微数据并行组
 """
 
 

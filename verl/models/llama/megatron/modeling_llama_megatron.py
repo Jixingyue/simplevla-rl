@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch LLaMA model."""
+""" PyTorch LLaMA 模型。"""
 
 from typing import Optional, Tuple, Union
 
@@ -36,16 +36,16 @@ from verl.utils.megatron import tensor_parallel as tp_utils
 from .layers import ParallelLlamaDecoderLayer, ParallelLlamaRMSNorm, ParallelLlamaDecoderLayerRmPad
 """
 TODO: 
-1. Add weight initialization. Here we need to be careful on TP weight init.
-2. Add sequence parallel
-3. Load checkpoint from meta LLama pretrained checkpoint
+1. 添加权重初始化。这里我们需要小心处理 TP 权重初始化。
+2. 添加 sequence parallel
+3. 从 meta LLama 预训练 checkpoint 加载权重
 """
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
+# 复制自 transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device):
     """
-    Make causal mask used for bi-directional self-attention.
+    构建用于双向自注意力的因果掩码（causal mask）。
     """
     bsz, tgt_len = input_ids_shape
     mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
@@ -55,10 +55,10 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: t
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len)
 
 
-# Copied from transformers.models.bart.modeling_bart._expand_mask
+# 复制自 transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    将 attention_mask 从 `[bsz, seq_len]` 扩展为 `[bsz, 1, tgt_seq_len, src_seq_len]`。
     """
     bsz, src_len = mask.size()
     tgt_len = tgt_len if tgt_len is not None else src_len
@@ -72,7 +72,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 class ParallelLlamaModel(nn.Module):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
+    由 *config.num_hidden_layers* 层组成的 Transformer decoder。每一层都是一个 [`LlamaDecoderLayer`]
 
     Args:
         config: LlamaConfig
@@ -94,9 +94,9 @@ class ParallelLlamaModel(nn.Module):
             [ParallelLlamaDecoderLayer(config, megatron_config) for _ in range(config.num_hidden_layers)])
         self.norm = ParallelLlamaRMSNorm(config, megatron_config)
 
-    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
+    # 复制自 transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds):
-        # create causal mask
+        # 创建因果掩码（causal mask）
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
         if input_shape[-1] > 1:
@@ -124,16 +124,16 @@ class ParallelLlamaModel(nn.Module):
         """
 
         Args:
-            input_ids: input ids. shape (batch_size, seq_length)
-            attention_mask: attention_mask. shape (batch_size, seq_length)
-            position_ids: position ids. shape (batch_size, seq_length)
+            input_ids: 输入 id。形状 (batch_size, seq_length)
+            attention_mask: 注意力掩码。形状 (batch_size, seq_length)
+            position_ids: 位置 id。形状 (batch_size, seq_length)
 
         Returns:
 
         """
         batch_size, seq_length = input_ids.shape
         inputs_embeds = self.embed_tokens(input_ids)
-        # embed positions
+        # 位置嵌入
 
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, (batch_size, seq_length), inputs_embeds)
 
@@ -181,14 +181,14 @@ class ParallelLlamaForCausalLM(nn.Module):
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+                用于计算掩码语言建模损失（masked language modeling loss）的标签。索引应在 `[0, ...,
+                config.vocab_size]` 内或为 -100（见 `input_ids` 的 docstring）。索引被设为 `-100` 的 token 会被忽略
+                （masked），损失只针对标签在 `[0, ..., config.vocab_size]` 内的 token 计算。
 
         Returns:
         ```"""
 
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
+        # decoder 输出由 (dec_features, layer_state, dec_hidden, dec_attn) 组成
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -215,7 +215,7 @@ from flash_attn.bert_padding import index_first_axis, pad_input, unpad_input  # 
 
 class ParallelLlamaModelRmPad(nn.Module):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
+    由 *config.num_hidden_layers* 层组成的 Transformer decoder。每一层都是一个 [`LlamaDecoderLayer`]
 
     Args:
         config: LlamaConfig
@@ -248,8 +248,8 @@ class ParallelLlamaModelRmPad(nn.Module):
         """
 
         Args:
-            input_ids: input ids. shape (1, totol_nnz)
-            position_ids: position ids. shape (batch_size, seq_length)
+            input_ids: 输入 id。形状 (1, totol_nnz)
+            position_ids: 位置 id。形状 (batch_size, seq_length)
 
         Returns:
 
@@ -300,7 +300,7 @@ class ParallelLlamaForCausalLMRmPad(nn.Module):
                                                             **column_kwargs)
 
     def _forward_head(self, hidden_states):
-        # all_gather from sequence parallel region is performed inside lm_head
+        # 从 sequence parallel 区域进行 all_gather 的操作在 lm_head 内部完成
         logits = self.lm_head(hidden_states)[0]
         logits = logits.float()  # (total_nnz_padded, 1, vocab_size // tp)
         logits = tensor_parallel.gather_from_tensor_model_parallel_region(logits)  # (total_nnz_padded, 1, vocab_size)
@@ -315,20 +315,20 @@ class ParallelLlamaForCausalLMRmPad(nn.Module):
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+                用于计算掩码语言建模损失（masked language modeling loss）的标签。索引应在 `[0, ...,
+                config.vocab_size]` 内或为 -100（见 `input_ids` 的 docstring）。索引被设为 `-100` 的 token 会被忽略
+                （masked），损失只针对标签在 `[0, ..., config.vocab_size]` 内的 token 计算。
 
         Returns:
         ```"""
         batch_size, sequence_length = input_ids.shape
 
-        # remove padding here
+        # 在这里去除 padding
         input_ids, indices, cu_seqlens, max_seqlen_in_batch = unpad_input(input_ids.unsqueeze(dim=-1),
                                                                           attention_mask)  # (total_nnz, 1)
 
-        # pad input_ids to multiple of tp for all tp ranks
-        # TODO: for better performance, the sp padding should be removed at each layer. Not sure the performance gap
+        # 将 input_ids 填充（pad）到所有 tp rank 的 tp 倍数
+        # TODO: 为了更好的性能，sp padding 应该在每一层被移除。不确定性能差距有多大
         if self.megatron_config.sequence_parallel:
             input_ids = sp_utils.pad_to_sequence_parallel(input_ids)
 
@@ -345,13 +345,13 @@ class ParallelLlamaForCausalLMRmPad(nn.Module):
 
         logits = self._forward_head(hidden_states)
 
-        # remove padding from sequence parallel
+        # 从 sequence parallel 中去除 padding
         if self.megatron_config.sequence_parallel:
             totol_nnz = cu_seqlens[-1]
             logits = logits[:totol_nnz]  # (total_nnz_padded)
 
-        logits = torch.squeeze(logits, dim=1)  # remove the artificial batch dimension
-        # add removed padding back
+        logits = torch.squeeze(logits, dim=1)  # 移除人为添加的 batch 维度
+        # 把移除的 padding 加回去
         logits = pad_input(logits, indices, batch_size,
                            seqlen=sequence_length)  # (batch_size, sequence_length, vocab_size)
 
@@ -372,7 +372,7 @@ class ParallelLlamaForValueRmPad(ParallelLlamaForCausalLMRmPad):
             assert column_kwargs.get('config', False), 'must have ModelParallelConfig'
             tp_utils.update_kwargs_with_config(column_kwargs, self.megatron_config)
         self.lm_head = nn.Linear(in_features=self.config.hidden_size, out_features=1, bias=False)
-        # lm_head is effectively the same as sequence parallel
+        # lm_head 实际上等同于 sequence parallel
         sp_utils.mark_parameter_as_sequence_parallel(self.lm_head.weight)
 
     def _forward_head(self, hidden_states):
@@ -394,16 +394,16 @@ class ParallelLlamaForValueRmPad(ParallelLlamaForCausalLMRmPad):
 
 
 """
-Support pipeline parallelism
+支持流水线并行（pipeline parallelism）
 """
 
 
 class ParallelLlamaModelRmPadPP(nn.Module):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`LlamaDecoderLayer`]
-    This model definition supports pipeline parallelism. To support pp and vpp,
-    - This model only contains layer in this pp stage and vpp chunk
-    - When calling get_model in Megatron, this rank will instantiate all the vpp chunks in this pp.
+    由 *config.num_hidden_layers* 层组成的 Transformer decoder。每一层都是一个 [`LlamaDecoderLayer`]
+    该模型定义支持流水线并行（pipeline parallelism）。为了支持 pp 和 vpp：
+    - 该模型只包含当前 pp stage 和 vpp chunk 中的层
+    - 当在 Megatron 中调用 get_model 时，该 rank 会实例化当前 pp 中的所有 vpp chunk。
     Args:
         config: LlamaConfig
     """
@@ -456,13 +456,11 @@ class ParallelLlamaModelRmPadPP(nn.Module):
             self.norm = None
 
     def set_input_tensor(self, input_tensor):
-        """Set input tensor to be used instead of forward()'s input.
+        """设置用于替代 forward() 输入的 input tensor。
 
-        When doing pipeline parallelism the input from the previous
-        stage comes from communication, not from the input, so the
-        model's forward_step_func won't have it. This function is thus
-        used by internal code to bypass the input provided by the
-        forward_step_func"""
+        在进行流水线并行时，来自上一个 stage 的输入是通过通信获得的，
+        而不是来自输入，因此模型的 forward_step_func 拿不到它。内部代码
+        因此使用该函数来绕过 forward_step_func 提供的输入"""
         self.input_tensor = input_tensor
 
     def forward(self,
@@ -475,8 +473,8 @@ class ParallelLlamaModelRmPadPP(nn.Module):
         """
 
         Args:
-            input_ids: input ids. shape (1, totol_nnz)
-            position_ids: position ids. shape (batch_size, seq_length)
+            input_ids: 输入 id。形状 (1, totol_nnz)
+            position_ids: 位置 id。形状 (batch_size, seq_length)
 
         Returns:
 
@@ -486,8 +484,8 @@ class ParallelLlamaModelRmPadPP(nn.Module):
             #     print(f'rank {torch.cuda.current_device()}: input_ids shape before embedding: {input_ids.shape}')
             inputs_embeds = self.embed_tokens(input_ids)  # (1, total_nnz) -> (1, total_nnz, hidden_size)
 
-            # vocab parallel embedding will not do sequence parallel reduce-scatter in open source megatron
-            # so need to deal with it by handle here:
+            # 在开源 megatron 中，vocab parallel embedding 不会做 sequence parallel 的 reduce-scatter
+            # 所以需要在这里手动处理：
             # (1, total_nnz, hidden_size) -> (total_nnz, 1, hidden_size) -> (total_nnz // sp, 1, hidden_size)
             inputs_embeds = inputs_embeds.transpose(0, 1)
             if self.megatron_config.sequence_parallel:
@@ -497,7 +495,7 @@ class ParallelLlamaModelRmPadPP(nn.Module):
             #     print(f'rank {torch.cuda.current_device()}: input_embeds shape after embedding: {inputs_embeds.shape}')
             hidden_states = inputs_embeds
         else:
-            # self.hidden_states should be passed by Megatron
+            # self.hidden_states 应由 Megatron 传入
             hidden_states = self.input_tensor
 
         for idx, decoder_layer in enumerate(self.layers):
@@ -526,7 +524,7 @@ class ParallelLlamaForCausalLMRmPadPP(nn.Module):
                                                megatron_config=megatron_config,
                                                pre_process=pre_process,
                                                post_process=post_process)
-        self.share_embeddings_and_output_weights = None  # workaround, megatron requires this attr
+        self.share_embeddings_and_output_weights = None  # 变通处理（workaround），megatron 要求有该属性
         self.vocab_size = config.vocab_size
         self.pre_process = pre_process
         self.post_process = post_process
@@ -534,13 +532,11 @@ class ParallelLlamaForCausalLMRmPadPP(nn.Module):
             self._init_head()
 
     def set_input_tensor(self, input_tensor):
-        """Set input tensor to be used instead of forward()'s input.
+        """设置用于替代 forward() 输入的 input tensor。
 
-        When doing pipeline parallelism the input from the previous
-        stage comes from communication, not from the input, so the
-        model's forward_step_func won't have it. This function is thus
-        used by internal code to bypass the input provided by the
-        forward_step_func"""
+        在进行流水线并行时，来自上一个 stage 的输入是通过通信获得的，
+        而不是来自输入，因此模型的 forward_step_func 拿不到它。内部代码
+        因此使用该函数来绕过 forward_step_func 提供的输入"""
         assert len(input_tensor) == 1
         self.model.set_input_tensor(input_tensor[0])
 
@@ -557,7 +553,7 @@ class ParallelLlamaForCausalLMRmPadPP(nn.Module):
                                                             **column_kwargs)
 
     def _forward_head(self, hidden_states):
-        # all_gather from sequence parallel region is performed inside lm_head
+        # 从 sequence parallel 区域进行 all_gather 的操作在 lm_head 内部完成
         # print(f'logits shape before forward_head: {hidden_states.shape}, vocab_size = {self.config.vocab_size}') # [4, 32, 4096]
         logits = self.lm_head(hidden_states)[0]
         # print(f'logits shape after forward_head: {logits.shape}') # [8, 32, 8]
@@ -566,7 +562,7 @@ class ParallelLlamaForCausalLMRmPadPP(nn.Module):
 
     def forward(
         self,
-        # original input
+        # 原始输入
         *,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
@@ -575,22 +571,22 @@ class ParallelLlamaForCausalLMRmPadPP(nn.Module):
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
-                config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
-                (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
+                用于计算掩码语言建模损失（masked language modeling loss）的标签。索引应在 `[0, ...,
+                config.vocab_size]` 内或为 -100（见 `input_ids` 的 docstring）。索引被设为 `-100` 的 token 会被忽略
+                （masked），损失只针对标签在 `[0, ..., config.vocab_size]` 内的 token 计算。
 
         Returns:
         ```"""
 
-        # Note that input_ids, attention_mask and position_ids should be passed to every pp layer.
-        # In the first pp, input_ids will be used, in other pp layers hidden_states will be used inside self.model
+        # 注意 input_ids、attention_mask 和 position_ids 应传递给每一个 pp 层。
+        # 在第一个 pp 阶段会使用 input_ids，在其他 pp 层中 self.model 内部会使用 hidden_states
         batch_size, sequence_length = input_ids.shape
-        # remove padding here
+        # 在这里去除 padding
         input_ids_rmpad, indices, cu_seqlens, max_seqlen_in_batch = unpad_input(input_ids.unsqueeze(dim=-1),
                                                                                 attention_mask)  # (total_nnz, 1)
         # print(f'input_ids.shape = {input_ids.shape}, input_ids_rmpad.shape = {input_ids_rmpad.shape}, indices.shape = {indices.shape}, cu_seqlens[-1] = {cu_seqlens[-1]}')
-        # pad input_ids to multiple of tp for all tp ranks
-        # TODO: for better performance, the sp padding should be removed at each layer. Not sure the performance gap
+        # 将 input_ids 填充（pad）到所有 tp rank 的 tp 倍数
+        # TODO: 为了更好的性能，sp padding 应该在每一层被移除。不确定性能差距有多大
         if self.megatron_config.sequence_parallel:
             input_ids_rmpad = sp_utils.pad_to_sequence_parallel(input_ids_rmpad)
 
@@ -608,13 +604,13 @@ class ParallelLlamaForCausalLMRmPadPP(nn.Module):
             # print(f'hidden_states.shape = {hidden_states.shape}') # torch.Size([4, 32, 4096])
             logits = self._forward_head(hidden_states)
             # print(f'logits.shape = {logits.shape}')
-            logits = torch.squeeze(logits, dim=1)  # remove the artificial batch dimension # torch.Size([8, 32, 16])
+            logits = torch.squeeze(logits, dim=1)  # 移除人为添加的 batch 维度 # torch.Size([8, 32, 16])
 
-            # remove padding from sequence parallel
+            # 从 sequence parallel 中去除 padding
             if self.megatron_config.sequence_parallel:
                 totol_nnz = cu_seqlens[-1]
                 logits = logits[:totol_nnz]  # (total_nnz_padded)
-            # add removed padding back. If input is already rmpad, we let the caller pad_input
+            # 把移除的 padding 加回去。如果输入已经是 rmpad，我们让调用方来做 pad_input
             # print(f'logits.shape = {logits.shape}, indices.shape = {indices.shape}, batch_size = {batch_size}, seq_len = {sequence_length}')
             logits = pad_input(logits, indices, batch_size,
                                seqlen=sequence_length)  # (batch_size, sequence_length, vocab_size)
@@ -638,7 +634,7 @@ class ParallelLlamaForValueRmPadPP(ParallelLlamaForCausalLMRmPadPP):
             assert column_kwargs.get('config', False), 'must have ModelParallelConfig'
             tp_utils.update_kwargs_with_config(column_kwargs, self.megatron_config)
         self.lm_head = nn.Linear(in_features=self.config.hidden_size, out_features=1, bias=False)
-        # lm_head is effectively the same as sequence parallel
+        # lm_head 实际上等同于 sequence parallel
         sp_utils.mark_parameter_as_sequence_parallel(self.lm_head.weight)
 
     def _forward_head(self, hidden_states):

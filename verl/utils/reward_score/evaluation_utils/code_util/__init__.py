@@ -4,7 +4,7 @@ import re
 import traceback
 import os
 def evaluate_code(completion, test_cases):
-    # try to get code solution from completion. if the completion is pure code, this will not take effect.
+    # 尝试从 completion 中获取代码解答。若 completion 本身就是纯代码，则此操作不会生效。
     solution = completion.split('```python')[-1].split('```')[0] 
     format_correctness = '```python' in completion and '```' in completion.split('```python')[-1]
    

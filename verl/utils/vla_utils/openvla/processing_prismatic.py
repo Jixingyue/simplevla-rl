@@ -1,8 +1,8 @@
 """
 processing_prismatic.py
 
-HuggingFace-style preprocessor definitions for Prismatic VLMs, inheriting from `ProcessorMixin`. Default configuration
-specifies `siglip-224px+7b`.
+面向 Prismatic VLM 的 HuggingFace 风格预处理器定义，继承自 `ProcessorMixin`。默认配置
+为 `siglip-224px+7b`。
 """
 
 from typing import Any, ClassVar, List, Optional, Tuple, Union
@@ -19,9 +19,9 @@ from transformers.tokenization_utils import PaddingStrategy, PreTokenizedInput, 
 from transformers.utils import TensorType
 
 
-# === Image Processing ===
+# === 图像处理 ===
 def letterbox_pad_transform(image: Image.Image, padding_fill_value: Tuple[int, int, int]) -> Image.Image:
-    """Given a PIL.Image, pad to square by adding a symmetric border around the height/width."""
+    """给定一张 PIL.Image，通过在高度/宽度周围添加对称边框将其填充为正方形。"""
     (w, h), max_wh = image.size, max(image.size)
     horizontal_pad, vertical_pad = int((max_wh - w) / 2), int((max_wh - h) / 2)
     padding = (horizontal_pad, vertical_pad, horizontal_pad, vertical_pad)
@@ -43,28 +43,28 @@ class PrismaticImageProcessor(ImageProcessingMixin):
         **kwargs: str,
     ) -> None:
         """
-        Initialize a PrismaticImageProcessor as a wrapper around a torchvision transform; this transform will be
-        created by TIMM, and edited to follow our custom `image_resize_strategy` logic.
+        初始化一个 PrismaticImageProcessor，作为 torchvision transform 的包装器；该 transform 将由
+        TIMM 创建，并经过修改以遵循我们自定义的 `image_resize_strategy` 逻辑。
 
-        @param use_fused_vision_backbone: Boolean indicating single or fused (dual) vision backbone
-        @param image_resize_strategy: Prismatic image resize strategy in < resize-naive | resize-crop | letterbox >
-        @param input_size: [TIMM :: `data_cfg`] Input image size as tuple (channels, width, height)
-        @param interpolation: [TIMM :: `data_cfg`] Interpolation as string (default: "bicubic")
-        @param mean: [TIMM :: `data_cfg`] Normalization mean as float tuple (or two-tuple if `fused_backbone`)
-        @param std: [TIMM :: `data_cfg`] Normalization std as float tuple (or two-tuple if `fused_backbone`)
+        @param use_fused_vision_backbone: 布尔值，指示单视觉骨干还是融合（双）视觉骨干
+        @param image_resize_strategy: Prismatic 图像缩放策略，取值 < resize-naive | resize-crop | letterbox >
+        @param input_size: [TIMM :: `data_cfg`] 输入图像尺寸，元组 (channels, width, height)
+        @param interpolation: [TIMM :: `data_cfg`] 插值方式，字符串（默认："bicubic"）
+        @param mean: [TIMM :: `data_cfg`] 归一化均值，浮点元组（若为 `fused_backbone` 则为二元组）
+        @param std: [TIMM :: `data_cfg`] 归一化标准差，浮点元组（若为 `fused_backbone` 则为二元组）
         """
         self.use_fused_vision_backbone = use_fused_vision_backbone
         self.image_resize_strategy = image_resize_strategy
 
-        # Handle `None` default values
+        # 处理 `None` 默认值
         input_sizes = [(3, 224, 224)] if input_sizes is None else input_sizes
         means = [(0.5, 0.5, 0.5)] if means is None else means
         stds = [(0.5, 0.5, 0.5)] if stds is None else stds
 
-        # TIMM `data_cfg` Parameters
+        # TIMM `data_cfg` 参数
         self.input_sizes, self.interpolations, self.means, self.stds = input_sizes, interpolations, means, stds
 
-        # Grab torchvision transforms via TIMM =>> need to parse for specific "functional" transform values!
+        # 通过 TIMM 获取 torchvision transforms =>> 需要解析出特定的 "functional" transform 参数！
         self.tvf_resize_params, self.tvf_crop_params, self.tvf_normalize_params = [], [], []
         self.tvf_do_letterbox, self.tvf_letterbox_fill = False, None
 
@@ -74,12 +74,12 @@ class PrismaticImageProcessor(ImageProcessingMixin):
                 interpolation=self.interpolations[idx],
                 mean=self.means[idx],
                 std=self.stds[idx],
-                crop_pct=1.0,  # Set to 1.0 to ignore cropping (initial Resize sets `input_size`)
-                crop_mode="center",  # Default crop mode -- no-op when `crop_pct == 1.0`
-                is_training=False,  # No image augmentations when loading the transform!
+                crop_pct=1.0,  # 设为 1.0 以忽略裁剪（初始 Resize 已设置 `input_size`）
+                crop_mode="center",  # 默认裁剪模式 —— 当 `crop_pct == 1.0` 时为空操作
+                is_training=False,  # 加载 transform 时不做图像增广！
             )
 
-            # [Validation] Ensure appropriate transform structure, expected sizes
+            # [校验] 确保 transform 结构与预期尺寸正确
             if not (
                 isinstance(transform, Compose)
                 and (len(transform.transforms) == 4)
@@ -92,8 +92,8 @@ class PrismaticImageProcessor(ImageProcessingMixin):
             ):
                 raise ValueError(f"Unexpected TIMM image transformation structure/sizes: `{transform}`")
 
-            # HF Image Processors *must* be JSON-serializable; as such, cannot have torchvision. as an attribute.
-            #   => Instead, we're going to parse the transform and call "torchvision.transforms.functional" (`tvf`)
+            # HF 图像处理器必须可 JSON 序列化；因此不能将 torchvision. 作为属性。
+            #   => 我们将解析该 transform，并调用 "torchvision.transforms.functional"（`tvf`）。
             resize_t, crop_t, norm_t = transform.transforms[0], transform.transforms[1], transform.transforms[3]
             self.tvf_resize_params.append(
                 {
@@ -113,7 +113,7 @@ class PrismaticImageProcessor(ImageProcessingMixin):
             )
             self.tvf_do_letterbox, self.tvf_letterbox_fill = False, None
 
-            # Handle Prismatic `image_resize_strategy`
+            # 处理 Prismatic `image_resize_strategy`
             if self.image_resize_strategy == "resize-naive":
                 self.tvf_resize_params[idx]["size"] = (resize_t.size, resize_t.size)
             elif self.image_resize_strategy == "letterbox":
@@ -123,15 +123,15 @@ class PrismaticImageProcessor(ImageProcessingMixin):
             else:
                 raise ValueError(f"Image resize strategy `{self.image_resize_strategy}` is not supported!")
 
-        # Dispatch **kwargs to super()
+        # 将 **kwargs 传给 super()
         super().__init__(**kwargs)
 
     def apply_transform(self, img: Image.Image) -> torch.Tensor:
-        """Apply `functional` variant of TIMM's Transform = Compose([Resize -> CenterCrop -> ToTensor -> Normalize])"""
+        """应用 TIMM Transform 的 `functional` 版本 = Compose([Resize -> CenterCrop -> ToTensor -> Normalize])"""
         if self.tvf_do_letterbox:
             img = letterbox_pad_transform(img, self.tvf_letterbox_fill)
 
-        # [Contract] Fused Backbones expect "channel-stacked" inputs; we'll unpack on the model side!
+        # [约定] 融合骨干期望"通道堆叠"的输入；我们会在模型侧解包！
         imgs_t = []
         for idx in range(len(self.input_sizes)):
             img_idx = TVF.resize(img, **self.tvf_resize_params[idx])
@@ -140,7 +140,7 @@ class PrismaticImageProcessor(ImageProcessingMixin):
             img_idx_t = TVF.normalize(img_idx_t, **self.tvf_normalize_params[idx])
             imgs_t.append(img_idx_t)
 
-        # [Contract] `imgs_t` is a list of Tensors of shape [3, input_size, input_size]; stack along dim = 0
+        # [约定] `imgs_t` 是形状为 [3, input_size, input_size] 的张量列表；沿 dim = 0 堆叠
         img_t = torch.vstack(imgs_t)
 
         return img_t
@@ -152,28 +152,28 @@ class PrismaticImageProcessor(ImageProcessingMixin):
         **_: str,
     ) -> BatchFeature:
         """
-        Preprocess an image (or batch of images); note that unlike the `transformers :: BaseImageProcessor` we
-        explicitly only handle PIL.Image.Image instances for simplicity.
+        对给定的图像（或图像 batch）进行预处理；注意，与 `transformers :: BaseImageProcessor` 不同，
+        为简单起见我们只处理 PIL.Image.Image 实例。
 
-        @param images: A (batch of) PIL.Image.Image instance(s) to preprocess.
-        @param return_tensors: BatchFeature default Tensor format (e.g., "pt" for torch); if None, returns np.ndarray
+        @param images: 待预处理的 PIL.Image.Image 实例（或实例 batch）。
+        @param return_tensors: BatchFeature 的默认 Tensor 格式（例如 torch 用 "pt"）；若为 None，则返回 np.ndarray
 
-        @return: Instance of `transformers :: BatchFeature` with a single key "pixel_values"
+        @return: 一个仅含 "pixel_values" 键的 `transformers :: BatchFeature` 实例
         """
         if not isinstance(images, list):
             images = [images]
 
-        # Apply `self.img_transform` to each image (will return list of torch.Tensors); stack into "batched" Tensor
+        # 对每张图像应用 `self.img_transform`（将返回 torch.Tensor 列表）；堆叠成 "batched" Tensor
         pixel_values = torch.stack([self.apply_transform(img.convert("RGB")) for img in images])
 
-        # Return BatchFeature =>> note that for compatibility, constructor expects Dict[str, np.ndarray], so we convert
+        # 返回 BatchFeature =>> 注意，出于兼容性考虑，构造函数期望 Dict[str, np.ndarray]，因此我们做了转换
         return BatchFeature(data={"pixel_values": pixel_values.float().numpy()}, tensor_type=return_tensors)
 
     def __call__(self, images: Union[Image.Image, List[Image.Image]], **kwargs) -> BatchFeature:
         return self.preprocess(images, **kwargs)
 
 
-# === PrismaticProcessor =>> Wraps both ImageProcessor and Tokenizer ===
+# === PrismaticProcessor =>> 同时包装 ImageProcessor 和 Tokenizer ===
 #   =>> https://github.com/huggingface/transformers/blob/main/src/transformers/models/llava/processing_llava.py
 class PrismaticProcessor(ProcessorMixin):
     attributes: ClassVar[List[str]] = ["image_processor", "tokenizer"]
@@ -197,30 +197,30 @@ class PrismaticProcessor(ProcessorMixin):
         return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
     ) -> BatchFeature:
         """
-        Preprocess a given (batch) of text/images for a Prismatic VLM; forwards text to the underlying LLM's tokenizer,
-        forwards images to PrismaticImageProcessor.
+        对 Prismatic VLM 的给定文本/图像（batch）进行预处理；将文本转发给底层 LLM 的 tokenizer，
+        将图像转发给 PrismaticImageProcessor。
 
-        @param text: The (batch) of text to encode; must be a string or list of strings.
-        @param images: A (batch of) PIL.Image.Image instance(s) to preprocess.
-        @param padding: Sequence padding strategy (if multiple specified) in < True = "longest" | "max_length" | False >
-        @param truncation: Truncation strategy for the output sequences; requires `max_length` to be specified
-        @param max_length: Maximum length (in tokens) to truncate
-        @param return_tensors: Type of return tensors (usually "pt" or TensorType.PYTORCH)
+        @param text: 待编码的文本（batch）；必须是字符串或字符串列表。
+        @param images: 待预处理的 PIL.Image.Image 实例（或实例 batch）。
+        @param padding: 序列填充策略（如果指定多个），取值 < True = "longest" | "max_length" | False >
+        @param truncation: 输出序列的截断策略；需要指定 `max_length`
+        @param max_length: 截断的最大长度（以 token 计）
+        @param return_tensors: 返回张量的类型（通常为 "pt" 或 TensorType.PYTORCH）
 
-        @return: BatchFeature with keys for `input_ids`, `attention_mask` and `pixel_values`.
+        @return: 包含 `input_ids`、`attention_mask` 和 `pixel_values` 键的 BatchFeature。
         """
         pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
         text_inputs = self.tokenizer(
             text, return_tensors=return_tensors, padding=padding, truncation=truncation, max_length=max_length
         )
 
-        # [Validate] Need same number of images and text inputs!
+        # [校验] 图像与文本输入的数量必须相同！
         if pixel_values.shape[0] != text_inputs.input_ids.shape[0]:
             raise ValueError("Batch is malformed; expected same number of images and text inputs!")
 
         return BatchFeature(data={**text_inputs, "pixel_values": pixel_values})
 
-    # === Tokenizer Dispatch Utilities =>> check `PreTrainedTokenizerBase` for documentation ===
+    # === Tokenizer 转发工具 =>> 文档参见 `PreTrainedTokenizerBase` ===
     def batch_decode(
         self,
         sequences: Union[List[int], List[List[int]], torch.Tensor, Any],  # `Any` = np.ndarray | tf.Tensor

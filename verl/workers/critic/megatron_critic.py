@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Implement a multiprocess PPOCritic
+实现一个多进程 PPOCritic
 """
 
 from functools import partial
@@ -51,7 +51,7 @@ class MegatronPPOCritic(BasePPOCritic):
         self.critic_optimizer = critic_optimizer
         self.critic_optimizer_config = critic_optimizer_config
 
-        # we create a separate nametuple for optimizer step so that global args won't affect it.
+        # 我们为 optimizer step 创建一个单独的 namedtuple，这样全局参数不会影响它。
         self.optimizer_step_args = OmegaConf.create({
             'skip_grad': None,
             'overlap_dp_param_comm': False,
@@ -82,23 +82,23 @@ class MegatronPPOCritic(BasePPOCritic):
         with torch.no_grad():
             output = self.forward_backward_batch(data=data, forward_only=True)
             if mpu.is_pipeline_last_stage(ignore_virtual=True):
-                # only on last rank. It should be on every tp rank
+                # 仅在最后一个 rank 上。它应该在每个 tp rank 上
                 values = torch.cat([o['vpreds'] for o in output], dim=0)  # (bs, seq_size, vocal_size)
                 values = values.to(torch.float32)
             else:
                 values = torch.empty_like(attention_mask, dtype=torch.float32)
 
-            # each tp ranks should contain the same value
+            # 每个 tp rank 应包含相同的值
             values = values * attention_mask
             values = values[:, -response_length - 1:-1]
             values = values.contiguous()
 
-            # sync among pp ranks
+            # 在 pp rank 之间同步
             torch.distributed.broadcast(tensor=values,
                                         src=mpu.get_pipeline_model_parallel_last_rank(),
                                         group=mpu.get_pipeline_model_parallel_group())
 
-        # add empty cache after each compute
+        # 每次计算后清空缓存
         torch.cuda.empty_cache()
 
         return values
@@ -111,18 +111,18 @@ class MegatronPPOCritic(BasePPOCritic):
                                   dataloader_kwargs={'shuffle': self.config.shuffle})
 
     def forward_backward_batch(self, data: DataProto, forward_only=False):
-        # broadcast from last pp rank to all other pp ranks
+        # 从最后一个 pp rank broadcast 到所有其他 pp rank
         data.batch = data.batch.contiguous()
         broadcast_dict_tensor(data.batch,
                               src=mpu.get_pipeline_model_parallel_last_rank(),
                               group=mpu.get_pipeline_model_parallel_group())
-        # split into micro-batches
+        # 切分为 micro-batch
         data.batch['attention_mask'] = data.batch['attention_mask'].to(bool)
         batches = split_dict_tensor_into_batches(data.batch, batch_size=self.config.ppo_micro_batch_size)
         n_micro_batch = len(batches)
         seq_len = batches[0]['input_ids'].shape[1]
 
-        # compute input shapes for pp stages
+        # 计算 pp stage 的输入形状
         input_shapes = compute_transformers_input_shapes(
             batches,
             meta_info={
@@ -170,21 +170,21 @@ class MegatronPPOCritic(BasePPOCritic):
             output = model(input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids)
             return output, partial(loss_func, data=batch, meta_info={})
 
-        # batch should be a list of batches inside micro-batches
+        # batch 应该是 micro-batch 内部的 batch 列表
         batch_generator = make_batch_generator(batches, vpp_size=len(self.critic_module))
 
-        # TODO: we may use the new schedule instead
-        # for flash-attn: (seq_len, batch_size, hidden_size) = (mbs*seq_len, 1, hidden_size)
+        # TODO: 我们可以改用新的 schedule
+        # 对于 flash-attn: (seq_len, batch_size, hidden_size) = (mbs*seq_len, 1, hidden_size)
         if mpu.get_pipeline_model_parallel_world_size() > 1:
             losses_reduced = forward_backward_func(
                 forward_step_func=forward_step,
                 data_iterator=batch_generator,
                 model=self.critic_module,
                 num_microbatches=n_micro_batch,
-                input_shapes=input_shapes,  # must set for flash-attn sequence packing
-                seq_length=self.config.ppo_micro_batch_size * seq_len,  # no use when input_shapes was set
-                hidden_size=self.model_config.hidden_size,  # no use when input_shapes was set
-                micro_batch_size=1,  # no use when input_shapes was set
+                input_shapes=input_shapes,  # 必须为 flash-attn 序列打包进行设置
+                seq_length=self.config.ppo_micro_batch_size * seq_len,  # 当设置了 input_shapes 时不使用
+                hidden_size=self.model_config.hidden_size,  # 当设置了 input_shapes 时不使用
+                micro_batch_size=1,  # 当设置了 input_shapes 时不使用
                 forward_only=forward_only,
             )
         else:
@@ -193,12 +193,12 @@ class MegatronPPOCritic(BasePPOCritic):
                 data_iterator=batch_generator,
                 model=self.critic_module,
                 num_microbatches=n_micro_batch,
-                seq_length=self.config.ppo_micro_batch_size * seq_len,  # in use for pp = 1
-                hidden_size=self.model_config.hidden_size,  # in use for pp = 1
-                micro_batch_size=1,  # in use for pp = 1
+                seq_length=self.config.ppo_micro_batch_size * seq_len,  # 在 pp = 1 时使用
+                hidden_size=self.model_config.hidden_size,  # 在 pp = 1 时使用
+                micro_batch_size=1,  # 在 pp = 1 时使用
                 forward_only=forward_only,
             )
-        # loss_reduces contains the stats returned from loss_func
+        # loss_reduces 包含 loss_func 返回的统计信息
         return losses_reduced
 
     def update_critic(self, dataloader: Iterable[DataProto]):
@@ -207,7 +207,7 @@ class MegatronPPOCritic(BasePPOCritic):
         for data in dataloader:
             # data = data.batch.to(self.critic_module.device)
             self.critic_optimizer.zero_grad()
-            # use use_contiguous_buffers_in_local_ddp and no overlap_dp_param_comm
+            # 使用 use_contiguous_buffers_in_local_ddp 且不使用 overlap_dp_param_comm
             for chunk in self.critic_module:
                 chunk.zero_grad_buffer(zero_buffer=(not self.critic_optimizer_config.use_distributed_optimizer))
 
@@ -216,14 +216,14 @@ class MegatronPPOCritic(BasePPOCritic):
             update_successful, grad_norm, num_zeros_in_grad = self.critic_optimizer.step(
                 self.megatron_config, self.megatron_config.timers)
             if update_successful:
-                # allgather already execute in optimizer.step in new megatron
+                # 在新版 megatron 中，allgather 已在 optimizer.step 中执行
                 pass
             else:
                 raise NotImplementedError
 
             for metric in metric_micro_batch:
-                append_to_dict(metrics, metric)  # append the metric from this micro-batch to global metrics.
+                append_to_dict(metrics, metric)  # 将该 micro-batch 的指标追加到全局 metrics 中。
 
-        # add empty cache after each compute
+        # 每次计算后清空缓存
         torch.cuda.empty_cache()
         return metrics

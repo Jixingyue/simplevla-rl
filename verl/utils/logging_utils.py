@@ -17,6 +17,6 @@ import logging
 
 def set_basic_config(level):
     """
-    This function sets the global logging format and level. It will be called when import verl
+    该函数设置全局日志格式和级别。在 import verl 时会被调用。
     """
     logging.basicConfig(format='%(levelname)s:%(asctime)s:%(message)s', level=level)

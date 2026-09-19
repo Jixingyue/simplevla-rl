@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/worker/model_runner.py
+# 改编自 https://github.com/vllm-project/vllm/blob/main/vllm/worker/model_runner.py
 
 import warnings
 from enum import IntEnum
@@ -47,13 +47,13 @@ from .model_loader import get_model
 logger = init_logger(__name__)
 
 
-# How batches are constructed.
+# batch 的构造方式。
 class BatchType(IntEnum):
-    # Every batch is prefill.
+    # 每个 batch 都是 prefill。
     PREFILL = 0
-    # Every batch is decode.
+    # 每个 batch 都是 decode。
     DECODE = 1
-    # Batch is a mixture of prefill and decode.
+    # batch 是 prefill 和 decode 的混合。
     MIXED = 2
 
 
@@ -61,7 +61,7 @@ class ModelRunner(ModelRunner):
 
     def __init__(
         self,
-        model: Union[nn.Module, Dict],  # [verl] model itself or its parameter dict
+        model: Union[nn.Module, Dict],  # [verl] 模型本身或其参数字典
         model_config: ModelConfig,
         parallel_config: ParallelConfig,
         scheduler_config: SchedulerConfig,
@@ -87,7 +87,7 @@ class ModelRunner(ModelRunner):
             load_config,
             lora_config,
             kv_cache_dtype,
-            is_driver_worker=True,  # a hack
+            is_driver_worker=True,  # 一种权宜做法
             prompt_adapter_config=prompt_adapter_config,
             return_hidden_states=return_hidden_states,
             observability_config=observability_config,
@@ -95,8 +95,8 @@ class ModelRunner(ModelRunner):
             mm_registry=mm_registry,
         )
 
-        # NOTE(sgm): add for verl
-        self.model = model  # this will be replaced by get_model()
+        # NOTE(sgm): 为 verl 添加
+        self.model = model  # 该值将被 get_model() 替换
 
     def load_model(self) -> None:
         logger.info("Starting to load model %s...", self.model_config.model)
@@ -121,8 +121,8 @@ class ModelRunner(ModelRunner):
             if supports_multimodal(self.model):
                 logger.warning("Regarding multimodal models, vLLM currently "
                                "only supports adding LoRA to language model.")
-            # It's necessary to distinguish between the max_position_embeddings
-            # of VLMs and LLMs.
+            # 有必要区分 VLM 和 LLM 的
+            # max_position_embeddings。
             if hasattr(self.model.config, "max_position_embeddings"):
                 max_pos_embeddings = self.model.config.max_position_embeddings
             else:
@@ -150,9 +150,8 @@ class ModelRunner(ModelRunner):
             self.model = self.prompt_adapter_manager.create_prompt_adapter_manager(self.model)
 
         if self.kv_cache_dtype == "fp8" and is_hip():
-            # Currently only ROCm accepts kv-cache scaling factors
-            # via quantization_param_path and this will be deprecated
-            # in the future.
+            # 目前只有 ROCm 支持通过 quantization_param_path
+            # 传入 kv-cache 缩放因子，未来将弃用此方式。
             if self.model_config.quantization_param_path is not None:
                 if callable(getattr(self.model, "load_kv_cache_scales", None)):
                     warnings.warn(

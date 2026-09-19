@@ -19,7 +19,7 @@ def extract_solution(solution_str, method='strict'):
     assert method in ['strict', 'flexible']
 
     if method == 'strict':
-        # this also tests the formatting of the model
+        # 这同时也检验了模型的输出格式
         solution = re.search("#### (\\-?[0-9\\.\\,]+)", solution_str)
         if solution is None:
             final_answer = None
@@ -30,11 +30,11 @@ def extract_solution(solution_str, method='strict'):
         answer = re.findall("(\\-?[0-9\\.\\,]+)", solution_str)
         final_answer = None
         if len(answer) == 0:
-            # no reward is there is no answer
+            # 没有答案时不给奖励
             pass
         else:
             invalid_str = ['', '.']
-            # find the last number that is not '.'
+            # 找到最后一个不是 '.' 的数字
             for final_answer in reversed(answer):
                 if final_answer not in invalid_str:
                     break
@@ -42,16 +42,16 @@ def extract_solution(solution_str, method='strict'):
 
 
 def compute_score(solution_str, ground_truth, method='strict', format_score=0., score=1.):
-    """The scoring function for GSM8k.
+    """GSM8k 的打分函数。
 
-    Reference: Trung, Luong, et al. "Reft: Reasoning with reinforced fine-tuning." Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers). 2024.
+    参考: Trung, Luong, et al. "Reft: Reasoning with reinforced fine-tuning." Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers). 2024.
 
-    Args:
-        solution_str: the solution text
-        ground_truth: the ground truth
-        method: the method to extract the solution, choices are 'strict' and 'flexible'
-        format_score: the score for the format
-        score: the score for the correct answer
+    参数:
+        solution_str: 解答文本
+        ground_truth: 真实答案
+        method: 提取解答的方法，可选 'strict' 和 'flexible'
+        format_score: 格式的得分
+        score: 答案正确的得分
     """
     answer = extract_solution(solution_str=solution_str, method=method)
     if answer is None:

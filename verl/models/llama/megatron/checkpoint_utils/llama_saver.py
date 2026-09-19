@@ -26,7 +26,7 @@ from megatron import get_args
 
 
 def _megatron_calc_global_rank(tp_rank: int = 0, dp_rank: int = 0, pp_rank: int = 0):
-    """given TP,DP,PP rank to get the global rank."""
+    """根据 TP、DP、PP rank 计算全局 rank。"""
 
     args = get_args()
     tp_size = mpu.get_tensor_model_parallel_world_size()
@@ -35,19 +35,19 @@ def _megatron_calc_global_rank(tp_rank: int = 0, dp_rank: int = 0, pp_rank: int 
     assert (tp_size * dp_size * pp_size == torch.distributed.get_world_size()
            ), f"{tp_size} x {dp_size} x {pp_size} != {torch.distributed.get_world_size()}"
     if args.switch_dp_and_pp_grouping:
-        # TP-PP-DP grouping
+        # TP-PP-DP 分组
         return (dp_rank * pp_size + pp_rank) * tp_size + tp_rank
     else:
-        # TP-DP-PP grouping
+        # TP-DP-PP 分组
         return (pp_rank * dp_size + dp_rank) * tp_size + tp_rank
 
 
 def _megatron_calc_layer_map(config):
-    """Calculate the mapping of global layer_idx to local layer_idx
-    Returns:
+    """计算全局 layer_idx 到局部 layer_idx 的映射
+    返回:
         layer_map (Dict: int -> tuple(int, int, int)):
-            mapping from the global layer index to
-            a tuple of (pp_rank, virtual_pp_rank, layer_idx inside model)
+            从全局层索引到
+            (pp_rank, virtual_pp_rank, 模型内 layer_idx) 元组的映射
     """
     import megatron
     from megatron.core import mpu
@@ -74,18 +74,17 @@ def _megatron_calc_layer_map(config):
 
 
 def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtype='bf16'):
-    """Merge sharded parameters of a Megatron module into a merged checkpoint.
+    """将 Megatron 模块的分片参数合并为一个完整的 checkpoint。
 
-    Args:
+    参数:
         wrapped_modelss (list of megatron.model.DistributedDataParallel):
-            The local DDP wrapped megatron modules.
+            本地 DDP 包装的 megatron 模块。
         dtype (str or None):
-            The data type of state_dict. if None, the data type of the original parameters
-            is used.
-        gpt_model_key: key to access model
-    Returns:
+            state_dict 的数据类型。若为 None，则使用原始参数的数据类型。
+        gpt_model_key: 访问模型的键
+    返回:
         state_dict (dict):
-            The merged state_dict in rank 0, and an empty dictionary in other ranks.
+            rank 0 上为合并后的 state_dict，其他 rank 上为空字典。
     """
     start_time = time.time()
     args = megatron.get_args()
@@ -129,7 +128,7 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
         return tensor.detach().cpu()
 
     def _broadcast_tensor(tensor, name, src_pp_rank) -> torch.Tensor:
-        """broadcast tensor across mp_group"""
+        """跨 mp_group 广播张量"""
         nonlocal state_dict
         nonlocal mp_group
         src_rank = _megatron_calc_global_rank(tp_rank=0, dp_rank=0, pp_rank=src_pp_rank)
@@ -150,7 +149,7 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
         tensor_shape = obj_list[0]
 
         if tensor_shape is None:
-            # all or none ranks in the mp_group should reach here
+            # mp_group 中的所有 rank 应同时到达这里，或都不到达
             print_rank_0(f"tensor:[{name}] not exist, skip collect")
             return
 
@@ -168,7 +167,7 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
             state_dict[name] = _get_cpu_tensor(weight)
 
     def _broadcast_tp_shard_tensor(tensor, name, src_pp_rank, concat_dim=0, mutate_func=None) -> torch.Tensor:
-        """broadcast tensor in tp shards across mp_group"""
+        """跨 mp_group 以 tp 分片广播张量"""
         nonlocal state_dict
         nonlocal mp_group
         tp_rank = mpu.get_tensor_model_parallel_rank()
@@ -184,7 +183,7 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
         dist.broadcast_object_list(obj_list, src=src_rank, group=mp_group)
         chunk_shape = obj_list[0]
         if chunk_shape is None:
-            # all or none ranks in the mp_group should reach here
+            # mp_group 中的所有 rank 应同时到达这里，或都不到达
             print_rank_0(f"tp_shard tensor:[{name}] not exist, skip collecting")
             return
 
@@ -212,7 +211,7 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
             state_dict[name] = full_tensor
 
     def _broadcast_tp_shard_tensor_gate_up(tensor, gate_name, up_name, src_pp_rank) -> torch.Tensor:
-        """broadcast tensor in tp shards across mp_group"""
+        """跨 mp_group 以 tp 分片广播张量"""
         nonlocal state_dict
         nonlocal mp_group
         tp_rank = mpu.get_tensor_model_parallel_rank()
@@ -228,7 +227,7 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
         dist.broadcast_object_list(obj_list, src=src_rank, group=mp_group)
         chunk_shape = obj_list[0]
         if chunk_shape is None:
-            # all or none ranks in the mp_group should reach here
+            # mp_group 中的所有 rank 应同时到达这里，或都不到达
             print_rank_0(f"tp_shard tensor:[{gate_name, up_name}] not exist, skip collecting")
             return
 
@@ -265,7 +264,7 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
             state_dict[up_name] = torch.cat(up_weight_list, dim=0)
 
     def _broadcast_tp_shard_tensor_qkv(tensor, q_name, k_name, v_name, src_pp_rank):
-        """broadcast tensor in tp shards across mp_group"""
+        """跨 mp_group 以 tp 分片广播张量"""
         nonlocal state_dict
         nonlocal mp_group
         tp_rank = mpu.get_tensor_model_parallel_rank()
@@ -281,7 +280,7 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
         dist.broadcast_object_list(obj_list, src=src_rank, group=mp_group)
         chunk_shape = obj_list[0]
         if chunk_shape is None:
-            # all or none ranks in the mp_group should reach here
+            # mp_group 中的所有 rank 应同时到达这里，或都不到达
             print_rank_0(f"tp_shard tensor:[{q_name}] not exist, skip collecting")
             return
 
@@ -339,12 +338,12 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
             state_dict[k_name] = torch.cat(k_weight_list, dim=0)
             state_dict[v_name] = torch.cat(v_weight_list, dim=0)
 
-    # empty cache before collecting weights
+    # 收集权重前清空缓存
     torch.cuda.empty_cache()
-    # Embeddings
+    # 嵌入层
     # -------------------
     if dp_rank == 0:
-        # Embeddings
+        # 嵌入层
         # -------------------
         print_rank_0("collecting embeddings...")
         gpt_model_module = _get_gpt_model(models[0])
@@ -354,7 +353,7 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
             src_pp_rank=0,
         )
 
-        # Transformer layers
+        # Transformer 层
         # -------------------
         layer_map = _megatron_calc_layer_map(config)
         for layer in range(config.num_hidden_layers):
@@ -404,7 +403,7 @@ def merge_megatron_ckpt_llama(wrapped_models, config, is_value_model=False, dtyp
                 src_pp_rank=src_pp_rank,
             )
 
-        # Final Layernorm
+        # 最终 LayerNorm
         # -------------------
         print_rank_0("collecting final layernorm...")
         gpt_model_module = _get_gpt_model(models[-1])

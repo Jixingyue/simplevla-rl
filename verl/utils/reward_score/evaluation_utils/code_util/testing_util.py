@@ -4,18 +4,18 @@ import sys
 import faulthandler
 import platform
 
-# used for debugging to time steps
+# 用于调试，对各步骤计时
 from datetime import datetime
 
-# to run the solution files we're using a timing based approach
+# 为了运行解答文件，我们采用基于计时的方式
 import signal
 
 import numpy as np
 
-# for capturing the stdout
+# 用于捕获 stdout
 from io import StringIO
 
-# used for testing the code that reads from input
+# 用于测试从输入读取的代码
 from unittest.mock import patch, mock_open
 
 from pyext import RuntimeModule
@@ -40,7 +40,7 @@ class CODE_TYPE(Enum):
     standard_input = 1
 
 
-# stuff for setting up signal timer
+# 用于设置信号定时器的相关代码
 class TimeoutException(Exception):
     pass
 
@@ -48,27 +48,27 @@ class TimeoutException(Exception):
 def timeout_handler(signum, frame):
     print("alarm went off")
     return
-    # raise TimeoutException # this is an unhandled exception. just return None is OK
+    # raise TimeoutException # 这是一个未处理的异常。直接返回 None 即可
 
 
 signal.signal(signal.SIGALRM, timeout_handler)
-# timeout = 6  # seconds
+# timeout = 6  # 单位为秒
 
 
-# used to capture stdout as a list
-# from https://stackoverflow.com/a/16571630/6416660
-# alternative use redirect_stdout() from contextlib
+# 用于以列表形式捕获 stdout
+# 来自 https://stackoverflow.com/a/16571630/6416660
+# 也可改用 contextlib 中的 redirect_stdout()
 class Capturing(list):
     def __enter__(self):
         self._stdout = sys.stdout
         sys.stdout = self._stringio = StringIO()
-        # Make closing the StringIO a no-op
+        # 让 StringIO 的 close 变为空操作
         self._stringio.close = lambda x: 1
         return self
 
     def __exit__(self, *args):
         self.append(self._stringio.getvalue())
-        del self._stringio  # free up some memory
+        del self._stringio  # 释放一些内存
         sys.stdout = self._stdout
 
 
@@ -91,8 +91,8 @@ def clean_traceback(error_traceback):
 
 def run_test(in_outs, test=None, debug=False, timeout=15):
     """
-    if test(generated_code) is not None it'll try to run the code.
-    otherwise it'll just return an input and output pair.
+    如果 test（生成的代码）不为 None，则尝试运行该代码。
+    否则仅返回一对输入和输出。
     """
     #
     original_os_chdir = os.chdir
@@ -101,7 +101,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
         
     original_cwd = os.getcwd()
     #
-    # Disable functionalities that can make destructive changes to the test.
+    # 禁用可能对测试造成破坏性更改的功能。
     reliability_guard()
     #
     os.chdir = original_os_chdir
@@ -121,10 +121,10 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
         
         if in_outs:
             if in_outs.get("fn_name") is None:
-                which_type = CODE_TYPE.standard_input  # Standard input
+                which_type = CODE_TYPE.standard_input  # 标准输入
                 method_name = None
             else:
-                which_type = CODE_TYPE.call_based  # Call-based
+                which_type = CODE_TYPE.call_based  # 调用式
                 method_name = in_outs["fn_name"]
 
         if debug:
@@ -173,7 +173,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
 
             elif which_type == CODE_TYPE.standard_input:
                 # sol
-                # if code has if __name__ == "__main__": then remove it
+                # 如果代码中包含 if __name__ == "__main__": 则将其移除
                 try:
                     astree = ast.parse(test)
                     last_block = astree.body[-1]
@@ -243,7 +243,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                 print(f"get method = {datetime.now().time()}")
 
             try:
-                method = getattr(tmp, method_name)  # get_attr second arg must be str
+                method = getattr(tmp, method_name)  # get_attr 的第二个参数必须是字符串
             except:
                 signal.alarm(0)
                 error_traceback = traceback.format_exc()
@@ -282,7 +282,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                 else:
                     raw_inputs = truncatefn(raw_inputs)
                     raw_outputs = truncatefn(raw_outputs, 200)
-                # JSON forces dictionaries to have string keys; this undoes this (assuming a singleton list) 
+                # JSON 强制字典使用字符串键；这里将其还原（假定是单元素列表）
                 try:
                     if isinstance(inputs[0], dict):
                         inputs = [{int(k): v for k, v in inputs[0].items()}]
@@ -307,7 +307,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                     print(
                         f"time: {datetime.now().time()} testing index = {index}  inputs = {inputs}, {type(inputs)}. type = {which_type}"
                     )
-                if which_type == CODE_TYPE.call_based:  # Call-based
+                if which_type == CODE_TYPE.call_based:  # 调用式
                     signal.alarm(timeout)
                     faulthandler.enable()
                     try:
@@ -317,7 +317,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                         raw_true_output_copy = json.dumps(output)
                         raw_true_output_copy = truncatefn(raw_true_output_copy, 200)
 
-                        # ground truth sequences are not tuples
+                        # 真实值序列不是元组
                         if isinstance(output, tuple):
                             output = list(output)
 
@@ -330,7 +330,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                                 output == in_outs["outputs"][index][0]
                             )
 
-                        # ground truth sequences are not tuples
+                        # 真实值序列不是元组
                         try:
                             if isinstance(output[0], tuple):
                                 tmp_result = tmp_result or (
@@ -353,7 +353,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                                 # "error_code": -2,
                                 "error_message": "Wrong Answer",
                             }
-                        # reset the alarm
+                        # 重置闹钟
                         signal.alarm(0)
                     except Exception as e:
                         signal.alarm(0)
@@ -398,7 +398,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                         print(
                             f"outputs = {output}, test outputs = {in_outs['outputs'][index]}, inputs = {inputs}, {type(inputs)}, {output == [in_outs['outputs'][index]]}"
                         )
-                elif which_type == CODE_TYPE.standard_input:  # Standard input
+                elif which_type == CODE_TYPE.standard_input:  # 标准输入
                     faulthandler.enable()
                     passed = False
 
@@ -411,11 +411,11 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                     with Capturing() as output:
                         try:
                             call_method(method, inputs)
-                            # reset the alarm
+                            # 重置闹钟
                             signal.alarm(0)
                             passed = True
                         except Exception as e:
-                            # runtime error or took too long
+                            # 运行时错误或耗时过长
                             signal.alarm(0)
                             error_traceback = traceback.format_exc()
                             print(
@@ -477,7 +477,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                         results.append(tmp_result)
                         continue
 
-                    # ground truth sequences are expressed as lists not tuples
+                    # 真实值序列以列表而非元组表示
                     if isinstance(output, tuple):
                         output = list(output)
 
@@ -499,7 +499,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                         results.append(tmp_result)
                         continue
 
-                    # try one more time without \n
+                    # 不带 \n 再尝试一次
                     if isinstance(in_outs["outputs"][index], list):
                         for tmp_index, i in enumerate(in_outs["outputs"][index]):
                             in_outs["outputs"][index][tmp_index] = i.split("\n")
@@ -528,7 +528,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                         results.append(tmp_result)
                         continue
 
-                    # try by converting the output into a split up list too
+                    # 尝试将输出也转换为拆分后的列表再比较
                     if isinstance(output, list):
                         output = list(filter(len, output))
 
@@ -609,7 +609,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
 
                     if debug:
                         print(f"{tmp_result=} @d")
-                    # try by converting the stuff into split up list
+                    # 尝试将内容转换为拆分后的列表再比较
                     if isinstance(in_outs["outputs"][index], list):
                         for tmp_index, i in enumerate(in_outs["outputs"][index]):
                             in_outs["outputs"][index][tmp_index] = set(i.split())
@@ -633,7 +633,7 @@ def run_test(in_outs, test=None, debug=False, timeout=15):
                     if debug:
                         print(f"{tmp_result=} @f")
 
-                    # try by converting the output into a split up list too
+                    # 尝试将输出也转换为拆分后的列表再比较
                     if isinstance(output, list):
                         for tmp_index, i in enumerate(output):
                             output[tmp_index] = i.split()
@@ -738,14 +738,12 @@ def call_method(method, inputs):
 
 def reliability_guard(maximum_memory_bytes=None):
     """
-    This disables various destructive functions and prevents the generated code
-    from interfering with the test (e.g. fork bomb, killing other processes,
-    removing filesystem files, etc.)
-    WARNING
-    This function is NOT a security sandbox. Untrusted code, including, model-
-    generated code, should not be blindly executed outside of one. See the
-    Codex paper for more information about OpenAI's code sandbox, and proceed
-    with caution.
+    此函数禁用各种具有破坏性的功能，防止生成的代码干扰测试
+    （例如 fork 炸弹、杀死其他进程、删除文件系统中的文件等）。
+    警告
+    此函数并不是一个安全沙箱。不可信的代码（包括模型生成的代码）
+    不应在沙箱之外盲目执行。有关 OpenAI 代码沙箱的更多信息请参阅
+    Codex 论文，并请谨慎操作。
     """
 
     if maximum_memory_bytes is not None:

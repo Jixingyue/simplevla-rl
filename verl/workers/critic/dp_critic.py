@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Implement a multiprocess PPOCritic
+实现一个多进程 PPOCritic
 """
 
 from typing import Iterable
@@ -48,7 +48,7 @@ class DataParallelPPOCritic(BasePPOCritic):
             output = self.critic_module(input_ids=micro_batch['input_ids'],
                                         attention_mask=micro_batch['attention_mask'],
                                         position_ids=micro_batch['position_ids'],
-                                        use_cache=False)  # prevent model thinks we are generating
+                                        use_cache=False)  # 防止模型认为我们正在进行生成
             values = output.logits
             values = values[:, -response_length - 1:-1]
             return values
@@ -89,19 +89,19 @@ class DataParallelPPOCritic(BasePPOCritic):
         return values
 
     def update_critic(self, data: DataProto):
-        # make sure we are in training mode
+        # 确保处于训练模式
         self.critic_module.train()
         metrics = {}
 
         dataloader = self._make_minibatch_iterator(data)
 
         for batch_idx, data in enumerate(dataloader):
-            # split batch into micro_batches
+            # 将 batch 切分为 micro_batch
             micro_batches = data.batch.split(self.config.ppo_micro_batch_size)
             self.critic_optimizer.zero_grad()
 
             for data in micro_batches:
-                data = data.cuda()  # critic device is cpu when using offload
+                data = data.cuda()  # 使用 offload 时 critic 设备位于 CPU
                 input_ids = data['input_ids']
                 responses = data['responses']
                 attention_mask = data['attention_mask']

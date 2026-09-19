@@ -37,7 +37,7 @@ class FSDPVLLMShardingManager(BaseShardingManager):
         self.inference_engine = inference_engine
         self.model_config = model_config
 
-        # Full params
+        # 完整参数
         self.full_params = full_params
         if full_params:
             FSDP.set_state_dict_type(self.module,
@@ -52,7 +52,7 @@ class FSDPVLLMShardingManager(BaseShardingManager):
         log_gpu_memory_usage('Before state_dict() in sharding manager memory', logger=logger)
         params = self.module.state_dict()
         log_gpu_memory_usage('After state_dict() in sharding manager memory', logger=logger)
-        # Copy, not share memory
+        # 复制，而非共享内存
         load_format = 'hf' if self.full_params else 'dtensor'
         self.inference_engine.sync_model_weights(params, load_format=load_format)
         log_gpu_memory_usage('After sync model weights in sharding manager', logger=logger)
@@ -61,7 +61,7 @@ class FSDPVLLMShardingManager(BaseShardingManager):
         torch.cuda.empty_cache()
         log_gpu_memory_usage('After del state_dict and empty_cache in sharding manager', logger=logger)
 
-        # TODO: offload FSDP model weights
+        # TODO: 将 FSDP 模型权重 offload 到 CPU
         # self.module.cpu()
         # torch.cuda.empty_cache()
         # if torch.distributed.get_rank() == 0:
@@ -78,11 +78,11 @@ class FSDPVLLMShardingManager(BaseShardingManager):
 
         self.module.train()
 
-        # add empty cache after each compute
+        # 每次计算后添加空缓存清理
         torch.cuda.empty_cache()
 
     def preprocess_data(self, data: DataProto) -> DataProto:
-        # TODO: Current impl doesn't consider FSDP with torch micro-dp
+        # TODO: 当前实现未考虑 FSDP 与 torch micro-dp 结合的情况
         data.batch = allgather_dict_tensors(data.batch.contiguous(),
                                             size=vllm_ps.get_tensor_model_parallel_world_size(),
                                             group=vllm_ps.get_tensor_model_parallel_group(),
@@ -91,15 +91,15 @@ class FSDPVLLMShardingManager(BaseShardingManager):
         return data
 
     def postprocess_data(self, data: DataProto) -> DataProto:
-        # TODO: Current impl doesn't consider FSDP with torch micro-dp
+        # TODO: 当前实现未考虑 FSDP 与 torch micro-dp 结合的情况
         broadcast_dict_tensor(data.batch,
                               src=vllm_ps.get_tensor_model_parallel_src_rank(),
                               group=vllm_ps.get_tensor_model_parallel_group())
         dp_rank = torch.distributed.get_rank()
-        dp_size = torch.distributed.get_world_size()  # not consider torch micro-dp
+        dp_size = torch.distributed.get_world_size()  # 未考虑 torch micro-dp
         tp_size = vllm_ps.get_tensor_model_parallel_world_size()
         if tp_size > 1:
-            # TODO: shall we build a micro_dp group for vllm when integrating with vLLM?
+            # TODO: 与 vLLM 集成时，是否应为 vllm 构建一个 micro_dp 组？
             local_prompts = data.chunk(chunks=tp_size)
             data = local_prompts[dp_rank % tp_size]
         return data

@@ -21,8 +21,8 @@ from typing import List, Dict, Tuple
 warnings.filterwarnings("ignore", message="Batch mode enable graph is only supported with num_graph_seeds==1")
 
 def get_robotwin2_task(task_name, config):
-    """Get robotwin 2.0 task using the eval_policy.py approach"""
-    # Add the robotwin2 path to sys.path
+    """参照 eval_policy.py 的方式获取 RoboTwin 2.0 任务"""
+    # 将 robotwin2 路径添加到 sys.path
     robotwin2_path = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'envs', 'robotwin2')
     if robotwin2_path not in sys.path:
         sys.path.append(robotwin2_path)
@@ -31,10 +31,10 @@ def get_robotwin2_task(task_name, config):
     if robotwin2_utils_path not in sys.path:
         sys.path.append(robotwin2_utils_path)
     
-    # Import necessary modules from robotwin2
+    # 从 robotwin2 导入必要的模块
     from envs import CONFIGS_PATH
     
-    # Get environment instance
+    # 获取环境实例
     envs_module = importlib.import_module(f"envs.{task_name}")
     try:
         env_class = getattr(envs_module, task_name)
@@ -42,7 +42,7 @@ def get_robotwin2_task(task_name, config):
     except:
         raise SystemExit(f"No Task: {task_name}")
     
-    # Load configuration
+    # 加载配置
     task_config = config.get('task_config', 'demo_randomized')
     config_file = os.path.join(robotwin2_path, f"task_config/{task_config}.yml")
     
@@ -53,7 +53,7 @@ def get_robotwin2_task(task_name, config):
     args['task_config'] = task_config
     args['ckpt_setting'] = config.get('ckpt_setting', 'demo_randomized')
     
-    # Load embodiment configuration
+    # 加载本体（embodiment）配置
     embodiment_type = args.get("embodiment")
     embodiment_config_path = os.path.join(CONFIGS_PATH, "_embodiment_config.yml")
     
@@ -72,7 +72,7 @@ def get_robotwin2_task(task_name, config):
             embodiment_args = yaml.load(f.read(), Loader=yaml.FullLoader)
         return embodiment_args
     
-    # Setup embodiment configuration
+    # 设置本体（embodiment）配置
     if len(embodiment_type) == 1:
         args["left_robot_file"] = get_embodiment_file(embodiment_type[0])
         args["right_robot_file"] = get_embodiment_file(embodiment_type[0])
@@ -88,7 +88,7 @@ def get_robotwin2_task(task_name, config):
     args["left_embodiment_config"] = get_embodiment_config(args["left_robot_file"])
     args["right_embodiment_config"] = get_embodiment_config(args["right_robot_file"])
     
-    # Load camera configuration
+    # 加载相机配置
     with open(CONFIGS_PATH + "_camera_config.yml", "r", encoding="utf-8") as f:
         _camera_config = yaml.load(f.read(), Loader=yaml.FullLoader)
     
@@ -96,7 +96,7 @@ def get_robotwin2_task(task_name, config):
     args["head_camera_h"] = _camera_config[head_camera_type]["h"]
     args["head_camera_w"] = _camera_config[head_camera_type]["w"]
     
-    # Set eval mode
+    # 设置评估模式
     args["eval_mode"] = True
     args["eval_video_log"] = False
     args["render_freq"] = 0
@@ -110,20 +110,20 @@ def collect_success_seeds_worker(gpu_id: int, task_name: str, seed_ranges: List[
                                 target_per_worker: int, result_queue: mp.Queue, 
                                 worker_id: int, num_workers: int):
     """
-    Worker function to collect success seeds on a specific GPU
-    
+    在指定 GPU 上收集成功种子的 worker 函数
+
     Args:
-        gpu_id: GPU device ID to use
-        task_name: Name of the task
-        seed_ranges: List of (start, end) tuples for seed ranges
-        target_per_worker: Target number of success seeds for this worker
-        result_queue: Queue to put results
-        worker_id: ID of this worker
-        num_workers: Total number of workers
+        gpu_id: 要使用的 GPU 设备 ID
+        task_name: 任务名称
+        seed_ranges: 由 (start, end) 元组组成的种子范围列表
+        target_per_worker: 该 worker 需要收集的成功种子目标数量
+        result_queue: 用于存放结果的队列
+        worker_id: 该 worker 的 ID
+        num_workers: worker 总数
     """
-    # Set GPU device
+    # 设置 GPU 设备
     os.environ['CUDA_VISIBLE_DEVICES'] = str(gpu_id)
-    torch.cuda.set_device(0)  # Since we only see one GPU, it's always device 0
+    torch.cuda.set_device(0)  # 由于只能看到一个 GPU，因此始终是设备 0
     
     success_seeds = []
     setup_demo_fail_seeds = []
@@ -182,11 +182,11 @@ def collect_success_seeds_worker(gpu_id: int, task_name: str, seed_ranges: List[
             print(f"[Worker {worker_id}, Seed {seed}] Failed!", flush=True)
             
         total_processed = len(success_seeds) + len(not_success_seeds) + len(setup_demo_fail_seeds) + len(play_once_fail_seeds)
-        if total_processed % 10 == 0:  # Print stats every 10 seeds
+        if total_processed % 10 == 0:  # 每处理 10 个种子打印一次统计信息
             print(f"[Worker {worker_id}] Progress: {total_processed} seeds processed", flush=True)
             print(f"  - Success rate: {len(success_seeds)}/{total_processed} ({len(success_seeds)/total_processed*100:.1f}%)", flush=True)
     
-    # Put results in queue
+    # 将结果放入队列
     result = {
         "worker_id": worker_id,
         "gpu_id": gpu_id,
@@ -205,17 +205,17 @@ def collect_success_seeds_worker(gpu_id: int, task_name: str, seed_ranges: List[
 def collect_success_seeds_for_task_parallel(task_name: str, seed_start: int, seed_end: int, 
                                            target_count: int, num_gpus: int = 8):
     """
-    Collect success seeds for a single task using multiple GPUs in parallel
-    
+    使用多个 GPU 并行收集单个任务的成功种子
+
     Args:
-        task_name: Name of the task
-        seed_start: Starting seed number
-        seed_end: Ending seed number
-        target_count: Target number of success seeds to collect
-        num_gpus: Number of GPUs to use
-        
+        task_name: 任务名称
+        seed_start: 起始种子编号
+        seed_end: 结束种子编号
+        target_count: 需要收集的成功种子目标数量
+        num_gpus: 使用的 GPU 数量
+
     Returns:
-        dict: Combined results from all workers
+        dict: 所有 worker 的合并结果
     """
     print(f"\n{'='*60}", flush=True)
     print(f"Starting parallel collection for task: {task_name}", flush=True)
@@ -224,26 +224,26 @@ def collect_success_seeds_for_task_parallel(task_name: str, seed_start: int, see
     print(f"Using {num_gpus} GPUs", flush=True)
     print(f"{'='*60}\n", flush=True)
     
-    # Calculate seeds per worker
+    # 计算每个 worker 处理的种子数
     total_seeds = seed_end - seed_start + 1
     seeds_per_worker = total_seeds // num_gpus
-    target_per_worker = (target_count + num_gpus - 1) // num_gpus  # Ceiling division
+    target_per_worker = (target_count + num_gpus - 1) // num_gpus  # 向上取整除法
     
-    # Create seed ranges for each worker
+    # 为每个 worker 创建种子范围
     worker_ranges = []
     for i in range(num_gpus):
         worker_start = seed_start + i * seeds_per_worker
-        if i == num_gpus - 1:  # Last worker takes remaining seeds
+        if i == num_gpus - 1:  # 最后一个 worker 处理剩余的种子
             worker_end = seed_end
         else:
             worker_end = worker_start + seeds_per_worker - 1
         worker_ranges.append([(worker_start, worker_end)])
     
-    # Create multiprocessing context
+    # 创建多进程上下文
     mp.set_start_method('spawn', force=True)
     result_queue = mp.Queue()
     
-    # Start worker processes
+    # 启动 worker 进程
     processes = []
     for i in range(num_gpus):
         p = mp.Process(
@@ -255,11 +255,11 @@ def collect_success_seeds_for_task_parallel(task_name: str, seed_start: int, see
         processes.append(p)
         print(f"Started worker {i} on GPU {i} with seed range {worker_ranges[i]}", flush=True)
     
-    # Wait for all processes to complete
+    # 等待所有进程完成
     for p in processes:
         p.join()
     
-    # Collect results from all workers
+    # 收集所有 worker 的结果
     all_success_seeds = []
     all_setup_demo_fail_seeds = []
     all_play_once_fail_seeds = []
@@ -278,11 +278,11 @@ def collect_success_seeds_for_task_parallel(task_name: str, seed_start: int, see
         print(f"  - Success seeds: {len(result['success_seeds'])}", flush=True)
         print(f"  - Seeds tried: {result['seeds_tried']}", flush=True)
     
-    # Trim to target count if we collected more
+    # 如果收集得更多，则裁剪到目标数量
     if len(all_success_seeds) > target_count:
         all_success_seeds = all_success_seeds[:target_count]
     
-    # Final summary
+    # 最终汇总
     print(f"\n{'='*60}", flush=True)
     print(f"Task '{task_name}' parallel collection completed!", flush=True)
     print(f"Total success seeds collected: {len(all_success_seeds)}/{target_count}", flush=True)
@@ -301,33 +301,33 @@ def collect_success_seeds_for_task_parallel(task_name: str, seed_start: int, see
 
 
 def save_results(results, filepath, data_split):
-    """Save results to JSON file with merge logic
-    
+    """将结果保存到 JSON 文件，包含合并逻辑
+
     Args:
-        results: Dictionary containing the results to save
-        filepath: Path to the JSON file
-        data_split: Data split type (train/val/test)
+        results: 包含待保存结果的字典
+        filepath: JSON 文件路径
+        data_split: 数据集划分类型（train/val/test）
     """
-    # Check if file exists
+    # 检查文件是否存在
     if os.path.exists(filepath):
-        # Load existing data
+        # 加载已有数据
         with open(filepath, 'r') as f:
             existing_data = json.load(f)
-        
-        # Check for existing keys and warn about overwrites
+
+        # 检查已存在的键并对覆盖发出警告
         for task_name in results:
             if task_name in existing_data:
                 print(f"\n⚠️  WARNING: Task '{task_name}' already exists in {filepath}. Overwriting existing data!", flush=True)
-        
-        # Merge results (new results overwrite existing ones for same keys)
+
+        # 合并结果（相同键时新结果覆盖已有内容）
         existing_data.update(results)
         final_data = existing_data
     else:
-        # Create new file with results
+        # 用结果创建新文件
         final_data = results
         print(f"\nCreating new file: {filepath}", flush=True)
-    
-    # Save to file
+
+    # 保存到文件
     with open(filepath, 'w') as f:
         json.dump(final_data, f, indent=2)
     
@@ -337,24 +337,24 @@ def save_results(results, filepath, data_split):
 
 
 def main(tasks=None, seed_start=100000, seed_end=100500, target_count=150, num_gpus=8, data_split="train"):
-    """Main function to collect success seeds for all tasks using multiple GPUs
-    
+    """使用多个 GPU 为所有任务收集成功种子的主函数
+
     Args:
-        tasks: List of task names to process. If None, process all tasks.
-        seed_start: Starting seed number
-        seed_end: Ending seed number  
-        target_count: Target number of success seeds to collect per task
-        num_gpus: Number of GPUs to use for parallel processing
-        data_split: Data split type (train/val/test), default is "train"
+        tasks: 待处理的任务名称列表。如果为 None，则处理所有任务。
+        seed_start: 起始种子编号
+        seed_end: 结束种子编号
+        target_count: 每个任务需要收集的成功种子目标数量
+        num_gpus: 用于并行处理的 GPU 数量
+        data_split: 数据集划分类型（train/val/test），默认为 "train"
     """
-    # Default task list
+    # 默认任务列表
     all_tasks = ["handover_mic", "move_can_pot", "pick_dual_bottles", 
                  "place_phone_stand", "click_bell", "place_a2b_left", "place_a2b_right",
                  "lift_pot","put_bottles_dustbin","stack_blocks_two","stack_bowls_two",
                  "handover_block","place_empty_cup","shake_bottle","move_stapler_pad",
                  "place_container_plate","place_shoe","blocks_ranking_rgb","beat_block_hammer","place_mouse_pad","move_pillbottle_pad"]
     
-    # Use specified tasks or all tasks
+    # 使用指定的任务或全部任务
     tasks_to_process = tasks if tasks is not None else all_tasks
     
     print(f"\nTasks to process: {tasks_to_process}", flush=True)
@@ -363,14 +363,14 @@ def main(tasks=None, seed_start=100000, seed_end=100500, target_count=150, num_g
     print(f"Number of GPUs: {num_gpus}", flush=True)
     print(f"Data split: {data_split}", flush=True)
     
-    # Construct the output filepath
+    # 构建输出文件路径
     output_filepath = os.path.join(os.path.dirname(__file__), '..', '..', '..', f'robotwin2_{data_split}_seeds.json')
     print(f"Output file path: {output_filepath}", flush=True)
     
-    # Results storage
+    # 结果存储
     all_results = {}
     
-    # Process each task
+    # 处理每个任务
     for task_name in tasks_to_process:
         print(f"\n{'#'*80}", flush=True)
         print(f"PROCESSING TASK {tasks_to_process.index(task_name) + 1}/{len(tasks_to_process)}: {task_name}", flush=True)
@@ -386,7 +386,7 @@ def main(tasks=None, seed_start=100000, seed_end=100500, target_count=150, num_g
             )
             all_results[task_name] = results
             
-            # Save intermediate results after each task with new logic
+            # 每个任务完成后用新的逻辑保存中间结果
             save_results(all_results, output_filepath, data_split)
             
         except Exception as e:
@@ -402,14 +402,14 @@ def main(tasks=None, seed_start=100000, seed_end=100500, target_count=150, num_g
                 "total_tried": 0
             }
     
-    # Print final summary
+    # 打印最终汇总
     print_final_summary(all_results)
     
     return all_results
 
 
 def print_final_summary(all_results):
-    """Print a final summary of all tasks"""
+    """打印所有任务的最终汇总"""
     print(f"\n{'='*80}", flush=True)
     print("FINAL SUMMARY", flush=True)
     print(f"{'='*80}", flush=True)
@@ -425,7 +425,7 @@ def print_final_summary(all_results):
                 success_rate = len(results['success_seeds']) / results['total_tried'] * 100
                 print(f"  - Success rate: {success_rate:.1f}%", flush=True)
             
-            # Print first 10 success seeds as sample
+            # 打印前 10 个成功种子作为示例
             if len(results['success_seeds']) > 0:
                 print(f"  - Sample success seeds: {results['success_seeds'][:10]}...", flush=True)
     
@@ -435,10 +435,10 @@ def print_final_summary(all_results):
 if __name__ == "__main__":
     import argparse
     
-    # Create argument parser
+    # 创建参数解析器
     parser = argparse.ArgumentParser(description='Collect success seeds for RobotWin2 tasks using multiple GPUs')
     
-    # Add arguments
+    # 添加参数
     parser.add_argument('--tasks', nargs='+', 
                        choices=["handover_mic", "move_can_pot", "pick_dual_bottles", 
                                "place_phone_stand", "click_bell", "place_a2b_left", 
@@ -464,17 +464,17 @@ if __name__ == "__main__":
                        choices=['train', 'val', 'test'],
                        help='Data split type (train/val/test) (default: train)')
     
-    # Parse arguments
+    # 解析参数
     args = parser.parse_args()
     
-    # Check available GPUs
+    # 检查可用 GPU
     num_available_gpus = torch.cuda.device_count()
     if args.num_gpus > num_available_gpus:
         print(f"Warning: Requested {args.num_gpus} GPUs but only {num_available_gpus} available.", flush=True)
         print(f"Using {num_available_gpus} GPUs instead.", flush=True)
         args.num_gpus = num_available_gpus
     
-    # Run the main collection process with parsed arguments
+    # 使用解析后的参数运行主收集流程
     all_results = main(
         tasks=args.tasks,
         seed_start=args.seed_start,

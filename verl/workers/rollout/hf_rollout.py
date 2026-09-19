@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Rollout with huggingface models.
-TODO: refactor this class. Currently, it will hang when using FSDP HybridShard. We should actually create a single GPU model.
-Then, get full state_dict and bind the state_dict to the single GPU model. Then, use the single GPU model to perform generation.
+使用 huggingface 模型进行 rollout。
+TODO: 重构这个类。当前在使用 FSDP HybridShard 时会挂起。我们实际上应该创建一个单 GPU 模型，
+然后获取完整的 state_dict 并将其绑定到单 GPU 模型上，再用该单 GPU 模型执行生成。
 """
 import contextlib
 import torch
@@ -50,10 +50,10 @@ class HFRollout(BaseRollout):
     @torch.no_grad()
     def _generate_minibatch(self, prompts: DataProto) -> DataProto:
         idx = prompts.batch['input_ids']  # (bs, prompt_length)
-        attention_mask = prompts.batch['attention_mask']  # left-padded attention_mask
+        attention_mask = prompts.batch['attention_mask']  # 左填充的 attention_mask
         position_ids = prompts.batch['position_ids']
 
-        # used to construct attention_mask
+        # 用于构建 attention_mask
         eos_token_id = prompts.meta_info['eos_token_id']
         pad_token_id = prompts.meta_info['pad_token_id']
 
@@ -63,7 +63,7 @@ class HFRollout(BaseRollout):
         self.module.eval()
         param_ctx = contextlib.nullcontext()
 
-        # make sampling args can be overriden by inputs
+        # 让采样参数可以被输入覆盖
         do_sample = prompts.meta_info.get('do_sample', self.config.do_sample)
         response_length = prompts.meta_info.get('response_length', self.config.response_length)
         top_p = prompts.meta_info.get('top_p', self.config.get('top_p', 1.0))
@@ -71,14 +71,14 @@ class HFRollout(BaseRollout):
 
         if top_k is None:
             top_k = 0
-        top_k = max(0, top_k)  # to be compatible with vllm
+        top_k = max(0, top_k)  # 为了兼容 vllm
 
         temperature = prompts.meta_info.get('temperature', self.config.temperature)
 
         generation_config = GenerationConfig(temperature=temperature, top_p=top_p, top_k=top_k)
 
         if isinstance(self.module, FSDP):
-            # recurse need to set to False according to https://github.com/pytorch/pytorch/issues/100069
+            # 根据 https://github.com/pytorch/pytorch/issues/100069，recurse 需要设置为 False
             param_ctx = FSDP.summon_full_params(self.module, writeback=False, recurse=False)
         with param_ctx:
             with torch.autocast(device_type='cuda', dtype=torch.bfloat16):
@@ -92,14 +92,14 @@ class HFRollout(BaseRollout):
                     pad_token_id=pad_token_id,
                     generation_config=generation_config,
                     # renormalize_logits=True,
-                    output_scores=False,  # this is potentially very large
+                    output_scores=False,  # 这个可能非常大
                     return_dict_in_generate=True,
                     use_cache=True)
-        # TODO: filter out the seq with no answers like ds-chat
+        # TODO: 像 ds-chat 一样过滤掉没有答案的序列
         seq = output.sequences
 
-        # huggingface generate will stop generating when all the batch reaches [EOS].
-        # We have to pad to response_length
+        # huggingface generate 会在整个 batch 都到达 [EOS] 时停止生成。
+        # 我们必须填充到 response_length
         sequence_length = prompt_length + self.config.response_length
         delta_length = sequence_length - seq.shape[1]
 
@@ -133,7 +133,7 @@ class HFRollout(BaseRollout):
             },
             batch_size=batch_size)
 
-        # empty cache before compute old_log_prob
+        # 在计算 old_log_prob 之前清空缓存
         torch.cuda.empty_cache()
 
         self.module.train()

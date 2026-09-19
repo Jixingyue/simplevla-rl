@@ -39,37 +39,34 @@ _LOCAL_LOGGING_INTERVAL_SEC = 5
 
 
 class LLMEngine:
-    """An LLM engine that receives requests and generates texts.
+    """接收请求并生成文本的 LLM 引擎。
 
-    This is the main class for the vLLM engine. It receives requests
-    from clients and generates texts from the LLM. It includes a tokenizer, a
-    language model (possibly distributed across multiple GPUs), and GPU memory
-    space allocated for intermediate states (aka KV cache). This class utilizes
-    iteration-level scheduling and efficient memory management to maximize the
-    serving throughput.
+    这是 vLLM 引擎的主类。它接收来自客户端的请求并从 LLM 生成
+    文本。它包含一个 tokenizer、一个语言模型（可能分布在多个 GPU
+    上），以及为中间状态（即 KV cache）分配的 GPU 内存空间。该类
+    利用迭代级调度和高效的内存管理来最大化服务吞吐量。
 
-    The `LLM` class wraps this class for offline batched inference and the
-    `AsyncLLMEngine` class wraps this class for online serving.
+    `LLM` 类包装本类用于离线批量推理，`AsyncLLMEngine` 类包装
+    本类用于在线服务。
 
-    NOTE: The config arguments are derived from the `EngineArgs` class. For the
-    comprehensive list of arguments, see `EngineArgs`.
+    NOTE: 配置参数派生自 `EngineArgs` 类。完整参数列表请参见
+    `EngineArgs`。
 
     Args:
-        model_config: The configuration related to the LLM model.
-        cache_config: The configuration related to the KV cache memory
-            management.
-        parallel_config: The configuration related to distributed execution.
-        scheduler_config: The configuration related to the request scheduler.
-        distributed_init_method: The initialization method for distributed
-            execution. See `torch.distributed.init_process_group` for details.
-        placement_group: Ray placement group for distributed execution.
-            Required for distributed execution.
-        log_stats: Whether to log statistics.
+        model_config: 与 LLM 模型相关的配置。
+        cache_config: 与 KV cache 内存管理相关的配置。
+        parallel_config: 与分布式执行相关的配置。
+        scheduler_config: 与请求调度器相关的配置。
+        distributed_init_method: 分布式执行的初始化方法。详见
+            `torch.distributed.init_process_group`。
+        placement_group: 用于分布式执行的 Ray placement group。
+            分布式执行必需。
+        log_stats: 是否记录统计信息。
     """
 
     def __init__(
         self,
-        model: Union[nn.Module, Dict], # model itself or its parameter dict
+        model: Union[nn.Module, Dict], # 模型本身或其参数字典
         tokenizer: nn.Module,
         model_config: ModelConfig,
         cache_config: CacheConfig,
@@ -96,9 +93,9 @@ class LLMEngine:
                     f"tensor_parallel_size={parallel_config.tensor_parallel_size}, "
                     f"quantization={model_config.quantization}, "
                     f"seed={model_config.seed})")
-        # TODO(woosuk): Print more configs in debug mode.
+        # TODO(woosuk): 在调试模式下打印更多配置。
 
-        self.model_config = model_config  # TODO: currently is hfconfig
+        self.model_config = model_config  # TODO: 目前是 hfconfig
         self.cache_config = cache_config
         self.lora_config = lora_config
         assert self.cache_config.sliding_window == getattr(self.model_config.hf_config, "sliding_window", None)
@@ -108,31 +105,31 @@ class LLMEngine:
         self.log_stats = log_stats
         self._verify_args()
 
-        # self.model = model # should not store the model, it should be deleted
-        # TODO(shengguangming): maybe we can choose init here or from arguments
+        # self.model = model # 不应存储模型，应将其删除
+        # TODO(shengguangming): 或许可以选择在此初始化或从参数传入
         self._init_tokenizer(tokenizer)
 
         self.seq_counter = Counter()
 
-        # Create the parallel GPU workers.
+        # 创建并行 GPU worker。
         self._init_workers_sp(model, distributed_init_method)
 
-        # Profile the memory usage and initialize the cache.
+        # 分析内存使用情况并初始化缓存。
         self._init_cache_sp()
 
-        # Create the scheduler.
-        # NOTE(shengguangming): each process will have independent scheduler
+        # 创建调度器。
+        # NOTE(shengguangming): 每个进程将拥有独立的调度器
         self.scheduler = Scheduler(scheduler_config, cache_config, lora_config)
 
-        # Metric Logging.
+        # 指标记录。
         if self.log_stats:
             self.stat_logger = StatLogger(local_interval=_LOCAL_LOGGING_INTERVAL_SEC)
 
-        # Logging.
+        # 日志记录。
         self.last_logging_time = 0.0
-        # List of (timestamp, num_tokens)
+        # 列表元素为 (时间戳, token 数)
         self.num_prompt_tokens: List[Tuple[float, int]] = []
-        # List of (timestamp, num_tokens)
+        # 列表元素为 (时间戳, token 数)
         self.num_generation_tokens: List[Tuple[float, int]] = []
 
     def _init_tokenizer(self, tokenizer, **tokenizer_init_kwargs):
@@ -142,13 +139,13 @@ class LLMEngine:
         init_kwargs.update(tokenizer_init_kwargs)
         self.tokenizer: TokenizerGroup = TokenizerGroup(tokenizer, **init_kwargs)
 
-    # TODO: check get_lora_tokenizer func
+    # TODO: 检查 get_lora_tokenizer 函数
     def get_tokenizer_for_seq(self, sequence: Sequence):
         return self.tokenizer.get_lora_tokenizer(sequence.lora_request)
 
     def _init_workers_sp(self, model, distributed_init_method: str):
-        # Lazy import the Worker to avoid importing torch.cuda/xformers
-        # before CUDA_VISIBLE_DEVICES is set in the Worker
+        # 延迟导入 Worker，以避免在 Worker 中设置 CUDA_VISIBLE_DEVICES
+        # 之前导入 torch.cuda/xformers
         from .worker import Worker  # pylint: disable=import-outside-toplevel
 
         rank = int(os.getenv("RANK"))
@@ -165,7 +162,7 @@ class LLMEngine:
             kv_cache_dtype=self.cache_config.cache_dtype,
         )
 
-        # NOTE(shengguangming): torch.distributed.init_process_group will be called inside the init_model()
+        # NOTE(shengguangming): torch.distributed.init_process_group 会在 init_model() 内部被调用
         self.worker.init_model()
         self.worker.load_model()
 
@@ -174,8 +171,8 @@ class LLMEngine:
         self.cache_config.verify_with_parallel_config(self.parallel_config)
 
     def _init_cache_sp(self) -> None:
-        """Profiles the memory usage and initializes the KV cache."""
-        # Get the maximum number of blocks that can be allocated on GPU and CPU.
+        """分析内存使用情况并初始化 KV cache。"""
+        # 获取 GPU 和 CPU 上可分配的最大块数。
         num_blocks = self.worker.profile_num_available_blocks(
             block_size=self.cache_config.block_size,
             gpu_memory_utilization=self.cache_config.gpu_memory_utilization,
@@ -183,12 +180,12 @@ class LLMEngine:
             cache_dtype=self.cache_config.cache_dtype,
         )
 
-        # NOTE(shengguangming): Now we don't use a shared centralized controler but each process will
-        # have its own scheduler
+        # NOTE(shengguangming): 现在我们不再使用共享的集中式控制器，
+        # 而是每个进程拥有自己的调度器
         num_gpu_blocks = num_blocks[0]
         num_cpu_blocks = num_blocks[1]
 
-        # FIXME(woosuk): Change to debug log.
+        # FIXME(woosuk): 改为 debug 日志。
         logger.info(f"# GPU blocks: {num_gpu_blocks}, "
                     f"# CPU blocks: {num_cpu_blocks}")
 
@@ -208,7 +205,7 @@ class LLMEngine:
         self.cache_config.num_gpu_blocks = num_gpu_blocks
         self.cache_config.num_cpu_blocks = num_cpu_blocks
 
-        # Initialize the cache.
+        # 初始化缓存。
         self.worker.init_cache_engine(cache_config=self.cache_config)
         self.worker.warm_up_model()
 
@@ -220,13 +217,13 @@ class LLMEngine:
 
     @classmethod
     def from_engine_args(cls, model, tokenizer, engine_args: EngineArgs) -> "LLMEngine":
-        """Creates an LLM engine from the engine arguments."""
-        # Create the engine configs.
+        """根据引擎参数创建 LLM 引擎。"""
+        # 创建引擎配置。
         engine_configs = engine_args.create_engine_configs()
         parallel_config = engine_configs[2]
-        # Initialize the cluster.
+        # 初始化集群。
         distributed_init_method, placement_group = initialize_cluster(parallel_config)
-        # Create the LLM engine.
+        # 创建 LLM 引擎。
         engine = cls(model,
                      tokenizer,
                      *engine_configs,
@@ -245,49 +242,47 @@ class LLMEngine:
         lora_request: Optional[LoRARequest] = None,
         prefix_pos: Optional[int] = None,
     ) -> None:
-        """Add a request to the engine's request pool.
+        """向引擎的请求池中添加一个请求。
 
-        The request is added to the request pool and will be processed by the
-        scheduler as `engine.step()` is called. The exact scheduling policy is
-        determined by the scheduler.
+        请求会被加入请求池，并在调用 `engine.step()` 时由调度器处理。
+        具体的调度策略由调度器决定。
 
         Args:
-            request_id: The unique ID of the request.
-            prompt: The prompt string. Can be None if prompt_token_ids is
-                provided.
-            sampling_params: The sampling parameters for text generation.
-            prompt_token_ids: The token IDs of the prompt. If None, we
-                use the tokenizer to convert the prompts to token IDs.
-            arrival_time: The arrival time of the request. If None, we use
-                the current monotonic time.
-            prefix_pos: If not None, we use the given position as the prefix
-                position for each prompt. We will cache the prefix's KV
-                cache and reuse it for the next request with the same prefix.
-                This is an experimental feature, and may be replaced with
-                automatic prefix caching in the future.
+            request_id: 请求的唯一 ID。
+            prompt: prompt 字符串。如果提供了 prompt_token_ids，可以为
+                None。
+            sampling_params: 文本生成的采样参数。
+            prompt_token_ids: prompt 的 token ID。若为 None，则使用
+                tokenizer 将 prompt 转换为 token ID。
+            arrival_time: 请求的到达时间。若为 None，则使用当前的
+                单调时钟时间。
+            prefix_pos: 若不为 None，则将给定位置作为每个 prompt 的
+                前缀位置。我们会缓存前缀的 KV cache，并在后续具有
+                相同前缀的请求中复用它。这是一个实验性功能，未来可能
+                被自动前缀缓存（automatic prefix caching）取代。
 
         Details:
-            - Set arrival_time to the current time if it is None.
-            - Set prompt_token_ids to the encoded prompt if it is None.
-            - Create `best_of` number of :class:`~vllm.Sequence` objects.
-            - Create a :class:`~vllm.SequenceGroup` object
-              from the list of :class:`~vllm.Sequence`.
-            - Add the :class:`~vllm.SequenceGroup` object to the scheduler.
+            - 若 arrival_time 为 None，则设置为当前时间。
+            - 若 prompt_token_ids 为 None，则设置为编码后的 prompt。
+            - 创建 `best_of` 个 :class:`~vllm.Sequence` 对象。
+            - 从 :class:`~vllm.Sequence` 列表创建
+              :class:`~vllm.SequenceGroup` 对象。
+            - 将 :class:`~vllm.SequenceGroup` 对象添加到调度器。
 
         Example:
-            >>> # initialize engine
+            >>> # 初始化引擎
             >>> engine = LLMEngine.from_engine_args(engine_args)
-            >>> # set request arguments
+            >>> # 设置请求参数
             >>> example_prompt = "Who is the president of the United States?"
             >>> sampling_params = SamplingParams(temperature=0.0)
             >>> request_id = 0
             >>>
-            >>> # add the request to the engine
+            >>> # 将请求添加到引擎
             >>> engine.add_request(
             >>>    str(request_id),
             >>>    example_prompt,
             >>>    SamplingParams(temperature=0.0))
-            >>> # continue the request processing
+            >>> # 继续处理请求
             >>> ...
         """
         if lora_request is not None and not self.lora_config:
@@ -299,50 +294,49 @@ class LLMEngine:
             assert prompt is not None
             prompt_token_ids = self.tokenizer.encode(prompt)
 
-        # Create the sequences.
+        # 创建序列。
         block_size = self.cache_config.block_size
         seq_id = next(self.seq_counter)
         seq = Sequence(seq_id, prompt, prompt_token_ids, block_size, lora_request)
 
-        # Check whether the input specifies prefix
+        # 检查输入是否指定了前缀
         prefix = self.scheduler.prefix_pool.add_or_get_prefix(prompt_token_ids[:prefix_pos], lora_request.lora_int_id if
                                                               lora_request else 0) if prefix_pos is not None else None
 
-        # Create the sequence group.
+        # 创建序列组。
         seq_group = SequenceGroup(request_id, [seq], sampling_params, arrival_time, lora_request, prefix)
 
-        # Add the sequence group to the scheduler.
+        # 将序列组添加到调度器。
         self.scheduler.add_seq_group(seq_group)
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
-        """Aborts a request(s) with the given ID.
+        """中止具有给定 ID 的请求。
 
         Args:
-            request_id: The ID(s) of the request to abort.
+            request_id: 要中止的请求 ID（可多个）。
 
         Details:
-            - Refer to the
-              :meth:`~vllm.core.scheduler.Scheduler.abort_seq_group`
-              from class :class:`~vllm.core.scheduler.Scheduler`.
+            - 参见 :class:`~vllm.core.scheduler.Scheduler` 类中的
+              :meth:`~vllm.core.scheduler.Scheduler.abort_seq_group`。
 
         Example:
-            >>> # initialize engine and add a request with request_id
+            >>> # 初始化引擎并添加一个带 request_id 的请求
             >>> request_id = str(0)
-            >>> # abort the request
+            >>> # 中止该请求
             >>> engine.abort_request(request_id)
         """
         self.scheduler.abort_seq_group(request_id)
 
     def get_model_config(self) -> ModelConfig:
-        """Gets the model configuration."""
+        """获取模型配置。"""
         return self.model_config
 
     def get_num_unfinished_requests(self) -> int:
-        """Gets the number of unfinished requests."""
+        """获取未完成请求的数量。"""
         return self.scheduler.get_num_unfinished_seq_groups()
 
     def has_unfinished_requests(self) -> bool:
-        """Returns True if there are unfinished requests."""
+        """如果存在未完成的请求则返回 True。"""
         return self.scheduler.has_unfinished_seqs()
 
     def _check_beam_search_early_stopping(
@@ -365,9 +359,8 @@ class LLMEngine:
         else:
             assert early_stopping == "never"
             if length_penalty > 0.0:
-                # If length_penalty > 0.0, beam search will prefer longer
-                # sequences. The highest attainable score calculation is
-                # based on the longest possible sequence length in this case.
+                # 若 length_penalty > 0.0，beam search 会偏好更长的
+                # 序列。此时最高可达分数的计算基于最长的可能序列长度。
                 max_possible_length = max(best_running_seq.get_prompt_len() + sampling_params.max_tokens,
                                           self.scheduler_config.max_model_len)
                 highest_attainable_score = (best_running_seq.get_beam_search_score(
@@ -375,50 +368,48 @@ class LLMEngine:
                     eos_token_id=self.get_tokenizer_for_seq(best_running_seq).eos_token_id,
                     seq_len=max_possible_length))
             else:
-                # Otherwise, beam search will prefer shorter sequences. The
-                # highest attainable score calculation is based on the current
-                # sequence length.
+                # 否则，beam search 会偏好更短的序列。最高可达分数的
+                # 计算基于当前序列长度。
                 highest_attainable_score = (best_running_seq.get_beam_search_score(
                     length_penalty=length_penalty,
                     eos_token_id=self.get_tokenizer_for_seq(best_running_seq).eos_token_id))
 
     def _process_sequence_group_outputs(self, seq_group: SequenceGroup, outputs: SequenceGroupOutput) -> None:
 
-        # Process prompt logprobs
+        # 处理 prompt 的 logprobs
         prompt_logprobs = outputs.prompt_logprobs
         if prompt_logprobs is not None:
             seq_group.prompt_logprobs = prompt_logprobs
 
-        # Process samples
+        # 处理采样结果
         samples = outputs.samples
         parent_seqs = seq_group.get_seqs(status=SequenceStatus.RUNNING)
         existing_finished_seqs = seq_group.get_finished_seqs()
         parent_child_dict = {parent_seq.seq_id: [] for parent_seq in parent_seqs}
         for sample in samples:
             parent_child_dict[sample.parent_seq_id].append(sample)
-        # List of (child, parent)
+        # 列表元素为 (子序列, 父序列)
         child_seqs: List[Tuple[Sequence, Sequence]] = []
 
-        # Process the child samples for each parent sequence
+        # 为每个父序列处理其子采样结果
         for parent in parent_seqs:
             child_samples: List[SequenceOutput] = parent_child_dict[parent.seq_id]
             if len(child_samples) == 0:
-                # This parent sequence has no children samples. Remove
-                # the parent sequence from the sequence group since it will
-                # not be used in the future iterations.
+                # 该父序列没有子采样结果。由于它在后续迭代中
+                # 不会再被使用，将其从序列组中移除。
                 parent.status = SequenceStatus.FINISHED_ABORTED
                 seq_group.remove(parent.seq_id)
                 self.scheduler.free_seq(parent)
                 continue
-            # Fork the parent sequence if there are multiple child samples.
+            # 如果有多个子采样结果，则对父序列进行分叉（fork）。
             for child_sample in child_samples[:-1]:
                 new_child_seq_id = next(self.seq_counter)
                 child = parent.fork(new_child_seq_id)
                 child.append_token_id(child_sample.output_token, child_sample.logprobs)
                 child_seqs.append((child, parent))
-            # Continue the parent sequence for the last child sample.
-            # We reuse the parent sequence here to reduce redundant memory
-            # copies, especially when using non-beam search sampling methods.
+            # 对最后一个子采样结果继续使用父序列。
+            # 这里复用父序列以减少冗余的内存拷贝，尤其是使用
+            # 非 beam search 采样方法时。
             last_child_sample = child_samples[-1]
             parent.append_token_id(last_child_sample.output_token, last_child_sample.logprobs)
             child_seqs.append((parent, parent))
@@ -427,78 +418,72 @@ class LLMEngine:
             # self._decode_sequence(seq, seq_group.sampling_params)
             self._check_stop(seq, seq_group.sampling_params)
 
-        # Non-beam search case
+        # 非 beam search 的情况
         if not seq_group.sampling_params.use_beam_search:
-            # For newly created child sequences, add them to the sequence group
-            # and fork them in block manager if they are not finished.
+            # 对于新建的子序列，将其添加到序列组中，
+            # 如果尚未完成，则在块管理器（block manager）中分叉它们。
             for seq, parent in child_seqs:
                 if seq is not parent:
                     seq_group.add(seq)
                     if not seq.is_finished():
                         self.scheduler.fork_seq(parent, seq)
 
-            # Free the finished and selected parent sequences' memory in block
-            # manager. Keep them in the sequence group as candidate output.
-            # NOTE: we need to fork the new sequences before freeing the
-            # old sequences.
+            # 在块管理器中释放已完成和被选中的父序列的内存，
+            # 并将其保留在序列组中作为候选输出。
+            # NOTE: 我们需要在释放旧序列之前先分叉新序列。
             for seq, parent in child_seqs:
                 if seq is parent and seq.is_finished():
                     self.scheduler.free_seq(seq)
             return
 
-        # Beam search case
-        # Select the child sequences to keep in the sequence group.
+        # beam search 的情况
+        # 选择要保留在序列组中的子序列。
         selected_child_seqs = []
         unselected_child_seqs = []
         beam_width = seq_group.sampling_params.best_of
         length_penalty = seq_group.sampling_params.length_penalty
 
-        # Select the newly finished sequences with the highest scores
-        # to replace existing finished sequences.
-        # Tuple of (seq, parent, is_new)
+        # 选择得分最高的新完成序列，以替换现有的已完成序列。
+        # 元组为 (seq, parent, is_new)
         existing_finished_seqs = [(seq, None, False) for seq in existing_finished_seqs]
         new_finished_seqs = [(seq, parent, True) for seq, parent in child_seqs if seq.is_finished()]
         all_finished_seqs = existing_finished_seqs + new_finished_seqs
-        # Sort the finished sequences by their scores.
+        # 按得分对已完成的序列排序。
         all_finished_seqs.sort(key=lambda x: x[0].get_beam_search_score(
             length_penalty=length_penalty, eos_token_id=self.get_tokenizer_for_seq(x[0]).eos_token_id),
                                reverse=True)
         for seq, parent, is_new in all_finished_seqs[:beam_width]:
             if is_new:
-                # A newly generated child sequence finishes and has a high
-                # score, so we will add it into the sequence group.
+                # 新生成的子序列已完成且得分较高，
+                # 因此将其加入序列组。
                 selected_child_seqs.append((seq, parent))
         for seq, parent, is_new in all_finished_seqs[beam_width:]:
             if is_new:
-                # A newly generated child sequence finishes but has a low
-                # score, so we will not add it into the sequence group.
-                # Additionally, if this sequence is a continuation of a
-                # parent sequence, we will need remove the parent sequence
-                # from the sequence group.
+                # 新生成的子序列已完成但得分较低，因此不将其加入
+                # 序列组。此外，如果该序列是某个父序列的延续，
+                # 还需要从序列组中移除该父序列。
                 unselected_child_seqs.append((seq, parent))
             else:
-                # An existing finished sequence has a low score, so we will
-                # remove it from the sequence group.
+                # 已有的完成序列得分较低，因此将其从序列组中移除。
                 seq_group.remove(seq.seq_id)
 
-        # select the top beam_width sequences from the running
-        # sequences for the next iteration to continue the beam
-        # search.
+        # 从运行中的序列里选出前 beam_width 个序列，
+        # 供下一次迭代继续 beam search。
         running_child_seqs = [(seq, parent) for seq, parent in child_seqs if not seq.is_finished()]
-        # Sort the running sequences by their scores.
+        # 按得分对运行中的序列排序。
         running_child_seqs.sort(key=lambda x: x[0].get_beam_search_score(
             length_penalty=length_penalty, eos_token_id=self.get_tokenizer_for_seq(x[0]).eos_token_id),
                                 reverse=True)
 
-        # Check if we can stop the beam search.
+        # 检查是否可以停止 beam search。
         if len(running_child_seqs) == 0:
-            # No running sequences, stop the beam search.
+            # 没有运行中的序列，停止 beam search。
             stop_beam_search = True
         elif len(all_finished_seqs) < beam_width:
-            # Not enough finished sequences, continue the beam search.
+            # 已完成的序列不足，继续 beam search。
             stop_beam_search = False
         else:
-            # Check the early stopping criteria
+            # 检查提前停止的判定条件
             best_running_seq = running_child_seqs[0][0]
             current_worst_seq = all_finished_seqs[beam_width - 1][0]
             stop_beam_search = self._check_beam_search_early_stopping(seq_group.sampling_params.early_stopping,
@@ -506,52 +491,49 @@ class LLMEngine:
                                                                       current_worst_seq)
 
         if stop_beam_search:
-            # Stop the beam search and remove all the running sequences from
-            # the sequence group.
+            # 停止 beam search，并将所有运行中的序列从序列组中移除。
             unselected_child_seqs.extend(running_child_seqs)
         else:
-            # Continue the beam search and select the top beam_width sequences
-            # to continue the beam search.
+            # 继续 beam search，选出前 beam_width 个序列
+            # 以继续搜索。
             selected_child_seqs.extend(running_child_seqs[:beam_width])
-            # The remaining running sequences will not be used in the next
-            # iteration. Again, if these sequences are continuations of
-            # parent sequences, we will need to remove the parent sequences
-            # from the sequence group.
+            # 剩余的运行序列在下次迭代中不会再被使用。同样，
+            # 如果这些序列是某个父序列的延续，则需要从序列组中
+            # 移除对应的父序列。
             unselected_child_seqs.extend(running_child_seqs[beam_width:])
 
-        # For newly created child sequences, add them to the sequence group
-        # and fork them in block manager if they are not finished.
+        # 对于新建的子序列，将其添加到序列组中，
+        # 如果尚未完成，则在块管理器中分叉它们。
         for seq, parent in selected_child_seqs:
             if seq is not parent:
                 seq_group.add(seq)
                 if not seq.is_finished():
                     self.scheduler.fork_seq(parent, seq)
 
-        # Free the finished and selected parent sequences' memory in block
-        # manager. Keep them in the sequence group as candidate output.
+        # 在块管理器中释放已完成和被选中的父序列的内存，
+        # 并将其保留在序列组中作为候选输出。
         for seq, parent in selected_child_seqs:
             if seq is parent and seq.is_finished():
                 self.scheduler.free_seq(seq)
 
-        # Remove the unselected parent sequences from the sequence group and
-        # free their memory in block manager.
+        # 将未被选中的父序列从序列组中移除，
+        # 并在块管理器中释放其内存。
         for seq, parent in unselected_child_seqs:
             if seq is parent:
-                # Remove the parent sequence if it is not selected for next
-                # iteration
+                # 如果父序列未被选中进入下一次迭代，则将其移除
                 seq_group.remove(seq.seq_id)
                 self.scheduler.free_seq(seq)
 
     def _process_model_outputs(self, output: SamplerOutput, scheduler_outputs: SchedulerOutputs) -> List[RequestOutput]:
-        # Update the scheduled sequence groups with the model outputs.
+        # 用模型输出更新已调度的序列组。
         scheduled_seq_groups = scheduler_outputs.scheduled_seq_groups
         for seq_group, outputs in zip(scheduled_seq_groups, output):
             self._process_sequence_group_outputs(seq_group, outputs)
 
-        # Free the finished sequence groups.
+        # 释放已完成的序列组。
         self.scheduler.free_finished_seq_groups()
 
-        # Create the outputs.
+        # 创建输出。
         request_outputs: List[RequestOutput] = []
         for seq_group in scheduled_seq_groups:
             request_output = RequestOutput.from_seq_group(seq_group)
@@ -560,30 +542,28 @@ class LLMEngine:
             request_output = RequestOutput.from_seq_group(seq_group)
             request_outputs.append(request_output)
 
-        # Update prefix state, now all the uncomputed prefixes are computed.
+        # 更新前缀状态，现在所有未计算的前缀都已计算完成。
         for seq_group in scheduled_seq_groups:
             if (seq_group.prefix is not None and seq_group.prefix.allocated and not seq_group.prefix.computed):
                 seq_group.prefix.computed = True
 
-        # Log stats.
+        # 记录统计信息。
         if self.log_stats:
             self.stat_logger.log(self._get_stats(scheduler_outputs))
 
         return request_outputs
 
     def step(self) -> List[RequestOutput]:
-        """Performs one decoding iteration and returns newly generated results.
+        """执行一次解码迭代，返回新生成的结果。
 
-        This function performs one decoding iteration of the engine. It first
-        schedules the sequences to be executed in the next iteration and the
-        token blocks to be swapped in/out/copy. Then, it executes the model
-        and updates the scheduler with the model outputs. Finally, it decodes
-        the sequences and returns the newly generated results.
+        该函数执行引擎的一次解码迭代。它首先调度下一次迭代要执行的
+        序列以及要换入/换出/拷贝的 token 块，然后执行模型并根据模型
+        输出更新调度器。最后，对序列进行解码并返回新生成的结果。
         """
         seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
         if not scheduler_outputs.is_empty():
             output = self.worker.execute_model(
-                        seq_group_metadata_list=seq_group_metadata_list, # TODO: check this input
+                        seq_group_metadata_list=seq_group_metadata_list, # TODO: 检查此输入
                         blocks_to_swap_in=scheduler_outputs.blocks_to_swap_in,
                         blocks_to_swap_out=scheduler_outputs.blocks_to_swap_out,
                         blocks_to_copy=scheduler_outputs.blocks_to_copy,)
@@ -593,15 +573,15 @@ class LLMEngine:
         return self._process_model_outputs(output, scheduler_outputs)
 
     def do_log_stats(self) -> None:
-        """Forced log when no requests active."""
+        """无活动请求时强制记录日志。"""
         if self.log_stats:
             self.stat_logger.log(self._get_stats(scheduler_outputs=None))
 
     def _get_stats(self, scheduler_outputs: Optional[SchedulerOutputs]) -> Stats:
-        """Get Stats to be Logged to Prometheus."""
+        """获取要记录到 Prometheus 的统计数据。"""
         now = time.monotonic()
 
-        # KV Cache Usage in %.
+        # KV cache 使用率（百分比）。
         num_total_gpu = self.cache_config.num_gpu_blocks
         num_free_gpu = self.scheduler.block_manager.get_num_free_gpu_blocks()
         gpu_cache_usage = 1.0 - (num_free_gpu / num_total_gpu)
@@ -612,12 +592,12 @@ class LLMEngine:
             num_free_cpu = self.scheduler.block_manager.get_num_free_cpu_blocks()
             cpu_cache_usage = 1.0 - (num_free_cpu / num_total_cpu)
 
-        # Scheduler State
+        # 调度器状态
         num_running = len(self.scheduler.running)
         num_swapped = len(self.scheduler.swapped)
         num_waiting = len(self.scheduler.waiting)
 
-        # Iteration stats if we have scheduler output.
+        # 如果有调度器输出，则为迭代统计数据。
         num_prompt_tokens = 0
         num_generation_tokens = 0
         time_to_first_tokens = []
@@ -626,18 +606,18 @@ class LLMEngine:
         if scheduler_outputs is not None:
             prompt_run = scheduler_outputs.prompt_run
 
-            # Number of Tokens.
+            # token 数量。
             if prompt_run:
                 num_prompt_tokens = scheduler_outputs.num_batched_tokens
             else:
                 num_generation_tokens = scheduler_outputs.num_batched_tokens
 
-            # Latency Timings.
+            # 延迟计时。
             time_last_iters = []
             for seq_group in scheduler_outputs.scheduled_seq_groups:
-                # Time since last token. (n.b. updates seq_group.last_token_time)
+                # 距上一个 token 的时间。（注意：会更新 seq_group.last_token_time）
                 time_last_iters.append(seq_group.get_last_latency(now))
-                # Time since arrival for all finished requests.
+                # 所有已完成请求自到达以来的时间。
                 if seq_group.is_finished():
                     time_e2e_requests.append(now - seq_group.arrival_time)
 
@@ -658,9 +638,9 @@ class LLMEngine:
             time_e2e_requests=time_e2e_requests,
         )
 
-    # TODO: we may not need to decode
+    # TODO: 我们可能不需要解码
     def _decode_sequence(self, seq: Sequence, prms: SamplingParams) -> None:
-        """Decodes the new token for a sequence."""
+        """对序列的新 token 进行解码。"""
         (new_tokens, new_output_text, prefix_offset, read_offset) = detokenize_incrementally(
             self.get_tokenizer_for_seq(seq),
             all_input_ids=seq.get_token_ids(),
@@ -679,7 +659,7 @@ class LLMEngine:
         seq.output_text += new_output_text
 
     def _check_stop(self, seq: Sequence, sampling_params: SamplingParams) -> None:
-        """Stop the finished sequences."""
+        """停止已完成的序列。"""
         # for stop_str in sampling_params.stop:
         #     if seq.output_text.endswith(stop_str):
         #         self._finalize_sequence(seq, sampling_params, stop_str)
@@ -691,17 +671,17 @@ class LLMEngine:
         #     seq.status = SequenceStatus.FINISHED_STOPPED
         #     return
 
-        # Check if the sequence has reached max_model_len.
+        # 检查序列是否已达到 max_model_len。
         if seq.get_len() > self.scheduler_config.max_model_len:
             seq.status = SequenceStatus.FINISHED_LENGTH_CAPPED
             return
 
-        # Check if the sequence has reached max_tokens.
+        # 检查序列是否已达到 max_tokens。
         if seq.get_output_len() == sampling_params.max_tokens:
             seq.status = SequenceStatus.FINISHED_LENGTH_CAPPED
             return
 
-        # Check if the sequence has generated the EOS token.
+        # 检查序列是否已生成 EOS token。
         if ((not sampling_params.ignore_eos) and
                 seq.get_last_token_id() == self.get_tokenizer_for_seq(seq).eos_token_id):
             seq.status = SequenceStatus.FINISHED_STOPPED
@@ -709,8 +689,7 @@ class LLMEngine:
 
     def _finalize_sequence(self, seq: Sequence, sampling_params: SamplingParams, stop_string: str) -> None:
         if not sampling_params.include_stop_str_in_output and stop_string:
-            # Truncate the output text so that the stop string is
-            # not included in the output.
+            # 截断输出文本，使停止字符串不包含在输出中。
             seq.output_text = seq.output_text[:-len(stop_string)]
 
     def add_lora(self, lora_request: LoRARequest) -> bool:
@@ -736,25 +715,24 @@ def initialize_cluster(
     engine_use_ray: bool = False,
     ray_address: Optional[str] = None,
 ) -> Tuple[str, Optional[None]]:
-    """Initialize the distributed cluster probably with Ray.
+    """初始化分布式集群（可能使用 Ray）。
 
     Args:
-        parallel_config: The configurations for parallel execution.
-        engine_use_ray: Whether to use Ray for async engine.
-        ray_address: The address of the Ray cluster. If None, uses
-            the default Ray cluster address.
+        parallel_config: 并行执行的配置。
+        engine_use_ray: 异步引擎是否使用 Ray。
+        ray_address: Ray 集群的地址。若为 None，则使用默认的
+            Ray 集群地址。
 
     Returns:
-        A tuple of (`distributed_init_method`, `placement_group`). The
-        `distributed_init_method` is the address for initializing the
-        distributed backend. `placement_group` includes the specification
-        of the resources for each distributed worker.
+        由 (`distributed_init_method`, `placement_group`) 组成的元组。
+        `distributed_init_method` 是用于初始化分布式后端的地址。
+        `placement_group` 包含每个分布式 worker 的资源规格。
     """
 
-    # Initialize cluster locally.
+    # 在本地初始化集群。
     port = get_open_port()
-    # We need to setup the distributed init method to make sure
-    # the distributed megatron code (e.g., get world size) works correctly.
+    # 我们需要设置分布式初始化方法，以确保分布式 megatron 代码
+    # （例如获取 world size）能够正常工作。
     distributed_init_method = f"tcp://localhost:{port}"
     return distributed_init_method, None
 

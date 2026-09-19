@@ -38,7 +38,7 @@ def nullable_str(val: str):
 
 @dataclass
 class EngineArgs:
-    """Arguments for vLLM engine."""
+    """vLLM 引擎的参数。"""
     model_hf_config: PretrainedConfig = None
     skip_tokenizer_init: bool = False
     served_model_name: Optional[Union[str, List[str]]] = None  # TODO
@@ -60,7 +60,7 @@ class EngineArgs:
     gpu_memory_utilization: float = 0.90
     max_num_batched_tokens: Optional[int] = None
     max_num_seqs: int = 256
-    max_logprobs: int = 5  # OpenAI default value
+    max_logprobs: int = 5  # OpenAI 默认值
     disable_log_stats: bool = False
     revision: Optional[str] = None
     code_revision: Optional[str] = None
@@ -86,7 +86,7 @@ class EngineArgs:
     num_lookahead_slots: int = 0
     model_loader_extra_config: Optional[dict] = None
 
-    # Related to Vision-language models such as llava
+    # 与 llava 等视觉-语言模型相关
     image_input_type: Optional[str] = None
     image_token_id: Optional[int] = None
     image_input_shape: Optional[str] = None
@@ -95,7 +95,7 @@ class EngineArgs:
     enable_chunked_prefill: bool = False
 
     guided_decoding_backend: str = 'outlines'
-    # Speculative decoding configuration.
+    # Speculative decoding 配置。
     speculative_model: Optional[str] = None
     num_speculative_tokens: Optional[int] = None
     speculative_max_model_len: Optional[int] = None
@@ -104,9 +104,9 @@ class EngineArgs:
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-        """Shared CLI arguments for vLLM engine."""
-        # Model arguments
-        # TODO(shengguangming): delete the unused args
+        """vLLM 引擎共享的 CLI 参数。"""
+        # 模型参数
+        # TODO(shengguangming): 删除未使用的参数
         parser.add_argument('--model',
                             type=str,
                             default='facebook/opt-125m',
@@ -168,7 +168,7 @@ class EngineArgs:
                             default=None,
                             help='model context length. If unspecified, '
                             'will be automatically derived from the model.')
-        # Parallel arguments
+        # 并行参数
         parser.add_argument('--worker-use-ray',
                             action='store_true',
                             help='use Ray for distributed serving, will be '
@@ -183,13 +183,13 @@ class EngineArgs:
                             type=int,
                             default=EngineArgs.tensor_parallel_size,
                             help='number of tensor parallel replicas')
-        # KV cache arguments
+        # KV cache 参数
         parser.add_argument('--block-size',
                             type=int,
                             default=EngineArgs.block_size,
                             choices=[8, 16, 32],
                             help='token block size')
-        # TODO(woosuk): Support fine-grained seeds (e.g., seed per request).
+        # TODO(woosuk): 支持更细粒度的种子（例如每个请求一个种子）。
         parser.add_argument('--seed', type=int, default=EngineArgs.seed, help='random seed')
         parser.add_argument('--swap-space',
                             type=int,
@@ -210,7 +210,7 @@ class EngineArgs:
                             default=EngineArgs.max_num_seqs,
                             help='maximum number of sequences per iteration')
         parser.add_argument('--disable-log-stats', action='store_true', help='disable logging statistics')
-        # Quantization settings.
+        # 量化设置。
         parser.add_argument('--quantization',
                             '-q',
                             type=str,
@@ -221,9 +221,9 @@ class EngineArgs:
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace) -> 'EngineArgs':
-        # Get the list of attributes of this dataclass.
+        # 获取该 dataclass 的属性列表。
         attrs = [attr.name for attr in dataclasses.fields(cls)]
-        # Set the attributes from the parsed arguments.
+        # 根据解析出的参数设置属性。
         engine_args = cls(**{attr: getattr(args, attr) for attr in attrs})
         return engine_args
 
@@ -231,7 +231,7 @@ class EngineArgs:
         self,
     ) -> EngineConfig:
         device_config = DeviceConfig(self.device)
-        # NOTE(sgm): we only modify ModelConfig, other configs are import from vllm
+        # NOTE(sgm): 我们只修改 ModelConfig，其他 config 从 vllm 导入
         model_config = ModelConfig(self.model_hf_config, self.dtype, self.seed, self.revision, self.code_revision,
                                    self.tokenizer_revision, self.max_model_len, self.quantization,
                                    self.quantization_param_path, self.enforce_eager, self.max_context_len_to_capture,
@@ -249,12 +249,12 @@ class EngineArgs:
                 self.tokenizer_pool_extra_config,
             ), self.ray_workers_use_nsight)
 
-        # Use the world_size set by TORCHRUN
+        # 使用 TORCHRUN 设置的 world_size
         world_size = int(os.getenv("WORLD_SIZE", "-1"))
         assert world_size != -1, "The world_size is set to -1, not initialized by TORCHRUN"
         parallel_config.world_size = world_size
 
-        # TODO: spec config
+        # TODO: 投机解码配置
         speculative_config = SpeculativeConfig.maybe_create_spec_config(
             target_model_config=model_config,
             target_parallel_config=parallel_config,

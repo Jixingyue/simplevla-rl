@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-This file contains utilities to manipulate torch memory buffers
+该文件包含操作 torch 内存缓冲区的工具函数
 """
 
 from typing import Dict, List
@@ -23,8 +23,8 @@ from torch import nn
 
 class MemoryBuffer:
     """
-    A memory buffer is a contiguous torch tensor that may combine multiple tensors sharing with the underlying
-    memory. It must have a unique type to support this behavior.
+    内存缓冲区是一个连续的 torch 张量，可以组合多个共享底层内存的张量。
+    它必须具有唯一的 dtype 才能支持这种行为。
     """
 
     def __init__(self, numel: int, numel_padded: int, dtype: torch.dtype):
@@ -34,12 +34,11 @@ class MemoryBuffer:
         self.data = torch.zeros(self.numel_padded, dtype=self.dtype, device='cuda', requires_grad=False)
 
     def zero(self):
-        """Reset the buffer to zero."""
+        """将缓冲区重置为零。"""
         self.data.zero_()
 
     def get(self, shape, start_index):
-        """Return a tensor with the input `shape` as a view into the
-        1-D data starting at `start_index`."""
+        """返回一个以输入 `shape` 为形状的张量视图，指向从 `start_index` 开始的一维数据。"""
         end_index = start_index + shape.numel()
         assert end_index <= self.numel, \
             'requested tensor is out of the buffer range.'
@@ -49,7 +48,7 @@ class MemoryBuffer:
 
 
 def calc_padded_numel(shape: torch.Size, dtype: torch.dtype):
-    """for cuda memory alignment, make sure alignment by 128-bits"""
+    """为了 CUDA 内存对齐，确保按 128 位对齐"""
     align_numel = 128 // torch.finfo(dtype).bits
     numel = shape.numel()
     return (numel + align_numel - 1) // align_numel * align_numel
@@ -57,7 +56,7 @@ def calc_padded_numel(shape: torch.Size, dtype: torch.dtype):
 
 def get_weight_buffer_meta_from_module(module: nn.Module) -> Dict[str, Dict]:
     """
-    Return a dictionary containing name to a shape and dtype.
+    返回一个字典，将名称映射到形状和 dtype。
     """
     weight_buffer_meta = {}
     for name, param in sorted(module.named_parameters()):
@@ -66,16 +65,16 @@ def get_weight_buffer_meta_from_module(module: nn.Module) -> Dict[str, Dict]:
 
 
 def build_memory_buffer(weight_buffer_meta: Dict[str, Dict]) -> Dict[torch.dtype, MemoryBuffer]:
-    """Build the memory buffer given weight_buffer_meta
+    """根据 weight_buffer_meta 构建内存缓冲区
 
     Args:
-        weight_buffer_meta: contains mapping from name to a dictionary containing shape and dtype of the tensors
+        weight_buffer_meta: 包含从名称到张量形状和 dtype 字典的映射
 
-    Returns: a large memory buffer for each dtype that can hold all the tensors
+    Returns: 每个 dtype 一个大的内存缓冲区，可容纳所有张量
 
     """
     memory_buffers = {}
-    total_numel_map = {}  # map from dtype to the total numel
+    total_numel_map = {}  # 从 dtype 到总元素数的映射
     for name, meta_info in sorted(weight_buffer_meta.items()):
         shape = meta_info['shape']
         dtype = meta_info['dtype']
@@ -103,7 +102,7 @@ def build_memory_reference_from_module(module: torch.nn.Module,
     for name, param in sorted(module.named_parameters()):
         memory_buffer = memory_buffers[param.dtype]
         buffer = memory_buffer.get(shape=param.shape, start_index=start_index[param.dtype])
-        # need to increment start_index
+        # 需要递增 start_index
         start_index[param.dtype] += calc_padded_numel(param.shape, dtype)
         if maintain_weight:
             buffer.copy_(param.data)
@@ -111,8 +110,8 @@ def build_memory_reference_from_module(module: torch.nn.Module,
 
 
 def build_memory_reference(weight_buffer_meta: Dict[str, Dict], memory_buffers: Dict[torch.dtype, MemoryBuffer]):
-    """Build the memory references. The memory buffers are built using the build_memory_buffer API.
-    This API will allocate a weight buffer pointer to the memory buffer according to the weight_buffer_meta.
+    """构建内存引用。内存缓冲区通过 build_memory_buffer API 构建。
+    该 API 会根据 weight_buffer_meta 将权重缓冲区指针分配到内存缓冲区中。
 
     Args:
         weight_buffer_meta:
@@ -139,8 +138,8 @@ def build_memory_reference(weight_buffer_meta: Dict[str, Dict], memory_buffers: 
 
 class MemoryBufferModuleWrapper:
     """
-    Note that we do not design MemoryBufferModuleWrapper as an nn.Module due to
-    - It will change the checkpoint name
+    注意，我们没有将 MemoryBufferModuleWrapper 设计为 nn.Module，原因是
+    - 这会改变 checkpoint 的名称
     """
 
     def __init__(self, module: nn.Module):
@@ -159,17 +158,17 @@ class MemoryBufferModuleWrapper:
 
 class MegatronMemoryBufferForRollout(object):
     """
-    We assume that
-    - inference engine has tp + dp
-    - actor has tp + pp + dp
-    - the tp between inference engine and actor should be the same
-    - memory_buffers: contains a list of memory_buffers, each is a dict from dtype to MemoryBuffer
-    - weight_buffers: contains a list of weight_buffers, each is a dict from name to param
-    - named_parameters: a dict from name to parameter that normalizes the names from pp and vpp. Note that
-        the named_parameters may not be directly compatible with inference engine. User has to take care of
-        this part such as the layout mismatches. (e.g. qkv transpose)
-    - Note that weight_buffer, named_parameters and memory_buffers share the same underlying GPU memory.
-    - When doing weight sync, the data is transfer via memory buffers
+    我们假设
+    - 推理引擎采用 tp + dp
+    - actor 采用 tp + pp + dp
+    - 推理引擎与 actor 之间的 tp 应当相同
+    - memory_buffers: 包含一个 memory_buffers 列表，每个元素是从 dtype 到 MemoryBuffer 的字典
+    - weight_buffers: 包含一个 weight_buffers 列表，每个元素是从名称到参数的字典
+    - named_parameters: 从名称到参数的字典，对来自 pp 和 vpp 的名称做了归一化。注意，
+        named_parameters 可能无法直接与推理引擎兼容。用户需要自行处理
+        这部分内容，例如布局不匹配的情况（如 qkv 转置）。
+    - 注意 weight_buffer、named_parameters 和 memory_buffers 共享同一块底层 GPU 内存。
+    - 在进行权重同步时，数据通过内存缓冲区传输
     """
 
     def __init__(self, transform_memory_param_fn):
@@ -180,11 +179,11 @@ class MegatronMemoryBufferForRollout(object):
 
     def initialize_weight_buffer(self, weight_buffer_meta_pp: List[Dict[str, Dict]]):
         """
-        Initialize the weight buffer. The weight buffer is obtained according to the actor. We will construct
-        a large buffer for each dtype in the weight_buffer.
+        初始化权重缓冲区。权重缓冲区根据 actor 获得。我们将为 weight_buffer 中的
+        每个 dtype 构建一个大缓冲区。
 
         Args:
-            weight_buffer_meta: contains pp models, each pp models contains a dictionary of mapping from
+            weight_buffer_meta: 包含各个 pp 模型，每个 pp 模型包含一个映射字典
 
         Returns: None
 

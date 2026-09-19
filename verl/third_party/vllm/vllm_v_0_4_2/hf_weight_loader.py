@@ -43,7 +43,7 @@ def gemma_load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
             if shard_name not in name:
                 continue
             name = name.replace(shard_name, param_name)
-            # Skip loading extra bias for GPTQ models.
+            # 跳过为 GPTQ 模型加载额外的 bias。
             if name.endswith(".bias") and name not in params_dict:
                 continue
             param = params_dict[name]
@@ -51,17 +51,17 @@ def gemma_load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
             weight_loader(param, loaded_weight, shard_id)
             break
         else:
-            # lm_head is not used in vllm as it is tied with embed_token.
-            # To prevent errors, skip loading lm_head.weight.
+            # lm_head 在 vllm 中不会被使用，因为它与 embed_token 绑定在一起。
+            # 为避免报错，跳过加载 lm_head.weight。
             if "lm_head.weight" in name:
                 continue
-            # Skip loading extra bias for GPTQ models.
+            # 跳过为 GPTQ 模型加载额外的 bias。
             if name.endswith(".bias") and name not in params_dict:
                 continue
-            # GemmaRMSNorm is different from Llama's in that it multiplies
-            # (1 + weight) to the output, instead of just weight.
+            # GemmaRMSNorm 与 Llama 的不同之处在于，它将 (1 + weight) 乘到输出上，
+            # 而不是只乘 weight。
             if "norm.weight" in name:
-                norm_weight = loaded_weight + 1.0  # prevent inplace modify actor weights
+                norm_weight = loaded_weight + 1.0  # 防止原地修改 actor 权重
                 param = params_dict[name]
                 weight_loader = getattr(param, "weight_loader", default_weight_loader)
                 weight_loader(param, norm_weight)
@@ -84,8 +84,8 @@ def load_hf_weights(actor_weights: Dict, vllm_model: nn.Module):
         quant_method = getattr(module, "quant_method", None)
         if quant_method is not None:
             quant_method.process_weights_after_loading(module)
-        # FIXME: Remove this after Mixtral is updated
-        # to use quant_method.
+        # FIXME: 等 Mixtral 更新为使用 quant_method 之后
+        # 再移除此代码。
         if hasattr(module, "process_weights_after_loading"):
             module.process_weights_after_loading()
     vllm_model = vllm_model.cuda()

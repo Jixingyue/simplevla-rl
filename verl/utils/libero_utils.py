@@ -1,4 +1,4 @@
-"""Utils for evaluating policies in LIBERO simulation environments."""
+"""用于在 LIBERO 仿真环境中评估策略的工具函数。"""
 
 import math
 import os
@@ -20,34 +20,34 @@ import random
 
 
 def get_libero_env(task, model_family, resolution=256):
-    """Initializes and returns the LIBERO environment, along with the task description."""
+    """初始化并返回 LIBERO 环境以及任务描述。"""
     # from libero.libero import get_libero_path
     # from libero.libero.envs import OffScreenRenderEnv
     task_description = task.language
     task_bddl_file = os.path.join(get_libero_path("bddl_files"), task.problem_folder, task.bddl_file)
     env_args = {"bddl_file_name": task_bddl_file, "camera_heights": resolution, "camera_widths": resolution}
     env = OffScreenRenderEnv(**env_args)
-    env.seed(0)  # IMPORTANT: seed seems to affect object positions even when using fixed initial state
+    env.seed(0)  # 重要：即使使用固定的初始状态，随机种子似乎也会影响物体位置
     return env, task_description
 
 
 def get_libero_dummy_action(model_family: str):
-    """Get dummy/no-op action, used to roll out the simulation while the robot does nothing."""
+    """获取哑动作/空操作动作，用于在机器人不执行任何操作时推进仿真。"""
     return [0, 0, 0, 0, 0, 0, -1]
 
 
 def resize_image(img, resize_size):
     """
-    Takes numpy array corresponding to a single image and returns resized image as numpy array.
+    接收对应单张图像的 numpy 数组，返回调整尺寸后的 numpy 数组图像。
 
-    NOTE (Moo Jin): To make input images in distribution with respect to the inputs seen at training time, we follow
-                    the same resizing scheme used in the Octo dataloader, which OpenVLA uses for training.
+    NOTE (Moo Jin): 为了使输入图像的分布与训练时所见输入保持一致，我们采用
+                    Octo dataloader 所使用的相同缩放方案，OpenVLA 训练时也使用该方案。
     """
 
     assert isinstance(resize_size, tuple)
-    # Resize to image size expected by model
-    img = tf.image.encode_jpeg(img)  # Encode as JPEG, as done in RLDS dataset builder
-    img = tf.io.decode_image(img, expand_animations=False, dtype=tf.uint8)  # Immediately decode back
+    # 调整为模型期望的图像尺寸
+    img = tf.image.encode_jpeg(img)  # 编码为 JPEG，与 RLDS dataset builder 的做法一致
+    img = tf.io.decode_image(img, expand_animations=False, dtype=tf.uint8)  # 立即解码回来
     img = tf.image.resize(img, resize_size, method="lanczos3", antialias=True)
     img = tf.cast(tf.clip_by_value(tf.round(img), 0, 255), tf.uint8)
     img = img.numpy()
@@ -55,28 +55,28 @@ def resize_image(img, resize_size):
 
 
 def get_libero_image(obs, resize_size):
-    """Extracts image from observations and preprocesses it."""
+    """从观测中提取图像并进行预处理。"""
     assert isinstance(resize_size, int) or isinstance(resize_size, tuple)
     if isinstance(resize_size, int):
         resize_size = (resize_size, resize_size)
     img = obs["agentview_image"]
-    img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
+    img = img[::-1, ::-1]  # 重要：旋转 180 度以匹配训练时的预处理
     img = resize_image(img, resize_size)
     return img
 
 
 def get_libero_wrist_image(obs, resize_size):
-    """Extracts image from observations and preprocesses it."""
+    """从观测中提取图像并进行预处理。"""
     assert isinstance(resize_size, int) or isinstance(resize_size, tuple)
     if isinstance(resize_size, int):
         resize_size = (resize_size, resize_size)
     img = obs["robot0_eye_in_hand_image"]
-    img = img[::-1, ::-1]  # IMPORTANT: rotate 180 degrees to match train preprocessing
+    img = img[::-1, ::-1]  # 重要：旋转 180 度以匹配训练时的预处理
     img = resize_image(img, resize_size)
     return img
 
 # def save_rollout_video(rollout_images, idx, success, task_description, log_file=None):
-#     """Saves an MP4 replay of an episode."""
+#     """保存一段 episode 的 MP4 回放。"""
 #     rollout_dir = f"./rollouts/{DATE}"
 #     os.makedirs(rollout_dir, exist_ok=True)
 #     processed_task_description = task_description.lower().replace(" ", "_").replace("\n", "_").replace(".", "_")[:50]
@@ -93,18 +93,18 @@ def get_libero_wrist_image(obs, resize_size):
 
 def quat2axisangle(quat):
     """
-    Copied from robosuite: https://github.com/ARISE-Initiative/robosuite/blob/eafb81f54ffc104f905ee48a16bb15f059176ad3/robosuite/utils/transform_utils.py#L490C1-L512C55
+    复制自 robosuite：https://github.com/ARISE-Initiative/robosuite/blob/eafb81f54ffc104f905ee48a16bb15f059176ad3/robosuite/utils/transform_utils.py#L490C1-L512C55
 
-    Converts quaternion to axis-angle format.
-    Returns a unit vector direction scaled by its angle in radians.
+    将四元数转换为轴角（axis-angle）格式。
+    返回一个按其弧度角缩放的单位向量方向。
 
     Args:
-        quat (np.array): (x,y,z,w) vec4 float angles
+        quat (np.array): (x,y,z,w) 形式的 vec4 浮点角度
 
     Returns:
-        np.array: (ax,ay,az) axis-angle exponential coordinates
+        np.array: (ax,ay,az) 轴角指数坐标
     """
-    # clip quaternion
+    # 裁剪四元数
     if quat[3] > 1.0:
         quat[3] = 1.0
     elif quat[3] < -1.0:
@@ -112,16 +112,16 @@ def quat2axisangle(quat):
 
     den = np.sqrt(1.0 - quat[3] * quat[3])
     if math.isclose(den, 0.0):
-        # This is (close to) a zero degree rotation, immediately return
+        # 这是（接近）零角度的旋转，立即返回
         return np.zeros(3)
 
     return (quat[:3] * 2.0 * math.acos(quat[3])) / den
 
 def get_image_resize_size(cfg):
     """
-    Gets image resize size for a model class.
-    If `resize_size` is an int, then the resized image will be a square.
-    Else, the image will be a rectangle.
+    获取某一模型类别对应的图像缩放尺寸。
+    如果 `resize_size` 是整数，则缩放后的图像为正方形。
+    否则，图像为矩形。
     """
     if cfg.model_family == "openvla":
         resize_size = 224
@@ -136,49 +136,49 @@ def get_image_resize_size(cfg):
 
 # def normalize_gripper_action(action, binarize=True):
 #     """
-#     Changes gripper action (last dimension of action vector) from [0,1] to [-1,+1].
-#     Necessary for some environments (not Bridge) because the dataset wrapper standardizes gripper actions to [0,1].
-#     Note that unlike the other action dimensions, the gripper action is not normalized to [-1,+1] by default by
-#     the dataset wrapper.
+#     将夹爪动作（动作向量的最后一维）从 [0,1] 变换到 [-1,+1]。
+#     对于某些环境（非 Bridge）这是必要的，因为 dataset wrapper 会将夹爪动作标准化到 [0,1]。
+#     注意，与其他动作维度不同，dataset wrapper 默认不会将夹爪动作
+#     归一化到 [-1,+1]。
 
-#     Normalization formula: y = 2 * (x - orig_low) / (orig_high - orig_low) - 1
+#     归一化公式：y = 2 * (x - orig_low) / (orig_high - orig_low) - 1
 #     """
 #     # Just normalize the last action to [-1,+1].
 #     orig_low, orig_high = 0.0, 1.0
 #     action[..., -1] = 2 * (action[..., -1] - orig_low) / (orig_high - orig_low) - 1
 
 #     if binarize:
-#         # Binarize to -1 or +1.
+#         # 二值化为 -1 或 +1。
 #         action[..., -1] = np.sign(action[..., -1])
 
 #     return action
 
 def normalize_gripper_action(action: np.ndarray, binarize: bool = True) -> np.ndarray:
     """
-    Normalize gripper action from [0,1] to [-1,+1] range.
+    将夹爪动作从 [0,1] 归一化到 [-1,+1] 范围。
 
-    This is necessary for some environments because the dataset wrapper
-    standardizes gripper actions to [0,1]. Note that unlike the other action
-    dimensions, the gripper action is not normalized to [-1,+1] by default.
+    对于某些环境这是必要的，因为 dataset wrapper 会将夹爪动作
+    标准化到 [0,1]。注意，与其他动作维度不同，夹爪动作默认
+    不会被归一化到 [-1,+1]。
 
-    Normalization formula: y = 2 * (x - orig_low) / (orig_high - orig_low) - 1
+    归一化公式：y = 2 * (x - orig_low) / (orig_high - orig_low) - 1
 
     Args:
-        action: Action array with gripper action in the last dimension
-        binarize: Whether to binarize gripper action to -1 or +1
+        action: 最后一维为夹爪动作的动作数组
+        binarize: 是否将夹爪动作二值化为 -1 或 +1
 
     Returns:
-        np.ndarray: Action array with normalized gripper action
+        np.ndarray: 夹爪动作已归一化的动作数组
     """
-    # Create a copy to avoid modifying the original
+    # 创建副本以避免修改原始数组
     normalized_action = action.copy()
 
-    # Normalize the last action dimension to [-1,+1]
+    # 将最后一个动作维度归一化到 [-1,+1]
     orig_low, orig_high = 0.0, 1.0
     normalized_action[..., -1] = 2 * (normalized_action[..., -1] - orig_low) / (orig_high - orig_low) - 1
 
     if binarize:
-        # Binarize to -1 or +1
+        # 二值化为 -1 或 +1
         normalized_action[..., -1] = np.sign(normalized_action[..., -1])
 
     return normalized_action
@@ -186,36 +186,36 @@ def normalize_gripper_action(action: np.ndarray, binarize: bool = True) -> np.nd
 
 # def invert_gripper_action(action):
 #     """
-#     Flips the sign of the gripper action (last dimension of action vector).
-#     This is necessary for some environments where -1 = open, +1 = close, since
-#     the RLDS dataloader aligns gripper actions such that 0 = close, 1 = open.
+#     翻转夹爪动作（动作向量的最后一维）的符号。
+#     对于某些 -1 = 张开、+1 = 闭合的环境这是必要的，因为
+#     RLDS dataloader 对齐夹爪动作的方式是 0 = 闭合、1 = 张开。
 #     """
 #     action[..., -1] = action[..., -1] * -1.0
 #     return action
 
 def invert_gripper_action(action: np.ndarray) -> np.ndarray:
     """
-    Flip the sign of the gripper action (last dimension of action vector).
+    翻转夹爪动作（动作向量的最后一维）的符号。
 
-    This is necessary for environments where -1 = open, +1 = close, since
-    the RLDS dataloader aligns gripper actions such that 0 = close, 1 = open.
+    对于 -1 = 张开、+1 = 闭合的环境这是必要的，因为
+    RLDS dataloader 对齐夹爪动作的方式是 0 = 闭合、1 = 张开。
 
     Args:
-        action: Action array with gripper action in the last dimension
+        action: 最后一维为夹爪动作的动作数组
 
     Returns:
-        np.ndarray: Action array with inverted gripper action
+        np.ndarray: 夹爪动作已翻转的动作数组
     """
-    # Create a copy to avoid modifying the original
+    # 创建副本以避免修改原始数组
     inverted_action = action.copy()
 
-    # Invert the gripper action
+    # 翻转夹爪动作
     inverted_action[..., -1] =inverted_action[..., -1] *  -1.0
 
     return inverted_action
 
 def save_rollout_video(rollout_images, exp_name, task_name, step_idx, success ):
-    """Saves an MP4 replay of an episode."""
+    """保存一个回合的 MP4 回放。"""
     rollout_dir = f"./rollouts/{exp_name}" 
     os.makedirs(rollout_dir, exist_ok=True)
     ran_id = random.randint(1, 10000)

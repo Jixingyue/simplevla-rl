@@ -1,4 +1,4 @@
-"""Utils for training/fine-tuning scripts."""
+"""训练/微调脚本的工具函数。"""
 
 import torch
 import os
@@ -6,16 +6,16 @@ from .constants import ACTION_DIM, ACTION_TOKEN_BEGIN_IDX, IGNORE_INDEX
 
 
 def get_current_action_mask(token_ids):
-    # Create a tensor marking positions of IGNORE_INDEX
+    # 创建一个张量，标记 IGNORE_INDEX 所在的位置
     newline_positions = token_ids != IGNORE_INDEX
 
-    # Calculate cumulative sum to identify regions between newlines
+    # 计算累加和以识别换行之间的区域
     cumsum = torch.cumsum(newline_positions, dim=1)
 
-    # Create the mask
+    # 创建掩码
     mask = (1 <= cumsum) & (cumsum <= ACTION_DIM)
 
-    # Extract the action part only
+    # 只提取动作部分
     action_tokens_only_mask = token_ids > ACTION_TOKEN_BEGIN_IDX
     mask = action_tokens_only_mask * mask
 
@@ -23,16 +23,16 @@ def get_current_action_mask(token_ids):
 
 
 def get_next_actions_mask(token_ids):
-    # Create a tensor marking positions of IGNORE_INDEX
+    # 创建一个张量，标记 IGNORE_INDEX 所在的位置
     newline_positions = token_ids != IGNORE_INDEX
 
-    # Calculate cumulative sum to identify regions between newlines
+    # 计算累加和以识别换行之间的区域
     cumsum = torch.cumsum(newline_positions, dim=1)
 
-    # Create the mask
+    # 创建掩码
     mask = cumsum > ACTION_DIM
 
-    # Extract the action part only
+    # 只提取动作部分
     action_tokens_only_mask = token_ids > ACTION_TOKEN_BEGIN_IDX
     mask = action_tokens_only_mask * mask
 
@@ -57,17 +57,17 @@ def compute_actions_l1_loss(action_tokenizer, predicted_token_ids, ground_truth_
 
 def find_checkpoint_file(pretrained_checkpoint, file_pattern) :
     """
-    Find a specific checkpoint file matching a pattern.
+    查找匹配给定模式的特定 checkpoint 文件。
 
-    Args:
-        pretrained_checkpoint: Path to the checkpoint directory
-        file_pattern: String pattern to match in filenames
+    参数：
+        pretrained_checkpoint: checkpoint 目录的路径
+        file_pattern: 用于匹配文件名的字符串模式
 
-    Returns:
-        str: Path to the matching checkpoint file
+    返回：
+        str: 匹配到的 checkpoint 文件路径
 
-    Raises:
-        AssertionError: If no files or multiple files match the pattern
+    抛出：
+        AssertionError: 如果没有文件或有多个文件匹配该模式
     """
     assert os.path.isdir(pretrained_checkpoint), f"Checkpoint path must be a directory: {pretrained_checkpoint}"
 
@@ -86,17 +86,17 @@ def find_checkpoint_file(pretrained_checkpoint, file_pattern) :
 
 def load_component_state_dict(checkpoint_path) :
     """
-    Load a component's state dict from checkpoint and handle DDP prefix if present.
+    从 checkpoint 加载某个组件的 state dict，并处理可能存在的 DDP 前缀。
 
-    Args:
-        checkpoint_path: Path to the checkpoint file
+    参数：
+        checkpoint_path: checkpoint 文件的路径
 
-    Returns:
-        Dict: The processed state dictionary for loading
+    返回：
+        Dict: 处理后用于加载的 state 字典
     """
     state_dict = torch.load(checkpoint_path, weights_only=True)
 
-    # If the component was trained with DDP, elements in the state dict have prefix "module." which we must remove
+    # 如果组件是用 DDP 训练的，state dict 中的元素带有 "module." 前缀，必须去除
     new_state_dict = {}
     for k, v in state_dict.items():
         if k.startswith("module."):

@@ -26,7 +26,7 @@ class ParallelLlamaRMSNorm(nn.Module):
 
     def __init__(self, config: LlamaConfig, megatron_config: ModelParallelConfig):
         """
-        LlamaRMSNorm is equivalent to T5LayerNorm
+        LlamaRMSNorm 等价于 T5LayerNorm
         """
         super().__init__()
         if isinstance(config.hidden_size, numbers.Integral):

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/transformers_utils/tokenizer_group/tokenizer_group.py
+# 改编自 https://github.com/vllm-project/vllm/blob/main/vllm/transformers_utils/tokenizer_group/tokenizer_group.py
 
 from typing import Optional
 
@@ -21,7 +21,7 @@ from vllm.utils import LRUCache
 
 
 class TokenizerGroup(TokenizerGroup):
-    """A group of tokenizers that can be used for LoRA adapters."""
+    """一组可用于 LoRA adapter 的 tokenizer。"""
 
     def __init__(self, tokenizer: PreTrainedTokenizer, enable_lora: bool, max_num_seqs: int,
                  max_input_length: Optional[int]):
@@ -30,7 +30,7 @@ class TokenizerGroup(TokenizerGroup):
         self.tokenizer = tokenizer
         self.lora_tokenizers = LRUCache[PreTrainedTokenizer](capacity=max_num_seqs) if enable_lora else None
 
-    # FIXME(sgm): for simplicity, we assign the special token here
+    # FIXME(sgm): 为简单起见，我们在这里直接指定 special token
     @property
     def pad_token_id(self):
         return self.tokenizer.pad_token_id

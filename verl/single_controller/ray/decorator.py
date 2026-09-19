@@ -18,16 +18,16 @@ import os
 
 import ray
 
-# compatiblity cern
+# 兼容性处理
 from verl.single_controller.base.decorator import *
 
 
 def maybe_remote(main):
-    """Schedule main function as ray remote task if VERL_DRIVER_NUM_GPUS or VERL_DRIVER_RESOURCES specified in config.
-       - VERL_DRIVER_NUM_GPUS: number of GPUs for driver task.
-       - VERL_DRIVER_RESOURCES: custom resources for driver task, e.g {"verl_driver": 1.0}.
+    """如果配置中指定了 VERL_DRIVER_NUM_GPUS 或 VERL_DRIVER_RESOURCES，则将 main 函数调度为 ray remote 任务。
+       - VERL_DRIVER_NUM_GPUS: driver 任务的 GPU 数量。
+       - VERL_DRIVER_RESOURCES: driver 任务的自定义资源，例如 {"verl_driver": 1.0}。
 
-    For job submission to ray cluster, you can specify these two envs in runtime.yaml.
+    若要向 ray 集群提交作业，可以在 runtime.yaml 中指定这两个环境变量。
     ```yaml
     working_dir: "."
     env_vars:
@@ -38,7 +38,7 @@ def maybe_remote(main):
     ray job submit --runtime-env=runtime.yaml -- python3 test.py
 
     Args:
-        main (Callable): main function to be schedule.
+        main (Callable): 待调度的 main 函数。
     """
 
     num_gpus = 0
@@ -54,11 +54,11 @@ def maybe_remote(main):
 
     @functools.wraps(main)
     def _main(*args, **kwargs):
-        # Run main function locally.
+        # 在本地运行 main 函数。
         if num_gpus == 0 and len(resources) == 0:
             return main(*args, **kwargs)
 
-        # Run main function remotely as ray task.
+        # 作为 ray task 在远端运行 main 函数。
         f = ray.remote(num_gpus=num_gpus, resources=resources)(main)
         return ray.get(f.remote(*args, **kwargs))
 

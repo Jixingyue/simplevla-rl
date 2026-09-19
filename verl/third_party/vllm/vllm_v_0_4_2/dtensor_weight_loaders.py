@@ -39,7 +39,7 @@ def gemma_dtensor_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> n
             if shard_name not in name:
                 continue
             stacked_name = name.replace(shard_name, param_name)
-            # Skip loading extra bias for GPTQ models.
+            # 跳过为 GPTQ 模型加载额外的 bias。
             if stacked_name.endswith(".bias") and stacked_name not in params_dict:
                 continue
             local_loaded_weight = redistribute_dtensor(param_name=name, loaded_weights=loaded_weight)
@@ -48,15 +48,15 @@ def gemma_dtensor_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> n
             weight_loader(param, local_loaded_weight.to(dtype=param.dtype), shard_id)
             break
         else:
-            # lm_head is not used in vllm as it is tied with embed_token.
-            # To prevent errors, skip loading lm_head.weight.
+            # lm_head 在 vllm 中不会被使用，因为它与 embed_token 绑定在一起。
+            # 为避免报错，跳过加载 lm_head.weight。
             if "lm_head.weight" in name:
                 continue
-            # Skip loading extra bias for GPTQ models.
+            # 跳过为 GPTQ 模型加载额外的 bias。
             if name.endswith(".bias") and name not in params_dict:
                 continue
-            # GemmaRMSNorm is different from Llama's in that it multiplies
-            # (1 + weight) to the output, instead of just weight.
+            # GemmaRMSNorm 与 Llama 的不同之处在于，它将 (1 + weight) 乘到输出上，
+            # 而不是只乘 weight。
             if "norm.weight" in name:
                 local_loaded_weight = redistribute_dtensor(param_name=name, loaded_weights=loaded_weight)
 
@@ -77,8 +77,8 @@ def gptbigcode_dtensor_load_weights(actor_weights: Dict, vllm_model: nn.Module):
         if "lm_head.weight" in name:
             continue
         if ".attn.bias" in name:
-            # Skip attention mask.
-            # NOTE: "c_attn.bias" should not be skipped.
+            # 跳过 attention mask。
+            # 注意："c_attn.bias" 不应被跳过。
             continue
         local_loaded_weight = redistribute_dtensor(param_name=name, loaded_weights=loaded_weight)
         param = params_dict[name]
@@ -131,19 +131,18 @@ def llama_dtensor_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> n
         if "rotary_emb.inv_freq" in name:
             continue
         if ("rotary_emb.cos_cached" in name or "rotary_emb.sin_cached" in name):
-            # Models trained using ColossalAI may include these tensors in
-            # the checkpoint. Skip them.
+            # 使用 ColossalAI 训练的模型可能在 checkpoint 中包含这些张量。
+            # 跳过它们。
             continue
-        # With tie_word_embeddings, we can skip lm_head.weight
-        # The weight might appear unnecessarily in the files if the model is
-        # processed with quantization, LoRA, fine-tuning, etc.
+        # 使用 tie_word_embeddings 时，我们可以跳过 lm_head.weight
+        # 如果模型经过量化、LoRA、微调等处理，该权重可能会不必要地出现在文件中。
         if vllm_model.config.tie_word_embeddings and "lm_head.weight" in name:
             continue
         for (param_name, weight_name, shard_id) in stacked_params_mapping:
             if weight_name not in name:
                 continue
             name = name.replace(weight_name, param_name)
-            # Skip loading extra bias for GPTQ models.
+            # 跳过为 GPTQ 模型加载额外的 bias。
             if name.endswith(".bias") and name not in params_dict:
                 continue
             local_loaded_weight = redistribute_dtensor(param_name=name, loaded_weights=loaded_weight)
@@ -152,7 +151,7 @@ def llama_dtensor_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> n
             weight_loader(param, local_loaded_weight.to(dtype=param.dtype), shard_id)
             break
         else:
-            # Skip loading extra bias for GPTQ models.
+            # 跳过为 GPTQ 模型加载额外的 bias。
             if name.endswith(".bias") and name not in params_dict:
                 continue
             local_loaded_weight = redistribute_dtensor(param_name=name, loaded_weights=loaded_weight)
@@ -180,7 +179,7 @@ def qwen2_dtensor_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> n
             if weight_name not in name:
                 continue
             name = name.replace(weight_name, param_name)
-            # Skip loading extra bias for GPTQ models.
+            # 跳过为 GPTQ 模型加载额外的 bias。
             if name.endswith(".bias") and name not in params_dict:
                 continue
             local_loaded_weight = redistribute_dtensor(param_name=name, loaded_weights=loaded_weight)
@@ -189,7 +188,7 @@ def qwen2_dtensor_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> n
             weight_loader(param, local_loaded_weight.to(dtype=param.dtype), shard_id)
             break
         else:
-            # Skip loading extra bias for GPTQ models.
+            # 跳过为 GPTQ 模型加载额外的 bias。
             if name.endswith(".bias") and name not in params_dict:
                 continue
             param = params_dict[name]
@@ -216,17 +215,17 @@ def redistribute_dtensor(param_name: str, loaded_weights: DTensor, parallelize_p
 
 
 def _process_parameter_names(name):
-    # Remove '.weight' if it exists at the end of the string
+    # 移除字符串末尾的 '.weight'（如果存在）
     if name.endswith(".weight"):
         name = name[:-7]
 
-    # Remove 'model.layers.x.' or 'model.' prefix
+    # 移除 'model.layers.x.' 或 'model.' 前缀
     if "model.layers" in name:
         parts = name.split('.')
-        # Reconstruct the string without 'model.layers.x.'
-        name = '.'.join(parts[3:])  # parts[0] is 'model', parts[1] is 'layers', parts[2] is 'x'
+        # 重新构造不含 'model.layers.x.' 的字符串
+        name = '.'.join(parts[3:])  # parts[0] 是 'model'，parts[1] 是 'layers'，parts[2] 是 'x'
     elif name.startswith("model."):
-        name = name[6:]  # Remove 'model.'
+        name = name[6:]  # 移除 'model.'
 
     return name
 
@@ -235,7 +234,7 @@ __MODEL_DTENSOR_WEIGHT_LOADER_REGISTRY__ = {
     'GPT2LMHeadModel': gpt2_dtensor_weight_loader,
     'LlamaForCausalLM': llama_dtensor_weight_loader,
     'LLaMAForCausalLM': llama_dtensor_weight_loader,
-    'MistralForCausalLM': llama_dtensor_weight_loader,  # mistral is the same as llama in vLLM
+    'MistralForCausalLM': llama_dtensor_weight_loader,  # 在 vLLM 中 mistral 与 llama 相同
     'InternLMForCausalLM': llama_dtensor_weight_loader,
     'AquilaModel': llama_dtensor_weight_loader,
     'AquilaForCausalLM': llama_dtensor_weight_loader,
@@ -247,13 +246,13 @@ __MODEL_DTENSOR_WEIGHT_LOADER_REGISTRY__ = {
 }
 
 
-# the actor model is .state_dict()
-# Load dtensor weights
+# actor 模型是 .state_dict()
+# 加载 dtensor 权重
 def load_dtensor_weights(actor_weights: Dict, vllm_model: nn.Module):
     weight_loader = _get_model_weight_loader(vllm_model.__class__.__name__)
     weight_loader(actor_weights, vllm_model)
-    # NOTE(sgm) to reduce peak memory usage, we offload vllm model to cpu
-    # after init, and we need this after sync model weights for in first iter.
+    # NOTE(sgm) 为了降低峰值内存占用，我们在初始化后将 vllm 模型卸载到 cpu 上，
+    # 在第一次迭代中同步模型权重之后需要这个操作。
     vllm_model = vllm_model.cuda()
 
 
@@ -264,6 +263,6 @@ def _get_model_weight_loader(arch: str):
                      f"Supported architectures: {__MODEL_DTENSOR_WEIGHT_LOADER_REGISTRY__.keys()}")
 
 
-# NOTE(sgm): we use per-parameter weight loader in each vllm sub
+# NOTE(sgm): 我们在每个 vllm sub 中使用按参数的 weight loader
 def update_dtensor_weight_loader():
     pass

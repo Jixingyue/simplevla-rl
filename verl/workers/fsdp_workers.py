@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-The main entry point to run the PPO algorithm
+运行 PPO 算法的主入口
 """
 
 import os
@@ -50,7 +50,7 @@ logger = logging.getLogger(__file__)
 logger.setLevel(os.getenv('VERL_PPO_LOGGING_LEVEL', 'WARN'))
 
 def convert_to_regular_types(obj):
-    """Convert Hydra configs and other special types to regular Python types."""
+    """将 Hydra 配置和其他特殊类型转换为普通 Python 类型。"""
     from omegaconf import ListConfig, DictConfig
     if isinstance(obj, (ListConfig, DictConfig)):
         return {k: convert_to_regular_types(v) for k, v in obj.items()} if isinstance(obj, DictConfig) else list(obj)
@@ -63,8 +63,8 @@ def convert_to_regular_types(obj):
 
 class RobActorRolloutRefWorker(Worker):
     """
-    This worker can be instantiated as a standalone actor or a standalone rollout or a standalone reference policy
-    or a hybrid engine based on the config.rollout
+    根据 config.rollout，此 worker 可以被实例化为独立的 actor、独立的 rollout、独立的参考策略，
+    或者一个混合引擎（hybrid engine）
     """
 
     def __init__(self, config: DictConfig, role: str):
@@ -74,10 +74,10 @@ class RobActorRolloutRefWorker(Worker):
         if not torch.distributed.is_initialized():
             torch.distributed.init_process_group(backend="nccl")
 
-        # build device mesh
+        # 构建设备网格（device mesh）
         world_size = torch.distributed.get_world_size()
         from torch.distributed.device_mesh import init_device_mesh
-        # TODO(sgm): support FSDP hybrid shard for larger model
+        # TODO(sgm): 支持更大模型的 FSDP hybrid shard
         self.device_mesh = init_device_mesh('cuda', mesh_shape=(world_size,), mesh_dim_names=['fsdp'])
 
         self._is_lora = self.config.model.get('lora_rank', 0) > 0
@@ -96,10 +96,10 @@ class RobActorRolloutRefWorker(Worker):
             self._is_offload_grad = self.config.actor.fsdp_config.get('grad_offload', False)
             self._is_offload_optimizer = self.config.actor.fsdp_config.get('optimizer_offload', False)
         elif self._is_ref:
-            # TODO: it seems that manual offload is slowly than FSDP offload
+            # TODO: 手动 offload 似乎比 FSDP offload 慢
             self._is_offload_param = self.config.ref.fsdp_config.get('param_offload', False)
 
-        # normalize config
+        # 归一化 config
         if self._is_actor:
             self.config.actor.ppo_mini_batch_size //= self.device_mesh.shape[0]
             self.config.actor.ppo_micro_batch_size //= self.device_mesh.shape[0]
@@ -124,7 +124,7 @@ class RobActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('Before init from HF AutoModel', logger=logger)
         local_path = copy_local_path_from_hdfs(model_path)
-        #add oft
+        # 新增 oft
          
         if self.config.model.vla == "openvla-oft":
             from verl.utils.vla_utils.openvla_oft.configuration_prismatic import OpenVLAConfig
@@ -153,10 +153,10 @@ class RobActorRolloutRefWorker(Worker):
                 check_model_logic_mismatch(local_path)
             torch.distributed.barrier()
         
-        #add end
+        # 新增结束
 
-        # note that we have to create model in fp32. Otherwise, the optimizer is in bf16, which is incorrect
-        # TODO(zhangchi.usc1992): 1. support create from random initialized model. 2. Support init with FSDP directly
+        # 注意：必须以 fp32 创建模型，否则 optimizer 会是 bf16，这是不正确的
+        # TODO(zhangchi.usc1992): 1. 支持从随机初始化的模型创建。2. 支持直接用 FSDP 初始化
         self.tokenizer = hf_tokenizer(local_path, trust_remote_code=trust_remote_code, model = self.config.model.vla)
 
         torch_dtype = fsdp_config.get('model_dtype', None)
@@ -165,7 +165,7 @@ class RobActorRolloutRefWorker(Worker):
         else:
             torch_dtype = PrecisionType.to_dtype(torch_dtype)
 
-        # override model kwargs
+        # 覆盖 model kwargs
         actor_model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=trust_remote_code)
         if self.config.model.use_remove_padding:
             from verl.models.registry import check_model_support_rmpad
@@ -201,10 +201,10 @@ class RobActorRolloutRefWorker(Worker):
                                                         trust_remote_code=True,
                                                     )
                 if self.config.rollout.use_proprio and self.config.model.resume == False:
-                    # Load proprio projector weights if available
+                    # 若存在则加载 proprio projector 权重
                     actor_module.load_proprio_projector_weights(local_path)
                     print("******Loaded pre-trained proprio projector weights*********")
-                #oft add
+                # oft 新增
                 actor_module.vision_backbone.set_num_images_in_input(self.config.actor.num_images_in_input)
                 
                 dataset_statistics_path = os.path.join(local_path, "dataset_statistics.json")
@@ -231,7 +231,7 @@ class RobActorRolloutRefWorker(Worker):
 
             if enable_gradient_checkpointing:
                 actor_module.gradient_checkpointing_enable()
-            # lora add
+            # lora 新增
             if self._is_lora:
                 print("Applying LoRA to actor module")
                 
@@ -245,7 +245,7 @@ class RobActorRolloutRefWorker(Worker):
                 }
                 actor_module = get_peft_model(actor_module, LoraConfig(**lora_config))  
                 actor_module.print_trainable_parameters()
-            # lora end
+            # lora 新增结束
                 
                 
         torch.distributed.barrier()
@@ -255,7 +255,7 @@ class RobActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('After init from HF AutoModel', logger=logger)
 
-        # We wrap FSDP for rollout as well
+        # 对 rollout 同样用 FSDP 包裹
         mixed_precision_config = fsdp_config.get('mixed_precision', None)
         if mixed_precision_config is not None:
             param_dtype = PrecisionType.to_dtype(mixed_precision_config.get('param_dtype', 'bf16'))
@@ -273,18 +273,18 @@ class RobActorRolloutRefWorker(Worker):
         
         #oft add
         auto_wrap_policy = get_fsdp_wrap_policy_vla(module=actor_module, config=fsdp_config.get('wrap_policy', None), is_lora=self.config.model.get('lora_rank', 0) > 0)
-        #oft add end
+        # oft 新增结束
         
 
         print(f'wrap_policy: {auto_wrap_policy}')
 
-        # TODO(sgm): support hybrid
+        # TODO(sgm): 支持 hybrid
         if auto_wrap_policy is None:
             sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
         else:
             sharding_strategy = ShardingStrategy.FULL_SHARD
 
-        # TODO: add transformer policy
+        # TODO: 添加 transformer policy
         actor_module_fsdp = FSDP(
             actor_module,
             param_init_fn=init_fn,
@@ -298,7 +298,7 @@ class RobActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('After Actor FSDP init', logger=logger)
 
-        # TODO: add more optimizer args into config
+        # TODO: 将更多 optimizer 参数加入 config
         if self._is_actor:
             from verl.utils.torch_functional import get_constant_schedule_with_warmup
             actor_optimizer = optim.AdamW(actor_module_fsdp.parameters(),
@@ -328,7 +328,7 @@ class RobActorRolloutRefWorker(Worker):
             from verl.workers.hybrid_engine import BaseShardingManager
             rollout = RobHFRollout(module=self.actor_module_fsdp, config=self.config.rollout)
             sharding_manager = BaseShardingManager()
-            # TODO: a sharding manager that do nothing?
+            # TODO: 一个什么都不做的 sharding manager？
         elif self.config.rollout.name == 'vllm':
             raise ValueError
             # from verl.workers.rollout.vllm_rollout import vLLMRollout
@@ -352,14 +352,14 @@ class RobActorRolloutRefWorker(Worker):
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
         from verl.workers.actor import RobDataParallelPPOActor
-        # This is used to import external_lib into the huggingface systems
+        # 用于将 external_lib 导入 huggingface 系统
         import_external_libs(self.config.model.get('external_lib', None))
 
         from omegaconf import OmegaConf
         override_model_config = OmegaConf.to_container(self.config.model.get('override_config', OmegaConf.create()))
 
         if self._is_actor or self._is_rollout:
-            # we need the model for actor and rollout
+            # actor 和 rollout 都需要该模型
             if self._is_actor:
                 optim_config = self.config.actor.optim
                 fsdp_config = self.config.actor.fsdp_config
@@ -374,17 +374,17 @@ class RobActorRolloutRefWorker(Worker):
                 enable_gradient_checkpointing=self.config.model.get('enable_gradient_checkpointing', False),
                 trust_remote_code=True) #self.config.model.get('trust_remote_code', True)
 
-            # get the original unwrapped module
+            # 获取原始未包裹的 module
             self.actor_module = self.actor_module_fsdp._fsdp_wrapped_module
 
             if self._is_offload_param:
-                # param is require during state_dict in sharding manager
+                # 在 sharding manager 中做 state_dict 时需要 param
                 offload_fsdp_grad(module=self.actor_module_fsdp)
                 log_gpu_memory_usage('After offload actor grad during init', logger=logger)
             if self._is_offload_optimizer:
                 offload_fsdp_optimizer(optimizer=self.actor_optimizer)
                 log_gpu_memory_usage('After offload actor optimizer during init', logger=logger)
-        # load from checkpoint
+        # 从 checkpoint 加载
         if self._is_actor:
             OmegaConf.set_struct(self.config.actor, True)
             self.actor = RobDataParallelPPOActor(config=self.config.actor,
@@ -435,7 +435,7 @@ class RobActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('After update policy', logger=logger)
 
-        # TODO: here, we should return all metrics
+        # TODO: 此处应返回所有 metrics
         output = DataProto(meta_info={'metrics': metrics})
         output = output.to('cpu')
 
@@ -467,7 +467,7 @@ class RobActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('After compute entropy', logger=logger)
 
-        # TODO: here, we should return all metrics
+        # TODO: 此处应返回所有 metrics
         output = DataProto(meta_info={'metrics': metrics})
         output = output.to('cpu')
         
@@ -483,7 +483,7 @@ class RobActorRolloutRefWorker(Worker):
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
     def generate_sequences(self, prompts):
         prompts = prompts.to('cuda')
-        # set to False if it is validation
+        # 若是验证则设为 False
         recompute_log_prob = prompts.meta_info.get('recompute_log_prob', True)
 
         assert self._is_rollout
@@ -513,7 +513,7 @@ class RobActorRolloutRefWorker(Worker):
         #     print("gen seq end ,  old log will begin")
         
         if self._is_actor and recompute_log_prob:
-            # we should always recompute old_log_probs when it is HybridEngine
+            # 使用 HybridEngine 时应始终重新计算 old_log_probs
             
             output.meta_info['micro_batch_size'] = self.config.rollout.log_prob_micro_batch_size
             output.meta_info['temperature'] = self.config.rollout.temperature
@@ -526,9 +526,9 @@ class RobActorRolloutRefWorker(Worker):
         output = output.to('cpu')
 
         if self._is_offload_param:
-            # NOTE(sgm): the grad is already in CPU, only offload param here
+            # NOTE(sgm): grad 已在 CPU 上，此处只需 offload 参数
             offload_fsdp_param_and_grad(module=self.actor_module_fsdp, offload_grad=self._is_offload_grad)
-        # clear kv cache
+        # 清空 kv cache
         torch.cuda.synchronize()
         torch.distributed.barrier()
         torch.cuda.empty_cache()
@@ -578,7 +578,7 @@ class RobActorRolloutRefWorker(Worker):
                                      device_id=torch.cuda.current_device(),
                                      load_grad=self._is_offload_grad)
 
-        #lora add
+        # lora 新增
         if self._is_lora and isinstance(self.actor_module, PeftModel):
             if dist.get_rank() == 0:
                 os.makedirs(local_path, exist_ok=True)
@@ -607,7 +607,7 @@ class RobActorRolloutRefWorker(Worker):
             if dist.get_rank() == 0:
                 print(f"[rank-{self.rank}]: Saved LoRA adapter to: {lora_save_path}")
             
-            # save total model
+            # 保存完整模型
             base_vla = AutoModelForVision2Seq.from_pretrained(
                 self.config.model.path, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, trust_remote_code=True, device_map="cpu"
             )
@@ -618,11 +618,11 @@ class RobActorRolloutRefWorker(Worker):
                 merged_vla.save_pretrained(local_path)
                 print(f"Saved merged model at: {local_path}")
 
-            # Wait for merged model to be saved
+            # 等待合并后的模型保存完成
             dist.barrier()    
                 
         
-        # TODO: support DCP and save sharded checkpoints
+        # TODO: 支持 DCP 并保存分片 checkpoint
         else:
             import torch.distributed
             from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
@@ -646,8 +646,8 @@ class RobActorRolloutRefWorker(Worker):
 
 class ActorRolloutRefWorker(Worker):
     """
-    This worker can be instantiated as a standalone actor or a standalone rollout or a standalone reference policy
-    or a hybrid engine based on the config.rollout
+    根据 config.rollout，此 worker 可以被实例化为独立的 actor、独立的 rollout、独立的参考策略，
+    或者一个混合引擎（hybrid engine）
     """
 
     def __init__(self, config: DictConfig, role: str):
@@ -657,10 +657,10 @@ class ActorRolloutRefWorker(Worker):
         if not torch.distributed.is_initialized():
             torch.distributed.init_process_group(backend="nccl")
 
-        # build device mesh
+        # 构建设备网格（device mesh）
         world_size = torch.distributed.get_world_size()
         from torch.distributed.device_mesh import init_device_mesh
-        # TODO(sgm): support FSDP hybrid shard for larger model
+        # TODO(sgm): 支持更大模型的 FSDP hybrid shard
         self.device_mesh = init_device_mesh('cuda', mesh_shape=(world_size,), mesh_dim_names=['fsdp'])
 
         self.role = role
@@ -678,10 +678,10 @@ class ActorRolloutRefWorker(Worker):
             self._is_offload_grad = self.config.actor.fsdp_config.get('grad_offload', False)
             self._is_offload_optimizer = self.config.actor.fsdp_config.get('optimizer_offload', False)
         elif self._is_ref:
-            # TODO: it seems that manual offload is slowly than FSDP offload
+            # TODO: 手动 offload 似乎比 FSDP offload 慢
             self._is_offload_param = self.config.ref.fsdp_config.get('param_offload', False)
 
-        # normalize config
+        # 归一化 config
         if self._is_actor:
             self.config.actor.ppo_mini_batch_size //= self.device_mesh.shape[0]
             self.config.actor.ppo_micro_batch_size //= self.device_mesh.shape[0]
@@ -707,8 +707,8 @@ class ActorRolloutRefWorker(Worker):
         log_gpu_memory_usage('Before init from HF AutoModel', logger=logger)
         local_path = copy_local_path_from_hdfs(model_path)
 
-        # note that we have to create model in fp32. Otherwise, the optimizer is in bf16, which is incorrect
-        # TODO(zhangchi.usc1992): 1. support create from random initialized model. 2. Support init with FSDP directly
+        # 注意：必须以 fp32 创建模型，否则 optimizer 会是 bf16，这是不正确的
+        # TODO(zhangchi.usc1992): 1. 支持从随机初始化的模型创建。2. 支持直接用 FSDP 初始化
         self.tokenizer = hf_tokenizer(local_path, trust_remote_code=trust_remote_code)
 
         torch_dtype = fsdp_config.get('model_dtype', None)
@@ -717,7 +717,7 @@ class ActorRolloutRefWorker(Worker):
         else:
             torch_dtype = PrecisionType.to_dtype(torch_dtype)
 
-        # override model kwargs
+        # 覆盖 model kwargs
         actor_model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=trust_remote_code)
         if self.config.model.use_remove_padding:
             from verl.models.registry import check_model_support_rmpad
@@ -732,7 +732,7 @@ class ActorRolloutRefWorker(Worker):
         if self.rank == 0:
             print(f'Model config after override: {actor_model_config}')
 
-        # NOTE(fix me): tie_word_embedding causes meta_tensor init to hang
+        # NOTE(fix me): tie_word_embedding 会导致 meta tensor 初始化卡住
         init_context = get_init_weight_context_manager(use_meta_tensor=not actor_model_config.tie_word_embeddings)
 
         with init_context(), warnings.catch_warnings():
@@ -743,7 +743,7 @@ class ActorRolloutRefWorker(Worker):
                                                                 config=actor_model_config,
                                                                 attn_implementation='flash_attention_2',
                                                                 trust_remote_code=trust_remote_code)
-            # some parameters may not in torch_dtype. TODO(zhangchi.usc1992) remove this after we switch to fsdp2
+            # 某些参数可能不在 torch_dtype 中。TODO(zhangchi.usc1992) 切换到 fsdp2 后移除此处
             actor_module.to(torch_dtype)
 
             if enable_gradient_checkpointing:
@@ -755,7 +755,7 @@ class ActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('After init from HF AutoModel', logger=logger)
 
-        # We wrap FSDP for rollout as well
+        # 对 rollout 同样用 FSDP 包裹
         mixed_precision_config = fsdp_config.get('mixed_precision', None)
         if mixed_precision_config is not None:
             param_dtype = PrecisionType.to_dtype(mixed_precision_config.get('param_dtype', 'bf16'))
@@ -774,18 +774,18 @@ class ActorRolloutRefWorker(Worker):
         auto_wrap_policy = get_fsdp_wrap_policy(module=actor_module, config=fsdp_config.get('wrap_policy', None))
 
         if self._is_rollout and self.config.rollout.name == 'hf':
-            # TODO(zhangchi.usc1992, shengguangming) fix me. Current, auto_wrap_policy causes HFRollout to hang in Gemma
+            # TODO(zhangchi.usc1992, shengguangming) fix me：目前 auto_wrap_policy 会导致 HFRollout 在 Gemma 上卡住
             auto_wrap_policy = None
 
         print(f'wrap_policy: {auto_wrap_policy}')
 
-        # TODO(sgm): support hybrid
+        # TODO(sgm): 支持 hybrid
         if auto_wrap_policy is None:
             sharding_strategy = ShardingStrategy.SHARD_GRAD_OP
         else:
             sharding_strategy = ShardingStrategy.FULL_SHARD
 
-        # TODO: add transformer policy
+        # TODO: 添加 transformer policy
         actor_module_fsdp = FSDP(
             actor_module,
             param_init_fn=init_fn,
@@ -799,7 +799,7 @@ class ActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('After Actor FSDP init', logger=logger)
 
-        # TODO: add more optimizer args into config
+        # TODO: 将更多 optimizer 参数加入 config
         if self._is_actor:
             from verl.utils.torch_functional import get_constant_schedule_with_warmup
             actor_optimizer = optim.AdamW(actor_module_fsdp.parameters(),
@@ -829,7 +829,7 @@ class ActorRolloutRefWorker(Worker):
             from verl.workers.hybrid_engine import BaseShardingManager
             rollout = HFRollout(module=self.actor_module_fsdp, config=self.config.rollout)
             sharding_manager = BaseShardingManager()
-            # TODO: a sharding manager that do nothing?
+            # TODO: 一个什么都不做的 sharding manager？
         elif self.config.rollout.name == 'vllm':
             from verl.workers.rollout.vllm_rollout import vLLMRollout
             from verl.workers.hybrid_engine import FSDPVLLMShardingManager
@@ -852,14 +852,14 @@ class ActorRolloutRefWorker(Worker):
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
         from verl.workers.actor import DataParallelPPOActor
-        # This is used to import external_lib into the huggingface systems
+        # 用于将 external_lib 导入 huggingface 系统
         import_external_libs(self.config.model.get('external_lib', None))
 
         from omegaconf import OmegaConf
         override_model_config = OmegaConf.to_container(self.config.model.get('override_config', OmegaConf.create()))
 
         if self._is_actor or self._is_rollout:
-            # we need the model for actor and rollout
+            # actor 和 rollout 都需要该模型
             if self._is_actor:
                 optim_config = self.config.actor.optim
                 fsdp_config = self.config.actor.fsdp_config
@@ -874,17 +874,17 @@ class ActorRolloutRefWorker(Worker):
                 enable_gradient_checkpointing=self.config.model.get('enable_gradient_checkpointing', False),
                 trust_remote_code=self.config.model.get('trust_remote_code', False))
 
-            # get the original unwrapped module
+            # 获取原始未包裹的 module
             self.actor_module = self.actor_module_fsdp._fsdp_wrapped_module
 
             if self._is_offload_param:
-                # param is require during state_dict in sharding manager
+                # 在 sharding manager 中做 state_dict 时需要 param
                 offload_fsdp_grad(module=self.actor_module_fsdp)
                 log_gpu_memory_usage('After offload actor grad during init', logger=logger)
             if self._is_offload_optimizer:
                 offload_fsdp_optimizer(optimizer=self.actor_optimizer)
                 log_gpu_memory_usage('After offload actor optimizer during init', logger=logger)
-        # load from checkpoint
+        # 从 checkpoint 加载
         if self._is_actor:
             OmegaConf.set_struct(self.config.actor, True)
             self.actor = DataParallelPPOActor(config=self.config.actor,
@@ -935,7 +935,7 @@ class ActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('After update policy', logger=logger)
 
-        # TODO: here, we should return all metrics
+        # TODO: 此处应返回所有 metrics
         output = DataProto(meta_info={'metrics': metrics})
         output = output.to('cpu')
 
@@ -967,7 +967,7 @@ class ActorRolloutRefWorker(Worker):
 
         log_gpu_memory_usage('After compute entropy', logger=logger)
 
-        # TODO: here, we should return all metrics
+        # TODO: 此处应返回所有 metrics
         output = DataProto(meta_info={'metrics': metrics})
         output = output.to('cpu')
         
@@ -983,7 +983,7 @@ class ActorRolloutRefWorker(Worker):
     @register(dispatch_mode=Dispatch.DP_COMPUTE_PROTO)
     def generate_sequences(self, prompts: DataProto):
         prompts = prompts.to('cuda')
-        # set to False if it is validation
+        # 若是验证则设为 False
         recompute_log_prob = prompts.meta_info.get('recompute_log_prob', True)
 
         assert self._is_rollout
@@ -1007,7 +1007,7 @@ class ActorRolloutRefWorker(Worker):
             torch.cuda.synchronize()
 
         if self._is_actor and recompute_log_prob:
-            # we should always recompute old_log_probs when it is HybridEngine
+            # 使用 HybridEngine 时应始终重新计算 old_log_probs
             output.meta_info['micro_batch_size'] = self.config.rollout.log_prob_micro_batch_size
             output.meta_info['temperature'] = self.config.rollout.temperature
             output.meta_info['use_dynamic_bsz'] = self.config.rollout.log_prob_use_dynamic_bsz
@@ -1018,9 +1018,9 @@ class ActorRolloutRefWorker(Worker):
         output = output.to('cpu')
 
         if self._is_offload_param:
-            # NOTE(sgm): the grad is already in CPU, only offload param here
+            # NOTE(sgm): grad 已在 CPU 上，此处只需 offload 参数
             offload_fsdp_param_and_grad(module=self.actor_module_fsdp, offload_grad=self._is_offload_grad)
-        # clear kv cache
+        # 清空 kv cache
         torch.cuda.synchronize()
         torch.distributed.barrier()
         torch.cuda.empty_cache()
@@ -1064,7 +1064,7 @@ class ActorRolloutRefWorker(Worker):
                                      device_id=torch.cuda.current_device(),
                                      load_grad=self._is_offload_grad)
 
-        # TODO: support DCP and save sharded checkpoints
+        # TODO: 支持 DCP 并保存分片 checkpoint
         import torch.distributed
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
         cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
@@ -1101,12 +1101,12 @@ class CriticWorker(Worker):
         self._is_offload_grad = self.config.model.fsdp_config.grad_offload
         self._is_offload_optimizer = self.config.model.fsdp_config.optimizer_offload
 
-        # normalize config
+        # 归一化 config
         self.config.ppo_mini_batch_size //= torch.distributed.get_world_size()
         self.config.ppo_micro_batch_size //= torch.distributed.get_world_size()
 
     def _build_critic_model_optimizer(self, config):
-        # the following line is necessary
+        # 下面这行是必需的
         from verl.utils.model import LambdaLayer, print_model_size, squeeze
         from verl.utils.torch_dtypes import PrecisionType
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, MixedPrecision, \
@@ -1114,9 +1114,9 @@ class CriticWorker(Worker):
         from torch import optim
 
         local_path = copy_local_path_from_hdfs(config.model.path)
-        # note that the tokenizer between actor and critic may be different. So override tokenizer info with actor info
-        # using random initialized model from any architecture. May not be the same as Actor.
-        # TODO: support loading critic weights from RM. Support using AutoModelForTokenClassification
+        # 注意：actor 和 critic 的 tokenizer 可能不同，因此用 actor 的信息覆盖 tokenizer 信息
+        # 使用任意架构的随机初始化模型，可能与 Actor 不同。
+        # TODO: 支持从 RM 加载 critic 权重，支持使用 AutoModelForTokenClassification
         from transformers import AutoTokenizer
 
         tokenizer_path = copy_local_path_from_hdfs(config.model.tokenizer_path)
@@ -1153,7 +1153,7 @@ class CriticWorker(Worker):
             critic_module.lm_head = nn.Sequential(nn.Linear(critic_model_config.hidden_size, 1, dtype=torch_dtype),
                                                   LambdaLayer(fn=squeeze))
 
-            # some parameters may not in torch_dtype
+            # 某些参数可能不在 torch_dtype 中
             critic_module.to(torch_dtype)
 
             if config.model.get('enable_gradient_checkpointing', False):
@@ -1208,7 +1208,7 @@ class CriticWorker(Worker):
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
-        # This is used to import external_lib into the huggingface systems
+        # 用于将 external_lib 导入 huggingface 系统
         import_external_libs(self.config.model.get('external_lib', None))
 
         from verl.workers.critic import DataParallelPPOCritic
@@ -1277,7 +1277,7 @@ class CriticWorker(Worker):
                                      device_id=torch.cuda.current_device(),
                                      load_grad=self._is_offload_grad)
 
-        # TODO: support DCP and save sharded checkpoints
+        # TODO: 支持 DCP 并保存分片 checkpoint
         import torch.distributed
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
         cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
@@ -1300,7 +1300,7 @@ class CriticWorker(Worker):
 
 class RewardModelWorker(Worker):
     """
-    Note that we only implement the reward model that is subclass of AutoModelForSequenceClassification.
+    注意：我们只实现了 AutoModelForSequenceClassification 子类的 reward model。
     """
 
     def __init__(self, config):
@@ -1313,11 +1313,11 @@ class RewardModelWorker(Worker):
         self.config.micro_batch_size //= torch.distributed.get_world_size()
 
     def _build_model(self, config):
-        # the following line is necessary
+        # 下面这行是必需的
         from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, CPUOffload
 
-        # download the checkpoint from hdfs
+        # 从 hdfs 下载 checkpoint
         local_path = copy_local_path_from_hdfs(config.model.path)
 
         if self.config.model.input_tokenizer is None:
@@ -1331,7 +1331,7 @@ class RewardModelWorker(Worker):
 
         trust_remote_code = config.model.get('trust_remote_code', False)
         model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=trust_remote_code)
-        # note that we have to create model in fp32. Otherwise, the optimizer is in bf16, which is incorrect
+        # 注意：必须以 fp32 创建模型，否则 optimizer 会是 bf16，这是不正确的
         init_context = get_init_weight_context_manager(use_meta_tensor=not model_config.tie_word_embeddings)
 
         with init_context(), warnings.catch_warnings():
@@ -1357,7 +1357,7 @@ class RewardModelWorker(Worker):
 
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
-        # This is used to import external_lib into the huggingface systems
+        # 用于将 external_lib 导入 huggingface 系统
         import_external_libs(self.config.model.get('external_lib', None))
         self.reward_module = self._build_model(config=self.config)
         torch.cuda.empty_cache()
@@ -1373,7 +1373,7 @@ class RewardModelWorker(Worker):
 
     def _expand_to_token_level(self, data: DataProto, scores: torch.Tensor):
         batch_size = data.batch.batch_size[0]
-        # expand as token_level_reward
+        # 扩展为 token_level_reward
         attention_mask = data.batch['attention_mask']
         position_ids = data.batch['position_ids']
         response_length = data.batch['responses'].shape[-1]
@@ -1381,7 +1381,7 @@ class RewardModelWorker(Worker):
         token_level_scores = torch.zeros_like(attention_mask, dtype=scores.dtype)  # (bsz, seqlen)
         token_level_scores[torch.arange(batch_size), eos_mask_idx] = scores
 
-        # select the response part
+        # 选取 response 部分
         token_level_scores = token_level_scores[:, -response_length:]
 
         return token_level_scores
@@ -1396,18 +1396,18 @@ class RewardModelWorker(Worker):
         rm_attention_mask = []
 
         for i in range(data.batch.batch_size[0]):
-            # extract raw prompt
+            # 提取原始 prompt
             chat: list = data.non_tensor_batch['raw_prompt'][i].tolist()
 
-            # extract response
+            # 提取 response
             response_ids = data.batch['responses'][i]
             response_length = response_ids.shape[-1]
             valid_response_length = data.batch['attention_mask'][i][-response_length:].sum()
             valid_response_ids = response_ids[:valid_response_length]
 
-            # decode
+            # 解码
             response = src_tokenizer.decode(valid_response_ids)
-            # remove bos and eos
+            # 移除 bos 和 eos
             response = response.replace(src_tokenizer.eos_token, '')
 
             chat.append({'role': 'assistant', 'content': response})
@@ -1416,10 +1416,10 @@ class RewardModelWorker(Worker):
                                                                              add_generation_prompt=False,
                                                                              tokenize=False)
             if self.rank == 0 and i == 0:
-                # for debugging purpose
+                # 用于调试
                 print(f'Switch template. chat: {prompt_with_chat_template}')
 
-            # the maximum length is actually determined by the reward model itself
+            # 最大长度实际上由 reward model 自身决定
             max_length = self.config.get('max_length', src_max_length)
             if max_length is None:
                 max_length = src_max_length
@@ -1428,8 +1428,8 @@ class RewardModelWorker(Worker):
                 tokenizer=target_tokenizer,
                 max_length=max_length,
                 pad_token_id=target_tokenizer.pad_token_id,
-                left_pad=False,  # right padding
-                truncation=self.config.get('truncation', 'right'))  # truncate from the right
+                left_pad=False,  # 右侧填充
+                truncation=self.config.get('truncation', 'right'))  # 从右侧截断
 
             rm_input_ids.append(input_ids)
             rm_attention_mask.append(attention_mask)
@@ -1457,7 +1457,7 @@ class RewardModelWorker(Worker):
             output.append(rm_score)
         scores = torch.cat(output, dim=0)  # (batch_size)
         token_level_scores = self._expand_to_token_level(data, scores)
-        # Note that this is only the scores, may not be the final rewards used to train RL
+        # 注意：这只是分数，不一定是用于训练 RL 的最终奖励
         output = DataProto.from_dict(tensors={'rm_scores': token_level_scores})
         output = output.to('cpu')
         torch.cuda.empty_cache()
@@ -1465,8 +1465,8 @@ class RewardModelWorker(Worker):
 
 class PRIMERewardModelWorker(Worker):
     """
-    PRIME reward model.
-    Can update itself whenever compute_rm_score is called.
+    PRIME reward model。
+    每次调用 compute_rm_score 时都可自我更新。
     """
     def __init__(self, config):
         super().__init__()
@@ -1478,10 +1478,10 @@ class PRIMERewardModelWorker(Worker):
         world_size = torch.distributed.get_world_size()
         self.config.mini_batch_size //= world_size
         self.config.micro_batch_size //= world_size
-        # build device mesh
+        # 构建设备网格（device mesh）
         
         from torch.distributed.device_mesh import init_device_mesh
-        # TODO(sgm): support FSDP hybrid shard for larger model
+        # TODO(sgm): 支持更大模型的 FSDP hybrid shard
         self.device_mesh = init_device_mesh('cuda', mesh_shape=(world_size,), mesh_dim_names=['fsdp'])
 
         self._is_offload_param = self.config.prime_model.fsdp_config.get('param_offload', False)
@@ -1489,11 +1489,11 @@ class PRIMERewardModelWorker(Worker):
         self._is_offload_optimizer = self.config.prime_model.fsdp_config.get('optimizer_offload', False)
 
     def _build_model_optimizer(self, config, enable_gradient_checkpointing=False):
-        # the following line is necessary
+        # 下面这行是必需的
         from transformers import AutoModelForSequenceClassification, AutoTokenizer, AutoConfig
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, ShardingStrategy, CPUOffload
 
-        # download the checkpoint from hdfs
+        # 从 hdfs 下载 checkpoint
         local_path = copy_local_path_from_hdfs(config.prime_model.path)
 
         if self.config.prime_model.input_tokenizer is None:
@@ -1507,7 +1507,7 @@ class PRIMERewardModelWorker(Worker):
 
         trust_remote_code = config.prime_model.get('trust_remote_code', False)
         model_config = AutoConfig.from_pretrained(local_path, trust_remote_code=trust_remote_code)
-        # note that we have to create model in fp32. Otherwise, the optimizer is in bf16, which is incorrect
+        # 注意：必须以 fp32 创建模型，否则 optimizer 会是 bf16，这是不正确的
         if config.prime_model.use_remove_padding:
             from verl.models.registry import check_model_support_rmpad
             check_model_support_rmpad(model_config.model_type)
@@ -1585,7 +1585,7 @@ class PRIMERewardModelWorker(Worker):
             self.reward_lr_scheduler = get_constant_schedule_with_warmup(optimizer=self.reward_optimizer,
                                                                          num_warmup_steps=num_warmup_steps)
 
-            # fsdp offload configurations
+            # fsdp offload 配置
             if self._is_offload_optimizer:
                 offload_fsdp_optimizer(optimizer=self.reward_optimizer)
 
@@ -1599,7 +1599,7 @@ class PRIMERewardModelWorker(Worker):
     @register(dispatch_mode=Dispatch.ONE_TO_ALL)
     def init_model(self):
         from verl.workers.actor import DataParallelPRIME
-        # This is used to import external_lib into the huggingface systems
+        # 用于将 external_lib 导入 huggingface 系统
         import_external_libs(self.config.prime_model.get('external_lib', None))
         self.reward_module, self.reference_module = self._build_model_optimizer(config=self.config, enable_gradient_checkpointing=self.config.prime_model.get('enable_gradient_checkpointing', False))
         self.prm = DataParallelPRIME(config=self.config,
@@ -1619,18 +1619,18 @@ class PRIMERewardModelWorker(Worker):
         rm_attention_mask = []
 
         for i in range(data.batch.batch_size[0]):
-            # extract raw prompt
+            # 提取原始 prompt
             chat: list = data.non_tensor_batch['raw_prompt'][i].tolist()
 
-            # extract response
+            # 提取 response
             response_ids = data.batch['responses'][i]
             response_length = response_ids.shape[-1]
             valid_response_length = data.batch['attention_mask'][i][-response_length:].sum()
             valid_response_ids = response_ids[:valid_response_length]
 
-            # decode
+            # 解码
             response = src_tokenizer.decode(valid_response_ids)
-            # remove bos and eos
+            # 移除 bos 和 eos
             response = response.replace(src_tokenizer.eos_token, '')
 
             chat.append({'role': 'assistant', 'content': response})
@@ -1639,10 +1639,10 @@ class PRIMERewardModelWorker(Worker):
                                                                              add_generation_prompt=False,
                                                                              tokenize=False)
             if self.rank == 0 and i == 0:
-                # for debugging purpose
+                # 用于调试
                 print(f'Switch template. chat: {prompt_with_chat_template}')
 
-            # the maximum length is actually determined by the reward model itself
+            # 最大长度实际上由 reward model 自身决定
             max_length = self.config.get('max_length', src_max_length)
             if max_length is None:
                 max_length = src_max_length
@@ -1651,8 +1651,8 @@ class PRIMERewardModelWorker(Worker):
                 tokenizer=target_tokenizer,
                 max_length=max_length,
                 pad_token_id=target_tokenizer.pad_token_id,
-                left_pad=False,  # right padding
-                truncation=self.config.get('truncation', 'right'))  # truncate from the right
+                left_pad=False,  # 右侧填充
+                truncation=self.config.get('truncation', 'right'))  # 从右侧截断
 
             rm_input_ids.append(input_ids)
             rm_attention_mask.append(attention_mask)
@@ -1708,7 +1708,7 @@ class PRIMERewardModelWorker(Worker):
                                      device_id=torch.cuda.current_device(),
                                      load_grad=self._is_offload_grad)
 
-        # TODO: support DCP and save sharded checkpoints
+        # TODO: 支持 DCP 并保存分片 checkpoint
         import torch.distributed
         from torch.distributed.fsdp import FullyShardedDataParallel as FSDP, StateDictType, FullStateDictConfig
         cfg = FullStateDictConfig(offload_to_cpu=True, rank0_only=True)

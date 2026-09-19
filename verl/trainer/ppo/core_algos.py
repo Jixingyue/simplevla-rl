@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Core functions to implement PPO algorithms.
-The function implemented in this file should be used by trainer with different distributed strategies to
-implement PPO
+实现 PPO 算法的核心函数。
+本文件中实现的函数应被采用不同分布式策略的 trainer 用来
+实现 PPO。
 """
 
 import numpy as np
@@ -26,7 +26,7 @@ import verl.utils.torch_functional as verl_F
 
 class AdaptiveKLController:
     """
-    Adaptive KL controller described in the paper:
+    论文中描述的自适应 KL 控制器：
     https://arxiv.org/pdf/1909.08593.pdf
     """
 
@@ -43,7 +43,7 @@ class AdaptiveKLController:
 
 
 class FixedKLController:
-    """Fixed KL controller."""
+    """固定 KL 控制器。"""
 
     def __init__(self, kl_coef):
         self.value = kl_coef
@@ -68,7 +68,7 @@ def get_kl_controller(config):
 
 def compute_gae_advantage_return(token_level_rewards: torch.Tensor, values: torch.Tensor, eos_mask: torch.Tensor,
                                  gamma: torch.Tensor, lam: torch.Tensor):
-    """Adapted from https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py
+    """改写自 https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py
 
     Args:
         token_level_rewards: `(torch.Tensor)`
@@ -76,11 +76,11 @@ def compute_gae_advantage_return(token_level_rewards: torch.Tensor, values: torc
         values: `(torch.Tensor)`
             shape: (bs, response_length)
         eos_mask: `(torch.Tensor)`
-            shape: (bs, response_length). [EOS] mask. The token after [EOS] have mask zero.
+            shape: (bs, response_length)。[EOS] 掩码，[EOS] 之后的 token 掩码为 0。
         gamma: `(float)`
-            discounted factor used in RL
+            RL 中使用的折扣因子
         lam: `(float)`
-            lambda value when computing Generalized Advantage Estimation (https://arxiv.org/abs/1506.02438)
+            计算广义优势估计（GAE，https://arxiv.org/abs/1506.02438）时使用的 lambda 值
 
     Returns:
         advantages: `(torch.Tensor)`
@@ -108,8 +108,8 @@ def compute_gae_advantage_return(token_level_rewards: torch.Tensor, values: torc
 def compute_reinforce_plus_plus_outcome_advantage(token_level_rewards: torch.Tensor, eos_mask: torch.Tensor,
                                                   gamma: torch.Tensor):
     """
-    Compute advantage for REINFORCE++. 
-    This implementation is based on the paper: https://arxiv.org/abs/2501.03262
+    计算 REINFORCE++ 的优势。
+    本实现基于论文：https://arxiv.org/abs/2501.03262
     Args:
         token_level_rewards: `(torch.Tensor)`
             shape: (bs, response_length)
@@ -130,7 +130,7 @@ def compute_reinforce_plus_plus_outcome_advantage(token_level_rewards: torch.Ten
         for t in reversed(range(token_level_rewards.shape[1])):
             running_return = token_level_rewards[:, t] + gamma * running_return
             returns[:, t] = running_return
-            # Reset after EOS
+            # 在 EOS 之后重置
             running_return = running_return * eos_mask[:, t]
 
         advantages = verl_F.masked_whiten(returns, eos_mask)
@@ -141,10 +141,10 @@ def compute_reinforce_plus_plus_outcome_advantage(token_level_rewards: torch.Ten
 def compute_remax_outcome_advantage(token_level_rewards: torch.Tensor, reward_baselines: torch.Tensor,
                                     eos_mask: torch.Tensor):
     """
-    Compute advantage for ReMax, operating only on Outcome reward 
-    This implementation is based on the paper: https://arxiv.org/abs/2310.10505
+    计算 ReMax 的优势，仅在结果奖励（outcome reward）上进行操作。
+    本实现基于论文：https://arxiv.org/abs/2310.10505
 
-    (with only one scalar reward for each response).
+    （每个回复只有一个标量奖励）。
     Args:
         token_level_rewards: `(torch.Tensor)`
             shape: (bs, response_length)
@@ -169,14 +169,14 @@ def compute_remax_outcome_advantage(token_level_rewards: torch.Tensor, reward_ba
     return advantages, returns
 
 
-# NOTE(sgm): this implementation only consider outcome supervision, where the reward is a scalar.
+# NOTE(sgm): 本实现只考虑结果监督（outcome supervision），即奖励是一个标量。
 def compute_grpo_outcome_advantage(token_level_rewards: torch.Tensor,
                                    eos_mask: torch.Tensor,
                                    index: torch.Tensor,
                                    epsilon: float = 1e-6):
     """
-    Compute advantage for GRPO, operating only on Outcome reward 
-    (with only one scalar reward for each response).
+    计算 GRPO 的优势，仅在结果奖励（outcome reward）上进行操作。
+    （每个回复只有一个标量奖励）。
     Args:
         token_level_rewards: `(torch.Tensor)`
             shape: (bs, response_length)
@@ -217,7 +217,7 @@ def compute_grpo_outcome_advantage(token_level_rewards: torch.Tensor,
 
 
 def compute_rloo_returns(data:verl.DataProto, eos_mask:torch.Tensor,n_samples,config):
-    # calculate rloo reward on different reward sources, and sum again
+    # 在不同奖励来源上计算 rloo 奖励，然后再次求和
     with torch.no_grad():
         # reward = torch.zeros_like(data.batch['responses'], dtype=torch.float32)
         advantages = torch.zeros_like(data.batch['responses'],dtype=torch.float32)
@@ -233,7 +233,7 @@ def compute_rloo_returns(data:verl.DataProto, eos_mask:torch.Tensor,n_samples,co
                 valid_response_length = data.batch['attention_mask'][:, prompt_length:].sum(-1)
                 reward_mask = torch.zeros_like(v, dtype=torch.bool)
                 reward_mask[torch.arange(0, valid_response_length.shape[0], dtype=torch.long, device=valid_response_length.device), valid_response_length-1]=True
-            else: # not a reward tensor
+            else: # 不是奖励张量
                 continue
             reward_tensor = v.clone()
             reward_tensor[~reward_mask]=0
@@ -256,9 +256,9 @@ def compute_rloo_returns(data:verl.DataProto, eos_mask:torch.Tensor,n_samples,co
                 else:
                     discount_reward[:,step] = reward_tensor[:, step] + gamma * discount_reward[:, step+1]
             discount_rewards.append(discount_reward)
-        # return is the sum of discounted reward
+        # return 是折扣奖励之和
         returns = sum(discount_rewards)
-        # advantage is whitened return
+        # advantage 是白化后的 return
         advantages = returns.clone()
         advantages = verl_F.masked_whiten(advantages, eos_mask)
     return advantages, returns
@@ -269,7 +269,7 @@ def compute_rewards(token_level_scores, old_log_prob, ref_log_prob, kl_ratio):
 
 
 def compute_policy_loss(old_log_prob, log_prob, advantages, eos_mask, clip_ratio_high, clip_ratio_low):
-    """Adapted from https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1122
+    """改写自 https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1122
 
     Args:
         old_log_prob: `(torch.Tensor)`
@@ -281,13 +281,13 @@ def compute_policy_loss(old_log_prob, log_prob, advantages, eos_mask, clip_ratio
         eos_mask: `(torch.Tensor)`
             shape: (bs, response_length)
         cliprange: (float)
-            The clip range used in PPO. See https://arxiv.org/abs/1707.06347
+            PPO 中使用的裁剪范围。参见 https://arxiv.org/abs/1707.06347
 
     Returns:
         pg_loss: `a scalar torch.Tensor`
-            policy gradient loss computed via PPO
+            通过 PPO 计算的策略梯度损失
         pg_clipfrac: (float)
-            a float number indicating the fraction of policy gradient loss being clipped
+            表示策略梯度损失被裁剪的比例的浮点数
 
     """
     negative_approx_kl = log_prob - old_log_prob
@@ -303,7 +303,7 @@ def compute_policy_loss(old_log_prob, log_prob, advantages, eos_mask, clip_ratio
 
 
 def compute_entropy_loss(logits, eos_mask):
-    """Compute Categorical entropy loss
+    """计算类别分布（categorical）的熵损失
 
     Args:
         logits: `(torch.Tensor)`
@@ -315,7 +315,7 @@ def compute_entropy_loss(logits, eos_mask):
         entropy: a scalar torch.Tensor
 
     """
-    # compute entropy
+    # 计算熵
     entropy = verl_F.entropy_from_logits(logits)  # (bs, response_len)
     entropy_loss = verl_F.masked_mean(entropy, mask=eos_mask)
     return entropy_loss
@@ -323,21 +323,21 @@ def compute_entropy_loss(logits, eos_mask):
 
 
 def compute_value_loss(vpreds, returns, values, eos_mask, cliprange_value):
-    """Compute the value loss. Copied from https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1151
+    """计算价值损失。复制自 https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1151
 
     Args:
         vpreds (`torch.FloatTensor`):
-            Predicted values of the value head, shape (`batch_size`, `response_length`)
+            价值头预测的值，shape (`batch_size`, `response_length`)
         values (`torch.FloatTensor`):
-            Old values of value head, shape (`batch_size`, `response_length`)
+            价值头的旧值，shape (`batch_size`, `response_length`)
         returns: (`torch.FloatTensor`):
-            Ground truth returns, shape (`batch_size`, `response_length`)
+            真实的 return，shape (`batch_size`, `response_length`)
 
     Returns:
         vf_loss: a scalar (`torch.FloatTensor`):
-            value function loss
+            价值函数损失
         vf_clipfrac: a float
-            The ratio of vf being clipped
+            价值函数被裁剪的比例
 
     """
     vpredclipped = verl_F.clip_by_value(vpreds, values - cliprange_value, values + cliprange_value)
@@ -349,8 +349,8 @@ def compute_value_loss(vpreds, returns, values, eos_mask, cliprange_value):
 
 
 def kl_penalty(logprob: torch.FloatTensor, ref_logprob: torch.FloatTensor, kl_penalty) -> torch.FloatTensor:
-    """Compute KL divergence given logprob and ref_logprob.
-    Copied from https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1104
+    """在给定 logprob 和 ref_logprob 的情况下计算 KL 散度。
+    复制自 https://github.com/huggingface/trl/blob/main/trl/trainer/ppo_trainer.py#L1104
 
     Args:
         logprob:
@@ -369,7 +369,7 @@ def kl_penalty(logprob: torch.FloatTensor, ref_logprob: torch.FloatTensor, kl_pe
         return 0.5 * (logprob - ref_logprob).square()
 
     if kl_penalty == "full":
-        # so, here logprob and ref_logprob should contain the logits for every token in vocabulary
+        # 因此，这里 logprob 和 ref_logprob 应包含词表中每个 token 的 logits
         raise NotImplementedError
 
     raise NotImplementedError
@@ -388,9 +388,9 @@ def compute_dpo_accuracy(token_level_scores, acc, eos_mask, n_samples):
             upper_tri_indices=torch.triu(torch.ones_like(diff_matrix).bool(), diagonal=1)
             return diff_matrix[upper_tri_indices]
 
-        cur_acc_diff=get_upper_triangle(acc[start_id:start_id+n_samples] ) # in range [-1,1]
-        cur_score_diff=get_upper_triangle(cur_scores) # in R
-        cur_score_prediction= (cur_score_diff>0).float() # in [0,1]
+        cur_acc_diff=get_upper_triangle(acc[start_id:start_id+n_samples] ) # 取值范围 [-1,1]
+        cur_score_diff=get_upper_triangle(cur_scores) # 取值范围为实数 R
+        cur_score_prediction= (cur_score_diff>0).float() # 取值范围 [0,1]
 
         # print(f"{token_level_scores=}")
         # print(f"{acc=}")

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-the class of WorkerGroup
+WorkerGroup 类
 """
 import logging
 import threading
@@ -30,7 +30,7 @@ class ResourcePool:
             process_on_nodes = []
         self._store = process_on_nodes
         self.max_collocate_count = max_collocate_count
-        self.n_gpus_per_node = n_gpus_per_node  # this is left for future huawei GPU that contains 16 GPUs per node
+        self.n_gpus_per_node = n_gpus_per_node  # 此参数是为未来华为 GPU 预留的，届时每节点可包含 16 块 GPU
 
     def add_node(self, process_count):
         self._store.append(process_count)
@@ -59,8 +59,8 @@ class ResourcePool:
 
 class ClassWithInitArgs:
     """
-    This class stores a class constructor and the args/kwargs to construct the class.
-    It is used to instantiate the remote class.
+    该类保存类的构造函数以及用于构造该类的 args/kwargs。
+    用于实例化远程类。
     """
 
     def __init__(self, cls, *args, **kwargs) -> None:
@@ -94,7 +94,7 @@ class WorkerGroup:
         self._is_init_with_detached_workers = True if resource_pool is None else False
 
         if resource_pool is not None:
-            # handle the case when WorkGroup is attached to an existing one
+            # 处理 WorkGroup 附加到已有 WorkerGroup 的情况
             self._procecss_dispatch_config = resource_pool()
         else:
             self._procecss_dispatch_config = None
@@ -119,7 +119,7 @@ class WorkerGroup:
                 break
 
     def start_worker_aliveness_check(self, every_n_seconds=1) -> None:
-        # before starting checking worker aliveness, make sure all workers are already alive
+        # 在开始检查 worker 存活状态之前，确保所有 worker 都已就绪
         self._block_until_all_workers_alive()
 
         self._checker_thread = threading.Thread(target=check_workers_alive,
@@ -130,12 +130,12 @@ class WorkerGroup:
     def world_size(self):
         return len(self._workers)
 
-    # execute_all_async and execute_rank_zero_async should be implemented by RayWorkerGroup, TorchRPCWorkerGroup,
-    # MegatronWorkerGroup, XperfWorkerGroup should skip
+    # execute_all_async 和 execute_rank_zero_async 应由 RayWorkerGroup、TorchRPCWorkerGroup 实现，
+    # MegatronWorkerGroup、XperfWorkerGroup 则应跳过
 
     def _bind_worker_method(self, user_defined_cls, func_generator):
         """
-        Bind the worker method to the WorkerGroup
+        将 worker 方法绑定到 WorkerGroup
         """
 
         for method_name in dir(user_defined_cls):
@@ -144,11 +144,11 @@ class WorkerGroup:
                 method = getattr(user_defined_cls, method_name)
                 assert callable(method), f"{method_name} in {user_defined_cls} is not callable"
             except Exception as e:
-                # if it is a property, it will fail because Class doesn't have instance property
+                # 如果是 property，会失败，因为类本身没有实例属性
                 continue
 
             if hasattr(method, MAGIC_ATTR):
-                # this method is decorated by register
+                # 该方法被 register 装饰器修饰
                 attribute = getattr(method, MAGIC_ATTR)
                 assert isinstance(attribute, Dict), f'attribute must be a dictionary. Got {type(attribute)}'
                 assert 'dispatch_mode' in attribute, f'attribute must contain dispatch_mode in its key'
@@ -157,9 +157,9 @@ class WorkerGroup:
                 execute_mode = attribute['execute_mode']
                 blocking = attribute['blocking']
 
-                # get dispatch fn
+                # 获取 dispatch fn
                 if isinstance(dispatch_mode, Dispatch):
-                    # get default dispatch fn
+                    # 获取默认的 dispatch fn
                     fn = get_predefined_dispatch_fn(dispatch_mode=dispatch_mode)
                     dispatch_fn = fn['dispatch_fn']
                     collect_fn = fn['collect_fn']
@@ -170,11 +170,11 @@ class WorkerGroup:
                     dispatch_fn = dispatch_mode['dispatch_fn']
                     collect_fn = dispatch_mode['collect_fn']
 
-                # get execute_fn_name
+                # 获取 execute_fn_name
                 execute_mode = get_predefined_execute_fn(execute_mode=execute_mode)
                 wg_execute_fn_name = execute_mode['execute_fn_name']
 
-                # get execute_fn from string
+                # 通过字符串获取 execute_fn
                 try:
                     execute_fn = getattr(self, wg_execute_fn_name)
                     assert callable(execute_fn), 'execute_fn must be callable'
@@ -182,7 +182,7 @@ class WorkerGroup:
                     print(f'execute_fn {wg_execute_fn_name} is invalid')
                     raise
 
-                # bind a new method to the RayWorkerGroup
+                # 将新方法绑定到 RayWorkerGroup
                 func = func_generator(self,
                                       method_name,
                                       dispatch_fn=dispatch_fn,

@@ -37,7 +37,7 @@ def get_init_weight_context_manager(use_meta_tensor=True):
 
 
 # Copyright 2020-present the HuggingFace Inc. team.
-# Adapted from https://github.com/huggingface/transformers/src/transformers/trainer.py
+# 改编自 https://github.com/huggingface/transformers/src/transformers/trainer.py
 def get_fsdp_wrap_policy(module, config=None):
     if config is None:
         config = {}
@@ -63,7 +63,7 @@ def get_fsdp_wrap_policy(module, config=None):
 
         auto_wrap_policy = functools.partial(
             transformer_auto_wrap_policy,
-            # Transformer layer class to wrap
+            # 要包装的 Transformer 层类
             transformer_layer_cls=transformer_cls_to_wrap,
         )
     return auto_wrap_policy
@@ -99,7 +99,7 @@ def get_fsdp_wrap_policy_vla(module, config=None, is_lora=False):
 
         llm_wrap_policy = functools.partial(
             transformer_auto_wrap_policy,
-            # Transformer layer class to wrap
+            # 要包装的 Transformer 层类
             transformer_layer_cls=transformer_cls_to_wrap,
         )
     print("llm_wrap_policy:",llm_wrap_policy)
@@ -110,7 +110,7 @@ def get_fsdp_wrap_policy_vla(module, config=None, is_lora=False):
 
 
 
-    # Get Prismatic Wrapping Policy =>> just a module wrapping policy around `self.projector`
+    # 获取 Prismatic 包装策略 =>> 只是围绕 `self.projector` 的模块包装策略
     # prismatic_fsdp_wrapping_policy = functools.partial(
     #     _module_wrap_policy,
     #     module_classes={LinearProjector, MLPProjector, FusedMLPProjector},
@@ -121,7 +121,7 @@ def get_fsdp_wrap_policy_vla(module, config=None, is_lora=False):
     )
 
     
-    # Add lambda policy for LoRA modules if is_lora is True
+    # 如果 is_lora 为 True，则为 LoRA 模块添加 lambda 策略
     if is_lora:
         def lambda_policy_fn(module):
             return bool(
@@ -132,9 +132,9 @@ def get_fsdp_wrap_policy_vla(module, config=None, is_lora=False):
         lambda_policy = functools.partial(lambda_auto_wrap_policy, lambda_fn=lambda_policy_fn)
 
 
-    # Return union (_or_) over constituent policies
-    #   => Note: there is *not* a fall-through policy; any module that isn't covered by the above constituents will
-    #            automatically be folded into the root VLM FSDP instance.
+    # 返回各组成策略的并集（_or_）
+    #   => 注意：不存在兜底（fall-through）策略；任何未被上述组成策略覆盖的模块
+    #            都会自动被并入根 VLM FSDP 实例。
     if is_lora:
         vla_policies=[
                 vision_fsdp_wrapping_policy,

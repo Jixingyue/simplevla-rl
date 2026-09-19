@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/worker/model_runner.py
+# 改编自 https://github.com/vllm-project/vllm/blob/main/vllm/worker/model_runner.py
 
 import torch
 import torch.nn as nn
@@ -39,13 +39,13 @@ from .config import ModelConfig, LoadConfig
 logger = init_logger(__name__)
 
 
-# How batches are constructed.
+# batch 的构造方式。
 class BatchType(IntEnum):
-    # Every batch is prefill.
+    # 每个 batch 都是 prefill。
     PREFILL = 0
-    # Every batch is decode.
+    # 每个 batch 都是 decode。
     DECODE = 1
-    # Batch is a mixture of prefill and decode.
+    # batch 是 prefill 和 decode 的混合。
     MIXED = 2
 
 
@@ -53,7 +53,7 @@ class ModelRunner(ModelRunner):
 
     def __init__(
         self,
-        model: Union[nn.Module, Dict], # [verl] model itself or its parameter dict
+        model: Union[nn.Module, Dict], # [verl] 模型本身或其参数字典
         model_config: ModelConfig,
         parallel_config: ParallelConfig,
         scheduler_config: SchedulerConfig,
@@ -77,15 +77,15 @@ class ModelRunner(ModelRunner):
             load_config,
             lora_config,
             kv_cache_dtype,
-            is_driver_worker=True,  # a hack
+            is_driver_worker=True,  # 一种权宜做法
             prompt_adapter_config=prompt_adapter_config,
             multimodal_config=multimodal_config,
             return_hidden_states=return_hidden_states)
 
-        # NOTE(sgm): add for verl
-        self.model = model  # this will be replaced by get_model()
+        # NOTE(sgm): 为 verl 添加
+        self.model = model  # 该值将被 get_model() 替换
 
-    # NOTE(sgm): initialize model using the actor model
+    # NOTE(sgm): 使用 actor 模型初始化模型
     def load_model(self) -> None:
         logger.info("Starting to load model %s...", self.model_config.model)
         with CudaMemoryProfiler() as m:
@@ -124,9 +124,8 @@ class ModelRunner(ModelRunner):
             self.model = (self.prompt_adapter_manager.create_prompt_adapter_manager(self.model))
 
         if self.kv_cache_dtype == "fp8" and is_hip():
-            # Currently only ROCm accepts kv-cache scaling factors
-            # via quantization_param_path and this will be deprecated
-            # in the future.
+            # 目前只有 ROCm 支持通过 quantization_param_path
+            # 传入 kv-cache 缩放因子，未来将弃用此方式。
             if self.model_config.quantization_param_path is not None:
                 if callable(getattr(self.model, "load_kv_cache_scales", None)):
                     warnings.warn(

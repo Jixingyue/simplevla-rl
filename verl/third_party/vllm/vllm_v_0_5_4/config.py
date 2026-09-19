@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/config.py
+# 改编自 https://github.com/vllm-project/vllm/blob/main/vllm/config.py
 
 import enum
 import json
@@ -25,7 +25,7 @@ from vllm.logger import init_logger
 from vllm.model_executor.layers.quantization import get_quantization_config
 from vllm.transformers_utils.config import get_hf_text_config
 from vllm.utils import is_hip, print_warning_once
-# Add for verl
+# 为 verl 添加
 from vllm.config import ModelConfig, _get_and_verify_dtype, _get_and_verify_max_len, get_served_model_name
 
 GPTQMarlinConfig = get_quantization_config("gptq_marlin")
@@ -36,64 +36,57 @@ _GB = 1 << 30
 
 
 class ModelConfig(ModelConfig):
-    """Configuration for the model.
+    """模型配置。
 
     Args:
-        model: Name or path of the huggingface model to use.
-        tokenizer: Name or path of the huggingface tokenizer to use.
-        tokenizer_mode: Tokenizer mode. "auto" will use the fast tokenizer if
-            available, and "slow" will always use the slow tokenizer.
-        trust_remote_code: Trust remote code (e.g., from HuggingFace) when
-            downloading the model and tokenizer.
-        download_dir: Directory to download and load the weights, default to the
-            default cache directory of huggingface.
-        load_format: The format of the model weights to load:
-            "auto" will try to load the weights in the safetensors format and
-                fall back to the pytorch bin format if safetensors format is
-                not available.
-            "pt" will load the weights in the pytorch bin format.
-            "safetensors" will load the weights in the safetensors format.
-            "npcache" will load the weights in pytorch format and store
-                a numpy cache to speed up the loading.
-            "dummy" will initialize the weights with random values, which is
-                mainly for profiling.
-        dtype: Data type for model weights and activations. The "auto" option
-            will use FP16 precision for FP32 and FP16 models, and BF16 precision
-            for BF16 models.
-        seed: Random seed for reproducibility.
-        revision: The specific model version to use. It can be a branch name,
-            a tag name, or a commit id. If unspecified, will use the default
-            version.
-        code_revision: The specific revision to use for the model code on
-            Hugging Face Hub. It can be a branch name, a tag name, or a
-            commit id. If unspecified, will use the default version.
-        tokenizer_revision: The specific tokenizer version to use. It can be a
-            branch name, a tag name, or a commit id. If unspecified, will use
-            the default version.
-        max_model_len: Maximum length of a sequence (including prompt and
-            output). If None, will be derived from the model.
-        quantization: Quantization method that was used to quantize the model
-            weights. If None, we assume the model weights are not quantized.
-        quantization_param_path: Path to JSON file containing scaling factors.
-            Used to load KV cache scaling factors into the model when KV cache
-            type is FP8_E4M3 on ROCm (AMD GPU). In the future these will also
-            be used to load activation and weight scaling factors when the
-            model dtype is FP8_E4M3 on ROCm.
-        enforce_eager: Whether to enforce eager execution. If True, we will
-            disable CUDA graph and always execute the model in eager mode.
-            If False, we will use CUDA graph and eager execution in hybrid.
-        max_context_len_to_capture: Maximum context len covered by CUDA graphs.
-            When a sequence has context length larger than this, we fall back
-            to eager mode (DEPRECATED. Use max_seq_len_to_capture instead).
-        max_seq_len_to_capture: Maximum sequence len covered by CUDA graphs.
-            When a sequence has context length larger than this, we fall back
-            to eager mode
-        skip_tokenizer_init: If true, skip initialization of tokenizer and
-            detokenizer.
-        served_model_name: The model name used in metrics tag `model_name`,
-            matches the model name exposed via the APIs. If multiple model 
-            names provided, the first name will be used. If not specified, 
-            the model name will be the same as `model`.
+        model: 要使用的 huggingface 模型的名称或路径。
+        tokenizer: 要使用的 huggingface tokenizer 的名称或路径。
+        tokenizer_mode: tokenizer 模式。"auto" 会在可用时使用快速 tokenizer，
+            "slow" 则始终使用慢速 tokenizer。
+        trust_remote_code: 下载模型和 tokenizer 时是否信任远程代码
+            （例如来自 HuggingFace 的代码）。
+        download_dir: 下载和加载权重的目录，默认为 huggingface 的
+            默认缓存目录。
+        load_format: 要加载的模型权重格式：
+            "auto" 会尝试以 safetensors 格式加载权重，若 safetensors 格式
+                不可用则回退到 pytorch bin 格式。
+            "pt" 会以 pytorch bin 格式加载权重。
+            "safetensors" 会以 safetensors 格式加载权重。
+            "npcache" 会以 pytorch 格式加载权重，并存储 numpy 缓存以
+                加快加载速度。
+            "dummy" 会用随机值初始化权重，主要用于性能分析。
+        dtype: 模型权重和激活值的数据类型。"auto" 选项会对 FP32 和
+            FP16 模型使用 FP16 精度，对 BF16 模型使用 BF16 精度。
+        seed: 用于保证可复现性的随机种子。
+        revision: 要使用的具体模型版本。可以是分支名、标签名或
+            commit id。若未指定，将使用默认版本。
+        code_revision: Hugging Face Hub 上模型代码使用的具体版本。
+            可以是分支名、标签名或 commit id。若未指定，将使用
+            默认版本。
+        tokenizer_revision: 要使用的具体 tokenizer 版本。可以是分支名、
+            标签名或 commit id。若未指定，将使用默认版本。
+        max_model_len: 序列的最大长度（包括 prompt 和输出）。若为
+            None，将从模型推导。
+        quantization: 量化模型权重时使用的量化方法。若为 None，则
+            假定模型权重未量化。
+        quantization_param_path: 包含缩放因子的 JSON 文件路径。用于在
+            KV cache 类型为 FP8_E4M3 时（ROCm/AMD GPU 上）将 KV cache
+            缩放因子加载到模型中。未来当模型 dtype 为 FP8_E4M3 时
+            （ROCm 上），这些因子也将用于加载激活值和权重的缩放因子。
+        enforce_eager: 是否强制 eager 执行。若为 True，将禁用
+            CUDA graph，始终以 eager 模式执行模型；若为 False，将
+            混合使用 CUDA graph 和 eager 执行。
+        max_context_len_to_capture: CUDA graph 覆盖的最大上下文长度。
+            当序列的上下文长度超过该值时，回退到 eager 模式
+            （已弃用。请改用 max_seq_len_to_capture）。
+        max_seq_len_to_capture: CUDA graph 覆盖的最大序列长度。当
+            序列的上下文长度超过该值时，回退到 eager 模式。
+        skip_tokenizer_init: 若为 true，跳过 tokenizer 和
+            detokenizer 的初始化。
+        served_model_name: 用于指标标签 `model_name` 的模型名称，
+            与通过 API 暴露的模型名称一致。若提供多个模型名称，
+            将使用第一个名称。若未指定，模型名称将与 `model`
+            相同。
     """
 
     def __init__(
@@ -122,7 +115,7 @@ class ModelConfig(ModelConfig):
     ) -> None:
         self.model = hf_config._name_or_path
         self.tokenizer = hf_config._name_or_path
-        # NOTE(sgm): same as open-sourced
+        # NOTE(sgm): 与开源版本相同
         self.tokenizer_mode = tokenizer_mode
         self.trust_remote_code = trust_remote_code
         self.seed = seed
@@ -130,7 +123,7 @@ class ModelConfig(ModelConfig):
         self.code_revision = code_revision
         self.rope_scaling = rope_scaling
         self.rope_theta = rope_theta
-        # The tokenizer version is consistent with the model version by default.
+        # 默认情况下 tokenizer 版本与模型版本保持一致。
         if tokenizer_revision is None:
             self.tokenizer_revision = revision
         else:
@@ -188,28 +181,25 @@ class LoadFormat(str, enum.Enum):
     DUMMY_DTENSOR = 'dummy_dtensor'
 
 
-# TODO: check whether this is necessary
+# TODO: 检查这是否有必要
 @dataclass
 class LoadConfig:
     """
-        download_dir: Directory to download and load the weights, default to the
-            default cache directory of huggingface.
-        load_format: The format of the model weights to load:
-            "auto" will try to load the weights in the safetensors format and
-                fall back to the pytorch bin format if safetensors format is
-                not available.
-            "pt" will load the weights in the pytorch bin format.
-            "safetensors" will load the weights in the safetensors format.
-            "npcache" will load the weights in pytorch format and store
-                a numpy cache to speed up the loading.
-            "dummy" will initialize the weights with random values, which is
-                mainly for profiling.
-            "tensorizer" will use CoreWeave's tensorizer library for
-                fast weight loading.
-            "bitsandbytes" will load nf4 type weights.
-        ignore_patterns: The list of patterns to ignore when loading the model.
-            Default to "original/**/*" to avoid repeated loading of llama's 
-            checkpoints.
+        download_dir: 下载和加载权重的目录，默认为 huggingface 的
+            默认缓存目录。
+        load_format: 要加载的模型权重格式：
+            "auto" 会尝试以 safetensors 格式加载权重，若 safetensors 格式
+                不可用则回退到 pytorch bin 格式。
+            "pt" 会以 pytorch bin 格式加载权重。
+            "safetensors" 会以 safetensors 格式加载权重。
+            "npcache" 会以 pytorch 格式加载权重，并存储 numpy 缓存以
+                加快加载速度。
+            "dummy" 会用随机值初始化权重，主要用于性能分析。
+            "tensorizer" 会使用 CoreWeave 的 tensorizer 库进行
+                快速权重加载。
+            "bitsandbytes" 会加载 nf4 类型的权重。
+        ignore_patterns: 加载模型时要忽略的模式列表。默认为
+            "original/**/*" 以避免重复加载 llama 的 checkpoint。
             
     """
 

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Single Process Actor
+单进程 Actor
 """
 
 import itertools
@@ -43,7 +43,7 @@ class DataParallelPPOActor(BasePPOActor):
         actor_module: nn.Module,
         actor_optimizer: torch.optim.Optimizer = None,
     ):
-        """When optimizer is None, it is Reference Policy"""
+        """当 optimizer 为 None 时，即为参考策略（Reference Policy）"""
         super().__init__(config)
         self.actor_module = actor_module
         self.actor_optimizer = actor_optimizer
@@ -57,7 +57,7 @@ class DataParallelPPOActor(BasePPOActor):
 
     def _forward_micro_batch(self, micro_batch, temperature) -> Tuple[torch.Tensor, torch.Tensor]:
         """
-        Returns: 
+        返回: 
             entropy: # (bs, response_len)
             log_probs: # (bs, response_len)
         """
@@ -73,14 +73,14 @@ class DataParallelPPOActor(BasePPOActor):
                                                            attention_mask)  # input_ids_rmpad (total_nnz, ...)
                 input_ids_rmpad = input_ids_rmpad.transpose(0, 1)  # (1, total_nnz)
 
-                # unpad the position_ids to align the rotary
+                # 对 position_ids 进行 unpad 以对齐 rotary
                 position_ids_rmpad = index_first_axis(rearrange(position_ids.unsqueeze(-1), "b s ... -> (b s) ..."),
                                                       indices).transpose(0, 1)
 
-                # for compute the log_prob
+                # 用于计算 log_prob
                 input_ids_rmpad_rolled = torch.roll(input_ids_rmpad, shifts=-1, dims=1)  # (1, total_nnz)
 
-                # pad and slice the inputs if sp > 1
+                # 若 sp > 1，对输入进行 pad 和切片
                 if self.use_ulysses_sp:
                     input_ids_rmpad, position_ids_rmpad, pad_size = ulysses_pad_and_slice_inputs(input_ids_rmpad, \
                                                                                                 position_ids_rmpad, \
@@ -90,30 +90,30 @@ class DataParallelPPOActor(BasePPOActor):
 
                 input_ids_rmpad_rolled = input_ids_rmpad_rolled.squeeze(0)  # ((total_nnz / sp) + pad)
 
-                # only pass input_ids and position_ids to enable flash_attn_varlen
+                # 仅传入 input_ids 和 position_ids 以启用 flash_attn_varlen
                 output = self.actor_module(input_ids=input_ids_rmpad,
                                            attention_mask=None,
                                            position_ids=position_ids_rmpad,
-                                           use_cache=False)  # prevent model thinks we are generating
+                                           use_cache=False)  # 防止模型认为我们正在进行生成
                 logits_rmpad = output.logits.squeeze(0)  # (total_nnz, vocab_size)
 
                 logits_rmpad.div_(temperature)
 
-                # compute entropy
+                # 计算 entropy
                 entropy_rmpad = self.compute_entropy_from_logits(logits_rmpad)  # ((total_nnz / sp) + pad)
 
-                # if use_sp: ((total_nnz / sp) + pad) ; if not use_sp: (batch, seqlen)
+                # 若使用 sp: ((total_nnz / sp) + pad)；若未使用 sp: (batch, seqlen)
                 log_probs = logprobs_from_logits(logits=logits_rmpad, labels=input_ids_rmpad_rolled)
 
-                # gather log_prob if sp > 1
+                # 若 sp > 1 则 gather log_prob
                 if self.use_ulysses_sp:
-                    # gather and unpad for the ulysses sp
+                    # 针对 ulysses sp 进行 gather 和 unpad
                     log_probs = gather_outpus_and_unpad(log_probs, gather_dim=0, unpad_dim=0, padding_size=pad_size)
                     entropy_rmpad = gather_outpus_and_unpad(entropy_rmpad,
                                                             gather_dim=0,
                                                             unpad_dim=0,
                                                             padding_size=pad_size)
-                # pad back to (bsz, seqlen)
+                # pad 回 (bsz, seqlen)
                 full_entropy = pad_input(hidden_states=entropy_rmpad.unsqueeze(-1),
                                          indices=indices,
                                          batch=batch_size,
@@ -123,15 +123,15 @@ class DataParallelPPOActor(BasePPOActor):
                                            batch=batch_size,
                                            seqlen=seqlen)
 
-                # only return response part:
+                # 仅返回 response 部分：
                 entropy = full_entropy.squeeze(-1)[:, -response_length - 1:-1]  # (bsz, response_length)
                 log_probs = full_log_probs.squeeze(-1)[:, -response_length - 1:-1]  # (bsz, response_length)
 
-            else:  # not using rmpad and no ulysses sp
+            else:  # 不使用 rmpad 且无 ulysses sp
                 output = self.actor_module(input_ids=input_ids,
                                            attention_mask=attention_mask,
                                            position_ids=position_ids,
-                                           use_cache=False)  # prevent model thinks we are generating
+                                           use_cache=False)  # 防止模型认为我们正在进行生成
                 logits = output.logits
                 logits.div_(temperature)
                 logits = logits[:, -response_length - 1:-1]  # (bsz, response_length)
@@ -153,14 +153,14 @@ class DataParallelPPOActor(BasePPOActor):
                                                            attention_mask)  # input_ids_rmpad (total_nnz, ...)
                 input_ids_rmpad = input_ids_rmpad.transpose(0, 1)  # (1, total_nnz)
 
-                # unpad the position_ids to align the rotary
+                # 对 position_ids 进行 unpad 以对齐 rotary
                 position_ids_rmpad = index_first_axis(rearrange(position_ids.unsqueeze(-1), "b s ... -> (b s) ..."),
                                                       indices).transpose(0, 1)
 
-                # for compute the log_prob
+                # 用于计算 log_prob
                 input_ids_rmpad_rolled = torch.roll(input_ids_rmpad, shifts=-1, dims=1)  # (1, total_nnz)
 
-                # pad and slice the inputs if sp > 1
+                # 若 sp > 1，对输入进行 pad 和切片
                 if self.use_ulysses_sp:
                     input_ids_rmpad, position_ids_rmpad, pad_size = ulysses_pad_and_slice_inputs(input_ids_rmpad, \
                                                                                                 position_ids_rmpad, \
@@ -170,38 +170,38 @@ class DataParallelPPOActor(BasePPOActor):
 
                 input_ids_rmpad_rolled = input_ids_rmpad_rolled.squeeze(0)  # ((total_nnz / sp) + pad)
 
-                # only pass input_ids and position_ids to enable flash_attn_varlen
+                # 仅传入 input_ids 和 position_ids 以启用 flash_attn_varlen
                 output = self.actor_module(input_ids=input_ids_rmpad,
                                            attention_mask=None,
                                            position_ids=position_ids_rmpad,
-                                           use_cache=False)  # prevent model thinks we are generating
+                                           use_cache=False)  # 防止模型认为我们正在进行生成
                 logits_rmpad = output.logits.squeeze(0)  # (total_nnz, vocab_size)
 
                 logits_rmpad.div_(temperature)
 
-                # compute entropy
+                # 计算 entropy
                 entropy_rmpad = self.compute_entropy_from_logits(logits_rmpad)  # ((total_nnz / sp) + pad)
 
-                # gather log_prob if sp > 1
+                # 若 sp > 1 则 gather log_prob
                 if self.use_ulysses_sp:
                     entropy_rmpad = gather_outpus_and_unpad(entropy_rmpad,
                                                             gather_dim=0,
                                                             unpad_dim=0,
                                                             padding_size=pad_size)
-                # pad back to (bsz, seqlen)
+                # pad 回 (bsz, seqlen)
                 full_entropy = pad_input(hidden_states=entropy_rmpad.unsqueeze(-1),
                                          indices=indices,
                                          batch=batch_size,
                                          seqlen=seqlen)
 
-                # only return response part:
+                # 仅返回 response 部分：
                 entropy = full_entropy.squeeze(-1)[:, -response_length - 1:-1]  # (bsz, response_length)
 
-            else:  # not using rmpad and no ulysses sp
+            else:  # 不使用 rmpad 且无 ulysses sp
                 output = self.actor_module(input_ids=input_ids,
                                            attention_mask=attention_mask,
                                            position_ids=position_ids,
-                                           use_cache=False)  # prevent model thinks we are generating
+                                           use_cache=False)  # 防止模型认为我们正在进行生成
                 logits = output.logits
                 logits.div_(temperature)
                 logits = logits[:, -response_length - 1:-1]  # (bsz, response_length)
@@ -222,35 +222,35 @@ class DataParallelPPOActor(BasePPOActor):
         return grad_norm
 
     def compute_log_prob(self, data: DataProto) -> torch.Tensor:
-        """Compute the log probability of the responses given input_ids, attention_mask and position_ids
+        """根据 input_ids、attention_mask 和 position_ids 计算 response 的 log 概率
 
-        Args:
-            data (DataProto): a DataProto containing keys
+        参数:
+            data (DataProto): 包含以下键的 DataProto
 
-                ``input_ids``: tensor of shape [batch_size, sequence_length]. torch.int64. Note that input_ids is the
-                concatenation of prompt and response. Note that ``sequence_length = prompt_length + response_length``.
+                ``input_ids``: 形状为 [batch_size, sequence_length] 的张量。torch.int64。注意 input_ids 是
+                prompt 和 response 的拼接。注意 ``sequence_length = prompt_length + response_length``。
 
-                ``attention_mask``: tensor of shape [batch_size, sequence_length]. torch.int64.
+                ``attention_mask``: 形状为 [batch_size, sequence_length] 的张量。torch.int64。
 
-                ``position_ids``: tensor of shape [batch_size, sequence_length]. torch.int64.
+                ``position_ids``: 形状为 [batch_size, sequence_length] 的张量。torch.int64。
 
-                ``responses``:  tensor of shape [batch_size, response_length]. torch.int64.
+                ``responses``:  形状为 [batch_size, response_length] 的张量。torch.int64。
 
-        Returns:
-            torch.Tensor: the log_prob tensor
+        返回:
+            torch.Tensor: log_prob 张量
         """
-        # set to eval
+        # 设置为 eval 模式
         self.actor_module.eval()
 
         micro_batch_size = data.meta_info['micro_batch_size']
-        temperature = data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error
+        temperature = data.meta_info['temperature']  # temperature 必须放在 data.meta_info 中，以避免隐蔽错误
         use_dynamic_bsz = data.meta_info['use_dynamic_bsz']
 
         select_keys = ['responses', 'input_ids', 'attention_mask', 'position_ids']
         batch = data.select(batch_keys=select_keys).batch
 
         if use_dynamic_bsz:
-            # split using dynamic bsz
+            # 使用动态 batch size 进行切分
             max_token_len = data.meta_info['max_token_len'] * self.ulysses_sequence_parallel_size
             micro_batches, indices = rearrange_micro_batches(batch=batch, max_token_len=max_token_len)
         else:
@@ -272,35 +272,35 @@ class DataParallelPPOActor(BasePPOActor):
         return log_probs
 
     def update_policy(self, data: DataProto):
-        # make sure we are in training mode
+        # 确保处于训练模式
         self.actor_module.train()
 
         assert self.config.ppo_mini_batch_size % self.config.ppo_micro_batch_size == 0
         self.gradient_accumulation = self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size
-        temperature = data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error
+        temperature = data.meta_info['temperature']  # temperature 必须放在 data.meta_info 中，以避免隐蔽错误
 
         select_keys = ['responses', 'input_ids', 'attention_mask', 'position_ids', 'old_log_probs', 'advantages']
         batch = data.select(batch_keys=select_keys).batch
 
-        # Split to make minibatch iterator for updating the actor
-        # See PPO paper for details. https://arxiv.org/abs/1707.06347
+        # 切分以构建用于更新 actor 的 minibatch 迭代器
+        # 详情参见 PPO 论文 https://arxiv.org/abs/1707.06347
         dataloader = batch.split(self.config.ppo_mini_batch_size)
 
         metrics = {}
         for batch_idx, data in enumerate(dataloader):
-            # split batch into micro_batches
+            # 将 batch 切分为 micro_batch
             mini_batch = data
             if self.config.use_dynamic_bsz:
                 max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
                 micro_batches, _ = rearrange_micro_batches(batch=mini_batch, max_token_len=max_token_len)
             else:
-                # split batch into micro_batches
+                # 将 batch 切分为 micro_batch
                 micro_batches = mini_batch.split(self.config.ppo_micro_batch_size)
 
             self.actor_optimizer.zero_grad()
 
             for data in micro_batches:
-                data = data.cuda()  # actor device is cpu when using offload
+                data = data.cuda()  # 使用 offload 时 actor 设备位于 CPU
                 responses = data['responses']
                 response_length = responses.size(1)
                 attention_mask = data['attention_mask']
@@ -311,7 +311,7 @@ class DataParallelPPOActor(BasePPOActor):
                 clip_ratio = self.config.clip_ratio
                 entropy_coeff = self.config.entropy_coeff
 
-                # all return: (bsz, response_length)
+                # 所有返回值形状均为: (bsz, response_length)
                 entropy, log_prob = self._forward_micro_batch(micro_batch=data, temperature=temperature)
 
                 pg_loss, pg_clipfrac, ppo_kl = core_algos.compute_policy_loss(old_log_prob=old_log_prob,
@@ -319,10 +319,10 @@ class DataParallelPPOActor(BasePPOActor):
                                                                               advantages=advantages,
                                                                               eos_mask=response_mask,
                                                                               cliprange=clip_ratio)
-                # compute entropy loss from entropy
+                # 由 entropy 计算 entropy loss
                 entropy_loss = verl_F.masked_mean(entropy, response_mask)
 
-                # compute policy loss
+                # 计算 policy loss
                 policy_loss = pg_loss - entropy_loss * entropy_coeff
 
                 loss = policy_loss / self.gradient_accumulation
@@ -358,29 +358,29 @@ class DataParallelPPOActor(BasePPOActor):
 
         assert self.config.ppo_mini_batch_size % self.config.ppo_micro_batch_size == 0
         self.gradient_accumulation = self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size
-        temperature = bacth_data.meta_info['temperature']  # temperature must be in the data.meta_info to avoid slient error
+        temperature = bacth_data.meta_info['temperature']  # temperature 必须放在 data.meta_info 中，以避免隐蔽错误
 
         select_keys = ['responses', 'input_ids', 'attention_mask', 'position_ids']
         batch = bacth_data.select(batch_keys=select_keys).batch
 
-        # Split to make minibatch iterator for updating the actor
-        # See PPO paper for details. https://arxiv.org/abs/1707.06347
+        # 切分以构建用于更新 actor 的 minibatch 迭代器
+        # 详情参见 PPO 论文 https://arxiv.org/abs/1707.06347
         dataloader = batch.split(self.config.ppo_mini_batch_size)
         print("dataloader_length:", len(dataloader))
         
         metrics = {}
         for batch_idx, data in enumerate(dataloader):
-            # split batch into micro_batches
+            # 将 batch 切分为 micro_batch
             mini_batch = data
             if self.config.use_dynamic_bsz:
                 max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
                 micro_batches, _ = rearrange_micro_batches(batch=mini_batch, max_token_len=max_token_len)
             else:
-                # split batch into micro_batches
+                # 将 batch 切分为 micro_batch
                 micro_batches = mini_batch.split(self.config.ppo_micro_batch_size)
 
             for data in micro_batches:
-                data = data.cuda()  # actor device is cpu when using offload
+                data = data.cuda()  # 使用 offload 时 actor 设备位于 CPU
                 responses = data['responses']
                 response_length = responses.size(1)
                 attention_mask = data['attention_mask']

@@ -22,20 +22,20 @@ from tqdm.asyncio import tqdm
 #         raise NotImplementedError
 
 # def compute_score(completions, references, tasks):
-#     # Process results
+#     # 处理结果
 #     scores = []
 #     format = []
 #     results = process_completion(completions, tasks, references)
 #     for result, completion, reference, task in zip(results, completions, references, tasks):
 #         if isinstance(result, Exception) or result is None:
-#             # Handle failed or timed-out tasks
+#             # 处理失败或超时的任务
 #             scores.append(0.0)
 #             format.append(0.0)
 #             continue
 
 #         try:
-#             # Process result based on task type
-#             if task == 'code' and not result[0]: # if task is code, the reference should be json string
+#             # 根据任务类型处理结果
+#             if task == 'code' and not result[0]: # 若任务是 code，则 reference 应为 json 字符串
 #                 correct = 0
 #                 total = min(
 #                     len(json.loads(reference)['inputs'] if not isinstance(reference, dict) else reference['inputs']),
@@ -78,7 +78,7 @@ from tqdm.asyncio import tqdm
 
 # async def process_row_with_timeout(completion, reference, task, executor, timeout=30.0):
 #     """
-#     Process a single row with a timeout.
+#     处理单行数据，带超时限制。
 #     """
 #     loop = asyncio.get_running_loop()
 #     try:
@@ -92,24 +92,24 @@ from tqdm.asyncio import tqdm
 #         return result
 #     except asyncio.TimeoutError:
 #         print(f"Timeout occurred for completion: {completion[:10]}, reference: {reference[:10]}")
-#         return None  # Default value for timed-out rows
+#         return None  # 超时行的默认返回值
 #     except Exception as e:
 #         print(f"Error processing completion: {completion[:10]}, Error: {e}")
-#         return None  # Default value for failed rows
+#         return None  # 失败行的默认返回值
 
 # async def parallel_evaluate_continual_async(completions, references, tasks, num_processes, task_timeout=30.0):
 #     """
-#     Evaluate rows in parallel with a process pool and timeout handling.
+#     使用进程池并行评估各行数据，并处理超时。
 #     """
 #     scores = []
 #     format = []
 #     with ProcessPoolExecutor(max_workers=num_processes) as executor:
-#         # Create tasks for all rows
+#         # 为所有行创建任务
 #         tasks_async = [
 #             process_row_with_timeout(completion, reference, task, executor, timeout=task_timeout)
 #             for completion, reference, task in zip(completions, references, tasks)
 #         ]
-#         # Use tqdm for progress tracking
+#         # 使用 tqdm 跟踪进度
 #         try:
 #             results = await asyncio.gather(*tasks_async, return_exceptions=False)
 #         except Exception as exc:
@@ -120,17 +120,17 @@ from tqdm.asyncio import tqdm
 #                 except Exception as kill_err:
 #                     print('shut down failed: '+str(kill_err))
 
-#     # Process results
+#     # 处理结果
 #     for result, completion, reference, task in zip(results, completions, references, tasks):
 #         if isinstance(result, Exception) or result is None:
-#             # Handle failed or timed-out tasks
+#             # 处理失败或超时的任务
 #             scores.append(0.0)
 #             format.append(0.0)
 #             continue
 
 #         try:
-#             # Process result based on task type
-#             if task == 'code' and not result[0]: # if task is code, the reference should be json string
+#             # 根据任务类型处理结果
+#             if task == 'code' and not result[0]: # 若任务是 code，则 reference 应为 json 字符串
 #                 correct = 0
 #                 total = min(
 #                     len(json.loads(reference)['inputs'] if not isinstance(reference, dict) else reference['inputs']),
@@ -155,8 +155,8 @@ from tqdm.asyncio import tqdm
 #     return scores, format
 
 # def compute_score(completions, references, tasks):
-#     # three lists should have identical length
-#     # TODO: make this one completely asynchronous, which means the main process can do other things(e.g., forwarding reward model) while computing score
+#     # 三个列表的长度应完全一致
+#     # TODO: 将其改为完全异步，即主进程在计算得分的同时可以做其他事情（例如前向奖励模型）
 #     assert len(completions) == len(references) == len(tasks)
 #     try:
 #         return asyncio.run(parallel_evaluate_continual_async(completions, references, tasks, num_processes=64))
@@ -195,7 +195,7 @@ def process_completion(completion, task, reference):
 
 async def process_row_with_timeout(completion, reference, task, executor, timeout=30.0):
     """
-    Process a single row with a timeout.
+    处理单行数据，带超时限制。
     """
     loop = asyncio.get_running_loop()
     try:
@@ -209,24 +209,24 @@ async def process_row_with_timeout(completion, reference, task, executor, timeou
         return result
     except asyncio.TimeoutError:
         print(f"Timeout occurred for completion: {completion[:10]}, reference: {reference[:10]}")
-        return None  # Default value for timed-out rows
+        return None  # 超时行的默认返回值
     except Exception as e:
         print(f"Error processing completion: {completion[:10]}, Error: {e}")
-        return None  # Default value for failed rows
+        return None  # 失败行的默认返回值
 
 async def parallel_evaluate_continual_async(completions, references, tasks, num_processes, task_timeout=600.0):
     """
-    Evaluate rows in parallel with a process pool and timeout handling.
+    使用进程池并行评估各行数据，并处理超时。
     """
     scores = []
     format = []
     with ProcessPoolExecutor(max_workers=num_processes) as executor:
-        # Create tasks for all rows
+        # 为所有行创建任务
         tasks_async = [
             process_row_with_timeout(completion, reference, task, executor, timeout=task_timeout)
             for completion, reference, task in zip(completions, references, tasks)
         ]
-        # Use tqdm for progress tracking
+        # 使用 tqdm 跟踪进度
         try:
             results = await asyncio.gather(*tasks_async, return_exceptions=False)
         except Exception as exc:
@@ -237,17 +237,17 @@ async def parallel_evaluate_continual_async(completions, references, tasks, num_
                 except Exception as kill_err:
                     print('shut down failed: '+str(kill_err))
 
-    # Process results
+    # 处理结果
     for result, completion, reference, task in zip(results, completions, references, tasks):
         if isinstance(result, Exception) or result is None:
-            # Handle failed or timed-out tasks
+            # 处理失败或超时的任务
             scores.append(0.0)
             format.append(0.0)
             continue
 
         try:
-            # Process result based on task type
-            if task == 'code' and not result[0]: # if task is code, the reference should be json string
+            # 根据任务类型处理结果
+            if task == 'code' and not result[0]: # 若任务是 code，则 reference 应为 json 字符串
                 correct = 0
                 total = min(
                     len(json.loads(reference)['inputs'] if not isinstance(reference, dict) else reference['inputs']),
@@ -273,8 +273,8 @@ async def parallel_evaluate_continual_async(completions, references, tasks, num_
     return scores, format
 
 def compute_score(completions, references, tasks):
-    # three lists should have identical length
-    # TODO: make this one completely asynchronous, which means the main process can do other things(e.g., forwarding reward model) while computing score
+    # 三个列表的长度应完全一致
+    # TODO: 将其改为完全异步，即主进程在计算得分的同时可以做其他事情（例如前向奖励模型）
     assert len(completions) == len(references) == len(tasks)
     try:
         return asyncio.run(parallel_evaluate_continual_async(completions, references, tasks, num_processes=128))

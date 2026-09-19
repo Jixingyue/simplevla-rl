@@ -17,8 +17,8 @@ from typing import List, Optional, Type
 
 import torch.nn as nn
 
-# Supported models using HF Rmpad
-# TODO(sgm): HF may supported more than listed here, we should add more after testing
+# 使用 HF Rmpad 的受支持模型
+# TODO(sgm): HF 支持的模型可能多于这里列出的，我们应在测试后添加更多
 from transformers import LlamaConfig, MistralConfig, GemmaConfig, Qwen2Config
 
 
@@ -32,8 +32,8 @@ def check_model_support_rmpad(model_type: str):
                          f"RMPad supported architectures: {_REOVEPAD_MODELS.keys()}")
 
 
-# Supported models in Megatron-LM
-# Architecture -> (module, class).
+# Megatron-LM 中受支持的模型
+# 模型结构 -> (模块, 类)。
 _MODELS = {
     "LlamaForCausalLM":
         ("llama", ("ParallelLlamaForCausalLMRmPadPP", "ParallelLlamaForValueRmPadPP", "ParallelLlamaForCausalLMRmPad")),
@@ -42,7 +42,7 @@ _MODELS = {
 }
 
 
-# return model class
+# 返回模型类
 class ModelRegistry:
 
     @staticmethod
@@ -53,9 +53,9 @@ class ModelRegistry:
         megatron = "megatron"
 
         module_name, model_cls_name = _MODELS[model_arch]
-        if not value:  # actor/ref
+        if not value:  # actor/ref 模型
             model_cls_name = model_cls_name[0]
-        elif value:  # critic/rm
+        elif value:  # critic/rm 模型
             model_cls_name = model_cls_name[1]
 
         module = importlib.import_module(f"verl.models.{module_name}.{megatron}.modeling_{module_name}_megatron")

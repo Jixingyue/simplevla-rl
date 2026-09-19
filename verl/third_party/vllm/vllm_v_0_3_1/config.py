@@ -29,47 +29,41 @@ _GB = 1 << 30
 
 
 class ModelConfig:
-    """Configuration for the model.
+    """模型配置。
 
     Args:
-        model: Name or path of the huggingface model to use.
-        tokenizer: Name or path of the huggingface tokenizer to use.
-        tokenizer_mode: Tokenizer mode. "auto" will use the fast tokenizer if
-            available, and "slow" will always use the slow tokenizer.
-        trust_remote_code: Trust remote code (e.g., from HuggingFace) when
-            downloading the model and tokenizer.
-        download_dir: Directory to download and load the weights, default to the
-            default cache directory of huggingface.
-        load_format: The format of the model weights to load:
-            "auto" will try to load the weights in the safetensors format and
-                fall back to the pytorch bin format if safetensors format is
-                not available.
-            "pt" will load the weights in the pytorch bin format.
-            "safetensors" will load the weights in the safetensors format.
-            "npcache" will load the weights in pytorch format and store
-                a numpy cache to speed up the loading.
-            "dummy" will initialize the weights with random values, which is
-                mainly for profiling.
-        dtype: Data type for model weights and activations. The "auto" option
-            will use FP16 precision for FP32 and FP16 models, and BF16 precision
-            for BF16 models.
-        seed: Random seed for reproducibility.
-        revision: The specific model version to use. It can be a branch name,
-            a tag name, or a commit id. If unspecified, will use the default
-            version.
-        tokenizer_revision: The specific tokenizer version to use. It can be a
-            branch name, a tag name, or a commit id. If unspecified, will use
-            the default version.
-        max_model_len: Maximum length of a sequence (including prompt and
-            output). If None, will be derived from the model.
-        quantization: Quantization method that was used to quantize the model
-            weights. If None, we assume the model weights are not quantized.
-        enforce_eager: Whether to enforce eager execution. If True, we will
-            disable CUDA graph and always execute the model in eager mode.
-            If False, we will use CUDA graph and eager execution in hybrid.
-        max_context_len_to_capture: Maximum context len covered by CUDA graphs.
-            When a sequence has context length larger than this, we fall back
-            to eager mode.
+        model: 要使用的 huggingface 模型的名称或路径。
+        tokenizer: 要使用的 huggingface tokenizer 的名称或路径。
+        tokenizer_mode: Tokenizer 模式。"auto" 会在可用时使用快速 tokenizer，
+            "slow" 则始终使用慢速 tokenizer。
+        trust_remote_code: 下载模型和 tokenizer 时是否信任远程代码
+            （例如来自 HuggingFace 的代码）。
+        download_dir: 下载和加载权重的目录，默认为 huggingface 的
+            默认缓存目录。
+        load_format: 要加载的模型权重格式：
+            "auto" 会尝试以 safetensors 格式加载权重，如果该格式
+                不可用则回退到 pytorch bin 格式。
+            "pt" 会以 pytorch bin 格式加载权重。
+            "safetensors" 会以 safetensors 格式加载权重。
+            "npcache" 会以 pytorch 格式加载权重并存储一个 numpy 缓存
+                以加快加载速度。
+            "dummy" 会用随机值初始化权重，主要用于性能分析。
+        dtype: 模型权重和激活值的数据类型。"auto" 选项对 FP32 和
+            FP16 模型使用 FP16 精度，对 BF16 模型使用 BF16 精度。
+        seed: 用于可复现性的随机种子。
+        revision: 要使用的具体模型版本。可以是分支名、标签名或
+            commit id。若未指定，则使用默认版本。
+        tokenizer_revision: 要使用的具体 tokenizer 版本。可以是分支名、
+            标签名或 commit id。若未指定，则使用默认版本。
+        max_model_len: 序列的最大长度（包括 prompt 和输出）。
+            若为 None，则从模型推导。
+        quantization: 用于量化模型权重的量化方法。若为 None，
+            则假设模型权重未被量化。
+        enforce_eager: 是否强制使用 eager 模式执行。若为 True，
+            将禁用 CUDA graph 并始终以 eager 模式执行模型。
+            若为 False，将混合使用 CUDA graph 和 eager 执行。
+        max_context_len_to_capture: CUDA graph 覆盖的最大上下文长度。
+            当序列的上下文长度超过该值时，回退到 eager 模式。
     """
 
     def __init__(
@@ -127,7 +121,7 @@ class ModelConfig:
         if self.quantization is not None:
             self.quantization = self.quantization.lower()
 
-        # Parse quantization method from the HF model config, if available.
+        # 从 HF 模型配置中解析量化方法（如果可用）。
         hf_quant_config = getattr(self.hf_config, "quantization_config", None)
         if hf_quant_config is not None:
             hf_quant_method = str(hf_quant_config["quant_method"]).lower()
@@ -155,7 +149,7 @@ class ModelConfig:
             self.max_context_len_to_capture = self.max_model_len
         self.max_context_len_to_capture = min(self.max_context_len_to_capture, self.max_model_len)
         if (self.quantization in ["gptq", "squeezellm"] and not self.enforce_eager):
-            # Related issue: https://github.com/vllm-project/vllm/issues/2147
+            # 相关 issue：https://github.com/vllm-project/vllm/issues/2147
             logger.warning(f"{self.quantization} does not support CUDA graph "
                            "yet. Disabling CUDA graph.")
             self.enforce_eager = True
@@ -188,30 +182,30 @@ class ModelConfig:
         return self.hf_config.hidden_size
 
     def get_head_size(self) -> int:
-        # FIXME(woosuk): This may not be true for all models.
+        # FIXME(woosuk): 这可能并不对所有模型都成立。
         return self.hf_config.hidden_size // self.hf_config.num_attention_heads
 
     def get_total_num_kv_heads(self) -> int:
-        """Returns the total number of KV heads."""
-        # For GPTBigCode & Falcon:
-        # NOTE: for falcon, when new_decoder_architecture is True, the
-        # multi_query flag is ignored and we use n_head_kv for the number of
-        # KV heads.
+        """返回 KV 头的总数。"""
+        # 针对 GPTBigCode 与 Falcon：
+        # NOTE: 对于 falcon，当 new_decoder_architecture 为 True 时，
+        # multi_query 标志会被忽略，我们使用 n_head_kv 作为
+        # KV 头的数量。
         falcon_model_types = ["falcon", "RefinedWeb", "RefinedWebModel"]
         new_decoder_arch_falcon = (self.hf_config.model_type in falcon_model_types and
                                    getattr(self.hf_config, "new_decoder_architecture", False))
         if not new_decoder_arch_falcon and getattr(self.hf_config, "multi_query", False):
-            # Multi-query attention, only one KV head.
-            # Currently, tensor parallelism is not supported in this case.
+            # 多查询注意力（Multi-query attention），只有一个 KV 头。
+            # 目前这种情况不支持张量并行。
             return 1
 
         attributes = [
-            # For Falcon:
+            # 针对 Falcon：
             "n_head_kv",
             "num_kv_heads",
-            # For LLaMA-2:
+            # 针对 LLaMA-2：
             "num_key_value_heads",
-            # For ChatGLM:
+            # 针对 ChatGLM：
             "multi_query_group_num",
         ]
         for attr in attributes:
@@ -219,17 +213,16 @@ class ModelConfig:
             if num_kv_heads is not None:
                 return num_kv_heads
 
-        # For non-grouped-query attention models, the number of KV heads is
-        # equal to the number of attention heads.
+        # 对于非分组查询注意力（non-grouped-query attention）模型，
+        # KV 头的数量等于注意力头的数量。
         return self.hf_config.num_attention_heads
 
     def get_num_kv_heads(self, parallel_config: "ParallelConfig") -> int:
-        """Returns the number of KV heads per GPU."""
+        """返回每个 GPU 上的 KV 头数量。"""
         total_num_kv_heads = self.get_total_num_kv_heads()
-        # If tensor parallelism is used, we divide the number of KV heads by
-        # the tensor parallel size. We will replicate the KV heads in the
-        # case where the number of KV heads is smaller than the tensor
-        # parallel size so each GPU has at least one KV head.
+        # 如果使用张量并行，我们将 KV 头的数量除以张量并行大小。
+        # 当 KV 头的数量小于张量并行大小时，会复制 KV 头，
+        # 以确保每个 GPU 至少有一个 KV 头。
         return max(1, total_num_kv_heads // parallel_config.tensor_parallel_size)
 
     def get_num_layers(self, parallel_config: "ParallelConfig") -> int:
@@ -238,14 +231,13 @@ class ModelConfig:
 
 
 class CacheConfig:
-    """Configuration for the KV cache.
+    """KV cache 的配置。
 
     Args:
-        block_size: Size of a cache block in number of tokens.
-        gpu_memory_utilization: Fraction of GPU memory to use for the
-            vLLM execution.
-        swap_space: Size of the CPU swap space per GPU (in GiB).
-        cache_dtype: Data type for kv cache storage.
+        block_size: 缓存块的大小（以 token 数计）。
+        gpu_memory_utilization: vLLM 执行所使用的 GPU 内存比例。
+        swap_space: 每个 GPU 的 CPU 交换空间大小（GiB）。
+        cache_dtype: KV cache 存储的数据类型。
     """
 
     def __init__(
@@ -264,7 +256,7 @@ class CacheConfig:
         self._verify_args()
         self._verify_cache_dtype()
 
-        # Will be set after profiling.
+        # 将在性能分析（profiling）之后设置。
         self.num_gpu_blocks = None
         self.num_cpu_blocks = None
 
@@ -296,8 +288,8 @@ class CacheConfig:
         parallel_config: "ParallelConfig",
     ) -> None:
         total_cpu_memory = get_cpu_memory()
-        # FIXME(woosuk): Here, it is assumed that the GPUs in a tensor parallel
-        # group are in the same node. However, the GPUs may span multiple nodes.
+        # FIXME(woosuk): 这里假设张量并行组中的 GPU 位于同一个节点上。
+        # 然而，GPU 可能分布在多个节点上。
         num_gpus_per_node = parallel_config.tensor_parallel_size
         cpu_memory_usage = self.swap_space_bytes * num_gpus_per_node
 
@@ -311,19 +303,18 @@ class CacheConfig:
 
 
 class ParallelConfig:
-    """Configuration for the distributed execution.
+    """分布式执行的配置。
 
     Args:
-        pipeline_parallel_size: Number of pipeline parallel groups.
-        tensor_parallel_size: Number of tensor parallel groups.
-        worker_use_ray: Whether to use Ray for model workers. Will be set to
-            True if either pipeline_parallel_size or tensor_parallel_size is
-            greater than 1.
-        max_parallel_loading_workers: Maximum number of multiple batches
-            when load model sequentially. To avoid RAM OOM when using tensor
-            parallel and large models.
-        disable_custom_all_reduce: Disable the custom all-reduce kernel and
-            fall back to NCCL.
+        pipeline_parallel_size: 流水线并行组的数量。
+        tensor_parallel_size: 张量并行组的数量。
+        worker_use_ray: 是否对模型 worker 使用 Ray。当
+            pipeline_parallel_size 或 tensor_parallel_size 大于 1 时
+            会被设置为 True。
+        max_parallel_loading_workers: 顺序加载模型时每批的最大数量。
+            用于避免在张量并行加载大模型时出现 RAM OOM。
+        disable_custom_all_reduce: 禁用自定义 all-reduce kernel，
+            回退到 NCCL。
     """
 
     def __init__(
@@ -358,8 +349,8 @@ class ParallelConfig:
                 logger.info("Disabled the custom all-reduce kernel because it is not "
                             "supported with pipeline parallelism.")
 
-        # FIXME(woosuk): Fix the stability issues and re-enable the custom
-        # all-reduce kernel.
+        # FIXME(woosuk): 修复稳定性问题后重新启用自定义
+        # all-reduce kernel。
         if not self.disable_custom_all_reduce and self.world_size > 1:
             self.disable_custom_all_reduce = True
             logger.info("Custom all-reduce kernels are temporarily disabled due to "
@@ -368,16 +359,13 @@ class ParallelConfig:
 
 
 class SchedulerConfig:
-    """Scheduler configuration.
+    """调度器（Scheduler）配置。
 
     Args:
-        max_num_batched_tokens: Maximum number of tokens to be processed in
-            a single iteration.
-        max_num_seqs: Maximum number of sequences to be processed in a single
-            iteration.
-        max_model_len: Maximum length of a sequence (including prompt
-            and generated text).
-        max_paddings: Maximum number of paddings to be added to a batch.
+        max_num_batched_tokens: 单次迭代中可处理的最大 token 数。
+        max_num_seqs: 单次迭代中可处理的最大序列数。
+        max_model_len: 序列的最大长度（包括 prompt 和生成的文本）。
+        max_paddings: 一个 batch 中可添加的最大 padding 数。
     """
 
     def __init__(
@@ -390,8 +378,8 @@ class SchedulerConfig:
         if max_num_batched_tokens is not None:
             self.max_num_batched_tokens = max_num_batched_tokens
         else:
-            # If max_model_len is too short, use 2048 as the default value for
-            # higher throughput.
+            # 如果 max_model_len 太短，为了获得更高吞吐量，
+            # 使用 2048 作为默认值。
             self.max_num_batched_tokens = max(max_model_len, 2048)
         self.max_num_seqs = max_num_seqs
         self.max_model_len = max_model_len
@@ -425,11 +413,11 @@ class LoRAConfig:
     max_cpu_loras: Optional[int] = None
     lora_dtype: Optional[torch.dtype] = None
     lora_extra_vocab_size: int = 256
-    # This is a constant.
+    # 这是一个常量。
     lora_vocab_padding_size: ClassVar[int] = 256
 
     def __post_init__(self):
-        # Keep this in sync with csrc/punica/bgmv/bgmv_config.h
+        # 与 csrc/punica/bgmv/bgmv_config.h 保持同步
         possible_max_ranks = (8, 16, 32, 64)
         possible_lora_extra_vocab_size = (0, 256, 512)
         if self.max_lora_rank not in possible_max_ranks:
@@ -476,8 +464,8 @@ def _get_and_verify_dtype(
     config: PretrainedConfig,
     dtype: Union[str, torch.dtype],
 ) -> torch.dtype:
-    # NOTE: getattr(config, "torch_dtype", torch.float32) is not correct
-    # because config.torch_dtype can be None.
+    # NOTE: getattr(config, "torch_dtype", torch.float32) 是不正确的，
+    # 因为 config.torch_dtype 可能为 None。
     config_dtype = getattr(config, "torch_dtype", None)
     if config_dtype is None:
         config_dtype = torch.float32
@@ -486,8 +474,7 @@ def _get_and_verify_dtype(
         dtype = dtype.lower()
         if dtype == "auto":
             if config_dtype == torch.float32:
-                # Following the common practice, we use float16 for float32
-                # models.
+                # 遵循常见做法，对 float32 模型使用 float16。
                 torch_dtype = torch.float16
             else:
                 torch_dtype = config_dtype
@@ -507,16 +494,16 @@ def _get_and_verify_dtype(
         raise ValueError(f"dtype \'{dtype}\' is not supported in ROCm. "
                          f"Supported dtypes are {rocm_supported_dtypes}")
 
-    # Verify the dtype.
+    # 校验 dtype。
     if torch_dtype != config_dtype:
         if torch_dtype == torch.float32:
-            # Upcasting to float32 is allowed.
+            # 向上转换为 float32 是允许的。
             pass
         elif config_dtype == torch.float32:
-            # Downcasting from float32 to float16 or bfloat16 is allowed.
+            # 从 float32 向下转换为 float16 或 bfloat16 是允许的。
             pass
         else:
-            # Casting between float16 and bfloat16 is allowed with a warning.
+            # 在 float16 和 bfloat16 之间转换是允许的，会给出警告。
             logger.warning(f"Casting {config_dtype} to {torch_dtype}.")
 
     return torch_dtype
@@ -526,18 +513,18 @@ def _get_and_verify_max_len(
     hf_config: PretrainedConfig,
     max_model_len: Optional[int],
 ) -> int:
-    """Get and verify the model's maximum length."""
+    """获取并校验模型的最大长度。"""
     derived_max_model_len = float("inf")
     possible_keys = [
-        # OPT
+        # OPT 模型
         "max_position_embeddings",
-        # GPT-2
+        # GPT-2 模型
         "n_positions",
-        # MPT
+        # MPT 模型
         "max_seq_len",
-        # ChatGLM2
+        # ChatGLM2 模型
         "seq_length",
-        # Others
+        # 其他模型
         "max_sequence_length",
         "max_seq_length",
         "seq_len",
@@ -548,7 +535,7 @@ def _get_and_verify_max_len(
             derived_max_model_len = min(derived_max_model_len, max_len_key)
     if derived_max_model_len == float("inf"):
         if max_model_len is not None:
-            # If max_model_len is specified, we use it.
+            # 如果指定了 max_model_len，则使用它。
             return max_model_len
 
         default_max_len = 2048

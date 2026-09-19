@@ -173,7 +173,7 @@ class Robotwin_Dataset(Dataset):
                     suc_seeds = self.twin2_success_seeds[self.task_name]
                     seeds = [suc_seeds[k] for k in range(int(self.num_trials_per_task))]
                 else:
-                    seeds = list(range(0, int(self.num_trials_per_task))) * 5  # repeat 5 time. make sure train dataset has enough batch
+                    seeds = list(range(0, int(self.num_trials_per_task))) * 5  # 重复 5 次，确保训练数据集有足够的 batch
                     seeds = [ s+self.train_start_seed_id for s in seeds ]
             else:
                 if self.version == "2.0":

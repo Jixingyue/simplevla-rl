@@ -1,8 +1,8 @@
 """
 configuration_prismatic.py
 
-HuggingFace-style configuration definition for Prismatic VLMs, inheriting from `transformers.PretrainedConfig`.
-Default configuration specifies `siglip-224px+7b`.
+面向 Prismatic VLM 的 HuggingFace 风格配置定义，继承自 `transformers.PretrainedConfig`。
+默认配置为 `siglip-224px+7b`。
 """
 
 from typing import Any, Dict, List, Optional
@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from transformers import PretrainedConfig
 from transformers.models.auto import CONFIG_MAPPING
 
-# === Utilities for Mapping Prismatic names to HF names ===
+# === 将 Prismatic 名称映射到 HF 名称的工具 ===
 # fmt: off
 VISION_BACKBONE_TO_RESOLUTION: Dict[str, List[int]] = {
     "clip-vit-l": [224], "siglip-vit-so400m": [224], "dinov2-vit-l": [224], "in1k-vit-l": [224],
@@ -93,13 +93,13 @@ class PrismaticConfig(PretrainedConfig):
         if llm_backbone_id not in VALID_LLM_BACKBONES:
             raise ValueError(f"LLM backbone `{llm_backbone_id}` not in {VALID_LLM_BACKBONES = }")
 
-        # Set Prismatic Configuration Fields
+        # 设置 Prismatic 配置字段
         self.vision_backbone_id = vision_backbone_id
         self.llm_backbone_id = llm_backbone_id
         self.arch_specifier = arch_specifier
         self.output_projector_states = output_projector_states
 
-        # [Contract] All vision backbone parameters are lists =>> supports fused backbones with different preprocessing
+        # [约定] 所有视觉骨干的参数均为列表 =>> 支持采用不同预处理的融合（fused）骨干
         self.use_fused_vision_backbone = (
             use_fused_vision_backbone
             if use_fused_vision_backbone is not None
@@ -115,14 +115,14 @@ class PrismaticConfig(PretrainedConfig):
         self.llm_max_length = llm_max_length
         self.pad_token_id, self.pad_to_multiple_of = pad_token_id, pad_to_multiple_of
 
-        # [IMPORTANT] HF Utilities actually look for a `text_config` field... we need to use that specific naming!
+        # [重要] HF 工具实际上会查找 `text_config` 字段……我们必须使用这个特定命名！
         self.text_config = (
             CONFIG_MAPPING[LLM_BACKBONE_TO_HF_METACLASS[self.llm_backbone_id]](**text_config)
             if text_config is not None
             else CONFIG_MAPPING[LLM_BACKBONE_TO_HF_METACLASS[self.llm_backbone_id]]()
         )
 
-        # Dispatch **kwargs to super() =>> note that `pad_token_id` collides, so we pass it in here as well...
+        # 将 **kwargs 传给 super() =>> 注意 `pad_token_id` 会冲突，因此在这里也传入它……
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
 

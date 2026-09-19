@@ -23,7 +23,7 @@ import copy
 
 
 def karmarkar_karp(seqlen_list: List[int], k_partitions: int, equal_size: bool):
-    # see: https://en.wikipedia.org/wiki/Largest_differencing_method
+    # 参见：https://en.wikipedia.org/wiki/Largest_differencing_method
     class Set:
 
         def __init__(self) -> None:
@@ -50,7 +50,7 @@ def karmarkar_karp(seqlen_list: List[int], k_partitions: int, equal_size: bool):
 
         def __init__(self, items: List[Tuple[int, int]], k: int) -> None:
             self.k = k
-            # sets should always be decreasing order
+            # 集合应始终保持降序
             self.sets = [Set() for _ in range(k)]
             assert len(items) in [1, k], f"{len(items)} not in [1, {k}]"
             for i, (idx, seqlen) in enumerate(items):
@@ -79,9 +79,9 @@ def karmarkar_karp(seqlen_list: List[int], k_partitions: int, equal_size: bool):
             return self.sets[0].sum - self.sets[-1].sum
 
         def __lt__(self, other):
-            # least heap, let the state with largest spread to be popped first,
-            # if the spread is the same, let the state who has the largest set
-            # to be popped first.
+            # 最小堆，让具有最大 spread 的状态最先弹出，
+            # 如果 spread 相同，则让拥有最大集合的
+            # 状态最先弹出。
             if self.spread != other.spread:
                 return self.spread > other.spread
             return self.sets[0] > other.sets[0]
@@ -117,7 +117,7 @@ def karmarkar_karp(seqlen_list: List[int], k_partitions: int, equal_size: bool):
     while len(states_pq) > 1:
         state0 = heapq.heappop(states_pq)
         state1 = heapq.heappop(states_pq)
-        # merge states
+        # 合并状态
         state0.merge(state1)
         heapq.heappush(states_pq, state0)
 
@@ -150,20 +150,20 @@ def greedy_partition(seqlen_list: List[int], k_partitions: int, equal_size: bool
 
 
 def get_seqlen_balanced_partitions(seqlen_list: List[int], k_partitions: int, equal_size: bool):
-    """ get order of seq lengths to make partitions balanced, this is
-        used in balacing sum of seqlength across dp ranks and microbatches
+    """ 返回使各分区平衡的序列长度排列顺序，用于
+        在 dp rank 和 microbatch 之间平衡序列长度之和
     Parameters:
         seqlen_list (List[int]):
-            seq lengths of each items
+            每个条目的序列长度
         k_partitions (int):
-            resulting number of partitions
+            得到的分区数量
         equal_size (bool):
-            if True, number of items in each partitions must be equal.
-            if False, only consider balancing the sum, each partition can have
-            variable number of items
+            如果为 True，每个分区中的条目数量必须相等。
+            如果为 False，只考虑平衡总和，每个分区可以包含
+            不同数量的条目
     Returns:
         partitions (List[List[int]]):
-            return k_partitions list containing the index of items.
+            返回包含条目索引的 k_partitions 个列表。
     """
     assert len(seqlen_list) >= k_partitions, f"number of items:[{len(seqlen_list)}] < k_partitions:[{k_partitions}]"
 
@@ -184,7 +184,7 @@ def get_seqlen_balanced_partitions(seqlen_list: List[int], k_partitions: int, eq
 
 
 def log_seqlen_unbalance(seqlen_list: List[int], partitions: List[List[int]], prefix):
-    # add some metrics of seqlen sum on dp ranks
+    # 添加一些关于 dp rank 上序列长度总和的指标
     k_partition = len(partitions)
     # assert len(seqlen_list) % k_partition == 0
     batch_size = len(seqlen_list) // k_partition
@@ -222,10 +222,10 @@ def ceildiv(a, b):
 
 
 def rearrange_micro_batches(batch: TensorDict, max_token_len, dp_group=None):
-    """Split the batch into a list of micro_batches, where the max_token_len is smaller than max_token_len
-    and the number of valid tokens in each micro batch is well balanced.
+    """将 batch 切分为多个 micro_batch 组成的列表，其中每个 micro_batch 的 token 长度不超过 max_token_len，
+    且每个 micro batch 中的有效 token 数量是均衡的。
     """
-    # this is per local micro_bsz
+    # 这是针对每个本地 micro_bsz 的
     max_seq_len = batch['attention_mask'].shape[-1]
     assert max_token_len >= max_seq_len, \
         f'max_token_len must be greater than the sequence length. Got {max_token_len=} and {max_seq_len=}'

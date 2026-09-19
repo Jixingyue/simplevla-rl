@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Contains commonly used utilities for ray
+包含常用的 Ray 工具函数
 """
 
 import ray
@@ -34,7 +34,7 @@ def parallel_put(data_list, max_workers=None):
         for future in concurrent.futures.as_completed(data_list_f):
             res_lst.append(future.result())
 
-        # reorder based on index
+        # 按索引重新排序
         output = [None for _ in range(len(data_list))]
         for res in res_lst:
             index, data_ref = res

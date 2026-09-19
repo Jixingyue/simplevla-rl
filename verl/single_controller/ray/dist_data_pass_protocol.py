@@ -20,4 +20,4 @@ from verl import DataProto
 
 class DistDataProto(DataProto, ray.ObjectRef):
     ...
-    # skip for prototype, assuming dp size kept among all Roles
+    # 原型阶段暂时跳过，假定所有 Role 的 dp size 保持一致

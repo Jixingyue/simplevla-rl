@@ -25,7 +25,7 @@ from .config import ModelConfig
 
 @dataclass
 class EngineArgs:
-    """Arguments for vLLM engine."""
+    """vLLM 引擎的参数。"""
     model_hf_config: PretrainedConfig = None
     dtype: str = 'auto'
     kv_cache_dtype: str = 'auto'
@@ -59,9 +59,9 @@ class EngineArgs:
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-        """Shared CLI arguments for vLLM engine."""
-        # Model arguments
-        # TODO(shengguangming): delete the unused args
+        """vLLM 引擎共享的 CLI 参数。"""
+        # 模型参数
+        # TODO(shengguangming): 删除未使用的参数
         parser.add_argument('--model',
                             type=str,
                             default='facebook/opt-125m',
@@ -123,7 +123,7 @@ class EngineArgs:
                             default=None,
                             help='model context length. If unspecified, '
                             'will be automatically derived from the model.')
-        # Parallel arguments
+        # 并行参数
         parser.add_argument('--worker-use-ray',
                             action='store_true',
                             help='use Ray for distributed serving, will be '
@@ -138,13 +138,13 @@ class EngineArgs:
                             type=int,
                             default=EngineArgs.tensor_parallel_size,
                             help='number of tensor parallel replicas')
-        # KV cache arguments
+        # KV cache 参数
         parser.add_argument('--block-size',
                             type=int,
                             default=EngineArgs.block_size,
                             choices=[8, 16, 32],
                             help='token block size')
-        # TODO(woosuk): Support fine-grained seeds (e.g., seed per request).
+        # TODO(woosuk): 支持更细粒度的种子（例如每个请求一个种子）。
         parser.add_argument('--seed', type=int, default=EngineArgs.seed, help='random seed')
         parser.add_argument('--swap-space',
                             type=int,
@@ -165,7 +165,7 @@ class EngineArgs:
                             default=EngineArgs.max_num_seqs,
                             help='maximum number of sequences per iteration')
         parser.add_argument('--disable-log-stats', action='store_true', help='disable logging statistics')
-        # Quantization settings.
+        # 量化设置。
         parser.add_argument('--quantization',
                             '-q',
                             type=str,
@@ -176,9 +176,9 @@ class EngineArgs:
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace) -> 'EngineArgs':
-        # Get the list of attributes of this dataclass.
+        # 获取该 dataclass 的属性列表。
         attrs = [attr.name for attr in dataclasses.fields(cls)]
-        # Set the attributes from the parsed arguments.
+        # 用解析后的参数设置这些属性。
         engine_args = cls(**{attr: getattr(args, attr) for attr in attrs})
         return engine_args
 
@@ -206,7 +206,7 @@ class EngineArgs:
 
 @dataclass
 class AsyncEngineArgs(EngineArgs):
-    """Arguments for asynchronous vLLM engine."""
+    """异步 vLLM 引擎的参数。"""
     engine_use_ray: bool = False
     disable_log_requests: bool = False
     max_log_len: Optional[int] = None

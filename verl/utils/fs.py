@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # -*- coding: utf-8 -*-
-"""File-system agnostic IO APIs"""
+"""与文件系统无关的 IO API"""
 import os
 import tempfile
 import hashlib
@@ -35,7 +35,7 @@ def md5_encode(path: str) -> str:
 
 
 def get_local_temp_path(hdfs_path: str, cache_dir: str) -> str:
-    """Return a local temp path that joins cache_dir and basename of hdfs_path
+    """返回一个本地临时路径，由 cache_dir 与 hdfs_path 的 basename 拼接而成
 
     Args:
         hdfs_path:
@@ -44,7 +44,7 @@ def get_local_temp_path(hdfs_path: str, cache_dir: str) -> str:
     Returns:
 
     """
-    # make a base64 encoding of hdfs_path to avoid directory conflict
+    # 对 hdfs_path 做编码以避免目录冲突
     encoded_hdfs_path = md5_encode(hdfs_path)
     temp_dir = os.path.join(cache_dir, encoded_hdfs_path)
     os.makedirs(temp_dir, exist_ok=True)
@@ -53,29 +53,29 @@ def get_local_temp_path(hdfs_path: str, cache_dir: str) -> str:
 
 
 def copy_local_path_from_hdfs(src: str, cache_dir=None, filelock='.file.lock', verbose=False) -> str:
-    """Copy src from hdfs to local if src is on hdfs or directly return src.
-    If cache_dir is None, we will use the default cache dir of the system. Note that this may cause conflicts if
-    the src name is the same between calls
+    """如果 src 位于 hdfs 上，则将 src 从 hdfs 复制到本地，否则直接返回 src。
+    如果 cache_dir 为 None，将使用系统的默认缓存目录。注意，如果多次调用中
+    src 名称相同，可能会导致冲突
 
     Args:
-        src (str): a HDFS path of a local path
+        src (str): 一个 HDFS 路径或本地路径
 
     Returns:
-        a local path of the copied file
+        复制后的文件的本地路径
     """
     from filelock import FileLock
 
     assert src[-1] != '/', f'Make sure the last char in src is not / because it will cause error. Got {src}'
 
     if _is_non_local(src):
-        # download from hdfs to local
+        # 从 hdfs 下载到本地
         if cache_dir is None:
-            # get a temp folder
+            # 获取一个临时文件夹
             cache_dir = tempfile.gettempdir()
         os.makedirs(cache_dir, exist_ok=True)
         assert os.path.exists(cache_dir)
         local_path = get_local_temp_path(src, cache_dir)
-        # get a specific lock
+        # 获取一个特定的锁
         filelock = md5_encode(src) + '.lock'
         lock_file = os.path.join(cache_dir, filelock)
         with FileLock(lock_file=lock_file):

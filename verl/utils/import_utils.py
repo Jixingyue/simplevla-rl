@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utilities to check if packages are available.
-We assume package availability won't change during runtime.
+用于检查包是否可用的工具函数。
+我们假设包的可用性在运行期间不会改变。
 """
 
 from functools import cache

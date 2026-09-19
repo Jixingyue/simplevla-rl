@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-A unified tracking interface that supports logging data to different backend
+统一的 tracking 接口，支持将数据记录到不同的后端
 """
 
 from typing import List, Union

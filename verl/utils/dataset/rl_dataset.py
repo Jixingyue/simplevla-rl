@@ -62,7 +62,7 @@ def collate_fn(data_list: list[dict]) -> dict:
 
 class RLHFDataset(Dataset):
     """
-    We assume the dataset contains a column that contains prompts and other information
+    我们假设数据集中包含一列 prompt 及其他相关信息
     """
 
     def __init__(self,
@@ -108,7 +108,7 @@ class RLHFDataset(Dataset):
     def _read_files_and_tokenize(self):
         dataframes = []
         for parquet_file in self.parquet_files:
-            # read parquet files and cache
+            # 读取 parquet 文件并缓存
             dataframe = pd.read_parquet(parquet_file)
             if self.sample_num > 0:
                 dataframe = dataframe.sample(n=self.sample_num, random_state=42)
@@ -117,7 +117,7 @@ class RLHFDataset(Dataset):
 
         print(f'original dataset len: {len(self.dataframe)}')
 
-        # filter out too long prompts
+        # 过滤掉过长的 prompt
         tokenizer = self.tokenizer
         prompt_key = self.prompt_key
 
@@ -144,7 +144,7 @@ class RLHFDataset(Dataset):
 
     def __getitem__(self, item):
         """
-        Note that we also return the raw_input_ids so that it can be combined with other chat template
+        注意我们同时返回 raw_input_ids，以便与其他 chat template 组合使用
         """
         row_dict = self.dataframe.iloc[item].to_dict()
 
@@ -167,7 +167,7 @@ class RLHFDataset(Dataset):
         row_dict['attention_mask'] = attention_mask[0]
         row_dict['position_ids'] = position_ids[0]
 
-        # encode prompts without chat template
+        # 编码不带 chat template 的 prompt
         if self.return_raw_chat:
             row_dict['raw_prompt'] = chat.tolist()
 
@@ -182,7 +182,7 @@ class BufferedDataLoader:
         self.dataloader_iter = None
 
     def start_new_epoch(self):
-        """Reset for new epoch"""
+        """为新的一轮训练重置"""
         self.dataloader_iter = iter(self.dataloader)
 
     def get_next_batch(self):

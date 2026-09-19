@@ -26,12 +26,12 @@ class BaseRollout(ABC):
         """
 
         Args:
-            dataloader: an Iterable of TensorDict that consistently generates prompts. Note that the dataloader
-            should handle when the training stops.
+            dataloader: 一个由 TensorDict 组成的 Iterable，持续生成 prompts。注意 dataloader
+            应当自行处理训练何时停止。
         """
         super().__init__()
 
     @abstractmethod
     def generate_sequences(self, prompts):
-        """Generate sequences"""
+        """生成序列"""
         pass

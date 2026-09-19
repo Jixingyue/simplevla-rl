@@ -31,7 +31,7 @@ def get_device_flops(unit="T"):
         return number
 
     device_name = torch.cuda.get_device_name()
-    flops = float("inf")  # INF flops for unkown gpu type
+    flops = float("inf")  # 未知 GPU 类型时 FLOPS 取无穷大
     if "H100" in device_name or "H800" in device_name:
         flops = 989e12
     elif "A100" in device_name or "A800" in device_name:
@@ -50,9 +50,9 @@ def get_device_flops(unit="T"):
 
 class FlopsCounter:
     """
-    Used to count mfu during training loop
+    用于在训练循环中统计 MFU。
 
-    Example:
+    示例：
         flops_counter = FlopsCounter(config)
         flops_achieved, flops_promised = flops_counter.estimate_flops(tokens_list, delta_time)
 
@@ -83,38 +83,38 @@ class FlopsCounter:
         k_size = num_key_value_heads * head_dim
         v_size = num_key_value_heads * head_dim
 
-        # non-attn per layer parm
-        # Qwen2/LLama use SwiGelu, gate, having up and down linear layer in mlp
+        # 非 attention 部分每层的参数
+        # Qwen2/LLama 使用 SwiGelu，mlp 中包含 gate、up 和 down 线性层
         mlp_N = hidden_size * intermediate_size * 3
         attn_linear_N = hidden_size * (q_size + k_size + v_size + num_attention_heads * head_dim)
         emd_and_lm_head_N = vocab_size * hidden_size * 2
-        # non-attn all_layer parm
+        # 非 attention 部分所有层的参数
         dense_N = (mlp_N + attn_linear_N) * num_hidden_layers + emd_and_lm_head_N
-        # non-attn all_layer & all_token fwd & bwd flops
+        # 非 attention 部分所有层、所有 token 的前向与反向 FLOPS
         dense_N_flops = 6 * dense_N * tokens_sum
 
-        # attn all_layer & all_token fwd & bwd flops
+        # attention 部分所有层、所有 token 的前向与反向 FLOPS
         seqlen_square_sum = 0
         for seqlen in batch_seqlens:
             seqlen_square_sum += seqlen * seqlen
         attn_qkv_flops = 12 * seqlen_square_sum * head_dim * num_attention_heads * num_hidden_layers
 
-        # all_layer & all_token fwd & bwd flops
+        # 所有层、所有 token 的前向与反向 FLOPS
         flops_all_token = dense_N_flops + attn_qkv_flops
         flops_achieved = flops_all_token * (1.0 / delta_time) / 1e12
         return flops_achieved
 
     def estimate_flops(self, batch_seqlens, delta_time):
         """
-        Estimate the FLOPS based on the number of valid tokens in the current batch and the time taken.
+        基于当前 batch 中的有效 token 数量及所耗时间估算 FLOPS。
 
         Args:
-            batch_seqlens (List[int]): A list where each element represents the number of valid tokens in the current batch.
-            delta_time (float): The time taken to process the batch, in seconds.
+            batch_seqlens (List[int]): 一个列表，每个元素表示当前 batch 中的有效 token 数量。
+            delta_time (float): 处理该 batch 所耗的时间，单位为秒。
 
         Returns:
-            estimated_flops (float): The estimated FLOPS based on the input tokens and time.
-            promised_flops (float): The expected FLOPS of the current device.
+            estimated_flops (float): 基于输入 token 和时间估算出的 FLOPS。
+            promised_flops (float): 当前设备的理论 FLOPS。
         """
         tokens_sum = sum(batch_seqlens)
         func = self.estimate_func.get(self.config.model_type, self._estimate_unknown_flops)

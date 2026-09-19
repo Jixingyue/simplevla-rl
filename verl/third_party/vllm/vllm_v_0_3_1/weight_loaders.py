@@ -18,9 +18,9 @@ import torch
 import torch.nn as nn
 
 
-# NOTE(shengguangming): replace the origin weight loader function in the class
+# NOTE(shengguangming): 替换类中原有的 weight loader 函数
 def parallel_weight_loader(self, param: torch.Tensor, loaded_weight: torch.Tensor) -> None:
-    """Parallel Linear weight loader."""
+    """Parallel Linear 的 weight loader。"""
     assert param.size() == loaded_weight.size(
     ), 'the parameter size is not align with the loaded weight size, param size: {}, loaded_weight size: {}'.format(
         param.size(), loaded_weight.size())
@@ -30,7 +30,7 @@ def parallel_weight_loader(self, param: torch.Tensor, loaded_weight: torch.Tenso
 
 
 def default_weight_loader(param: torch.Tensor, loaded_weight: torch.Tensor) -> None:
-    """Default weight loader."""
+    """默认的 weight loader。"""
     assert param.size() == loaded_weight.size()
     assert param.data.dtype == loaded_weight.data.dtype, "if we want to shared weights, the data type should also be the same"
 
@@ -41,32 +41,32 @@ def gpt2_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> nn.Module:
     params_dict = dict(vllm_model.named_parameters(remove_duplicate=False))
     for name, loaded_weight in actor_weights.items():
         if "lm_head.weight" in name:
-            # GPT-2 ties the weights of the embedding layer and the final
-            # linear layer.
+            # GPT-2 将 embedding 层和最后的
+            # 线性层的权重绑定在一起。
             continue
         if ".attn.bias" in name or ".attn.masked_bias" in name:
-            # Skip attention mask.
-            # NOTE: "c_attn.bias" should not be skipped.
+            # 跳过 attention mask。
+            # NOTE: "c_attn.bias" 不应被跳过。
             continue
         if not name.startswith("transformer."):
             name = "transformer." + name
         param = params_dict[name]
-        # The HF's GPT-2 implementation uses Conv1D instead of Linear.
-        # Because of this, we need to transpose the weights.
-        # Note(zhuohan): the logic below might break quantized models.
+        # HF 的 GPT-2 实现使用 Conv1D 而不是 Linear。
+        # 因此，我们需要转置权重。
+        # Note(zhuohan): 下面的逻辑可能会破坏量化模型。
         for conv1d_weight_name in ["c_attn", "c_proj", "c_fc"]:
             if conv1d_weight_name not in name:
                 continue
             if not name.endswith(".weight"):
                 continue
-            # TODO: check megatron
+            # TODO: 检查 megatron
             loaded_weight = loaded_weight.t()
         weight_loader = getattr(param, "weight_loader", default_weight_loader)
         weight_loader(param, loaded_weight)
 
 
 def llama_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> nn.Module:
-    # NOTE(shengguangming): the megatron llama may have this prefix
+    # NOTE(shengguangming): megatron 的 llama 可能带有这个前缀
     prefix = '0.module.module.'
     params_dict = dict(vllm_model.named_parameters())
     for name, loaded_weight in actor_weights.items():
@@ -81,7 +81,7 @@ def llama_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> nn.Module
 
 
 def mistral_weight_loader(actor_weights: Dict, vllm_model: nn.Module) -> nn.Module:
-    # TODO: need to implement a general way to deal with prefix
+    # TODO: 需要实现一种通用的方式来处理前缀
     prefix = '0.module.module.'
     params_dict = dict(vllm_model.named_parameters())
     for name, loaded_weight in actor_weights.items():

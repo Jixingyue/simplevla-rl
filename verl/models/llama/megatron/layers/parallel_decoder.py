@@ -48,46 +48,45 @@ class ParallelLlamaDecoderLayer(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
+        参数:
+            hidden_states (`torch.FloatTensor`): 形状为 `(batch, seq_len, embed_dim)` 的层输入
+            attention_mask (`torch.FloatTensor`, *optional*): 形状为
+                `(batch, 1, tgt_len, src_len)` 的注意力掩码，其中 padding 元素用非常大的负值表示。
             output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
+                是否返回所有注意力层的 attention 张量。详见返回张量中的 `attentions`。
             use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
+                若设为 `True`，则返回 `past_key_values` 键值状态，可用于加速解码
+                （参见 `past_key_values`）。
+            past_key_value (`Tuple(torch.FloatTensor)`, *optional*): 缓存的过去 key 和 value 投影状态
         """
 
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Note: sequence parallel is hidden inside ColumnParallelLinear
-        # reduce scatter is hidden inside RowParallelLinear
+        # 注意: sequence parallel 隐藏在 ColumnParallelLinear 内部
+        # reduce scatter 隐藏在 RowParallelLinear 内部
 
-        # Self Attention
+        # 自注意力
         hidden_states = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
         )
 
-        # TODO: add sequence parallel operator reduce_scatter here
+        # TODO: 在此处添加 sequence parallel 算子 reduce_scatter
 
         hidden_states = residual + hidden_states
 
-        # Fully Connected
+        # 全连接层
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
 
-        # TODO: add sequence parallel operator all_gather here
+        # TODO: 在此处添加 sequence parallel 算子 all_gather
 
         hidden_states = self.mlp(hidden_states)
 
-        # TODO: add sequence parallel operator reduce_scatter here
+        # TODO: 在此处添加 sequence parallel 算子 reduce_scatter
 
         hidden_states = residual + hidden_states
 
@@ -122,7 +121,7 @@ class ParallelLlamaDecoderLayerRmPad(nn.Module):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-        # Self Attention
+        # 自注意力
         # (total_nnz // sp, 1, hidden_size) -> all-gather (total_nnz, 1, hidden_size)
         # -> col + row -> reduce-scatter -> (total_nnz // sp, 1, hidden_size)
         hidden_states = self.self_attn(hidden_states=hidden_states,
@@ -134,8 +133,8 @@ class ParallelLlamaDecoderLayerRmPad(nn.Module):
 
         hidden_states = residual + hidden_states
 
-        # Fully Connected
-        # shape changes same as attn
+        # 全连接层
+        # 形状变化与 attn 相同
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)

@@ -1,29 +1,29 @@
 """
-Important constants for VLA training and evaluation.
+VLA 训练与评估的重要常量。
 
-Attempts to automatically identify the correct constants to set based on the Python command used to launch
-training or evaluation. If it is unclear, defaults to using the LIBERO simulation benchmark constants.
+尝试根据用于启动训练或评估的 Python 命令自动识别应设置的正确常量。若无法确定，
+则默认使用 LIBERO 仿真基准的常量。
 """
 import os
 import sys
 from enum import Enum
 
-# Llama 2 token constants
+# Llama 2 token 常量
 IGNORE_INDEX = -100
 ACTION_TOKEN_BEGIN_IDX = 31743
 STOP_INDEX = 2  # '</s>'
 
 
-# Defines supported normalization schemes for action and proprioceptive state.
+# 定义动作与本体感觉状态支持的归一化方式。
 class NormalizationType(str, Enum):
     # fmt: off
-    NORMAL = "normal"               # Normalize to Mean = 0, Stdev = 1
-    BOUNDS = "bounds"               # Normalize to Interval = [-1, 1]
-    BOUNDS_Q99 = "bounds_q99"       # Normalize [quantile_01, ..., quantile_99] --> [-1, ..., 1]
+    NORMAL = "normal"               # 归一化为均值 = 0，标准差 = 1
+    BOUNDS = "bounds"               # 归一化到区间 = [-1, 1]
+    BOUNDS_Q99 = "bounds_q99"       # 将 [quantile_01, ..., quantile_99] 归一化 --> [-1, ..., 1]
     # fmt: on
 
 
-# Define constants for each robot platform
+# 为每个机器人平台定义常量
 LIBERO_CONSTANTS = {
     "NUM_ACTIONS_CHUNK": 8,
     "ACTION_DIM": 7,
@@ -67,7 +67,7 @@ BRIDGE_CONSTANTS = {
 }
 
 
-# Function to detect robot platform from command line arguments
+# 根据命令行参数检测机器人平台的函数
 def detect_robot_platform():
     
     robot_env = os.environ.get('ROBOT_PLATFORM', '').upper()
@@ -100,16 +100,16 @@ def detect_robot_platform():
     elif "bridge" in cmd_args:
         return "BRIDGE"
     else:
-        # TODO (cjh, fix): fix this to be more robust
-        # Default to ALOHA if unclear
+        # TODO (cjh, fix): 修改此处使其更健壮
+        # 无法确定时默认使用 ALOHA
         return "ALOHA"
 
 
-# Determine which robot platform to use
+# 确定使用哪个机器人平台
 ROBOT_PLATFORM = detect_robot_platform()
 #ROBOT_PLATFORM = "ALOHA_12"
 
-# Set the appropriate constants based on the detected platform
+# 根据检测到的平台设置相应的常量
 if ROBOT_PLATFORM == "LIBERO":
     constants = LIBERO_CONSTANTS
 elif ROBOT_PLATFORM == "ALOHA":
@@ -123,13 +123,13 @@ elif ROBOT_PLATFORM == "ALOHA_6":
 elif ROBOT_PLATFORM == "BRIDGE":
     constants = BRIDGE_CONSTANTS
 
-# Assign constants to global variables
+# 将常量赋值给全局变量
 NUM_ACTIONS_CHUNK = constants["NUM_ACTIONS_CHUNK"]
 ACTION_DIM = constants["ACTION_DIM"]
 PROPRIO_DIM = constants["PROPRIO_DIM"]
 ACTION_PROPRIO_NORMALIZATION_TYPE = constants["ACTION_PROPRIO_NORMALIZATION_TYPE"]
 
-# Print which robot platform constants are being used (for debugging)
+# 打印正在使用哪个机器人平台的常量（用于调试）
 print(f"Using {ROBOT_PLATFORM} constants:",flush=True)
 print(f"  NUM_ACTIONS_CHUNK = {NUM_ACTIONS_CHUNK}",flush=True)
 # print(f"  ACTION_DIM = {ACTION_DIM}")

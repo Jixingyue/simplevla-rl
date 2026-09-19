@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Megatron Actor.
-In megatron actor, the differences are:
-1. We only make minibatch
+Megatron Actor。
+在 megatron actor 中，区别在于：
+1. 我们只构建 minibatch
 
-Note that our model doesn't have to be `MegatronModule` because we don't share embedding in the last layer
+注意我们的模型不必是 `MegatronModule`，因为我们不在最后一层共享 embedding
 """
 
 from functools import partial
@@ -49,44 +49,44 @@ class MegatronPPOActor(BasePPOActor):
 
     def __init__(self, config, model_config, megatron_config: ModelParallelConfig, actor_module: nn.ModuleList,
                  actor_optimizer: DistributedOptimizer, actor_optimizer_config: OptimizerConfig):
-        """MeagtronPPOActor class. This class implements the simple PPO logics when the model is built with Megatron.
+        """MeagtronPPOActor 类。该类实现了模型基于 Megatron 构建时的简单 PPO 逻辑。
 
-        Args:
-            config (OmegaConf): the basic config that contains the hyper-parameters of PPO Actor. It must contain
+        参数:
+            config (OmegaConf): 包含 PPO Actor 超参数的基础配置。它必须包含
 
-                ``ppo_micro_batch_size``: minibatch size when updating ppo.
+                ``ppo_micro_batch_size``: 更新 ppo 时的 minibatch 大小。
 
-                ``ppo_mini_batch_size``: minibatch size when updating ppo using the batch data.
+                ``ppo_mini_batch_size``: 使用 batch 数据更新 ppo 时的 minibatch 大小。
 
-                ``ppo_epochs``: number of epochs to update the actor using the batch data.
+                ``ppo_epochs``: 使用 batch 数据更新 actor 的 epoch 数。
 
-                ``shuffle``: whether to shuffle the data after each ppo epoch.
+                ``shuffle``: 每个 ppo epoch 后是否打乱数据。
 
-                ``clip_ratio``: clip ratio of the ppo algorithm. See https://arxiv.org/abs/1707.06347.
+                ``clip_ratio``: ppo 算法的裁剪比例。参见 https://arxiv.org/abs/1707.06347。
 
-                ``entropy_coeff``: entropy coefficient of the PPO loss. See https://arxiv.org/abs/1707.06347.
-            model_config (OmegaConf): model configuration. It must contains ``model_config.vocab_size`` and
+                ``entropy_coeff``: PPO 损失的熵系数。参见 https://arxiv.org/abs/1707.06347。
+            model_config (OmegaConf): 模型配置。必须包含 ``model_config.vocab_size`` 和
                 ``model_config.hidden_size``
-            megatron_config (OmegaConf): megatron configuration. It must contains
+            megatron_config (OmegaConf): megatron 配置。必须包含
 
-                ``sequence_parallel_enabled``: whether the sequence parallel is enabled.
+                ``sequence_parallel_enabled``: 是否启用序列并行。
 
-                ``param_dtype``: the dtype of the parameters.
+                ``param_dtype``: 参数的数据类型。
 
-                ``virtual_pipeline_model_parallel_size``: virtual pipeline model parallel size. a.k.a number of chunks in each pp stage.
-            actor_module (nn.ModuleList): actor module is a ModuleList that contains a list of nn.Module in this pp stage.
-                each nn.Module in this rank holds a vpp module chunk. See https://arxiv.org/pdf/2104.04473.pdf for more details.
-                The actor module has some constraints to follow in order to use the updating logics implemented here
+                ``virtual_pipeline_model_parallel_size``: 虚拟流水线模型并行大小，即每个 pp stage 中的 chunk 数量。
+            actor_module (nn.ModuleList): actor module 是一个 ModuleList，包含该 pp stage 中的 nn.Module 列表。
+                该 rank 上的每个 nn.Module 持有一个 vpp module chunk。更多细节参见 https://arxiv.org/pdf/2104.04473.pdf。
+                为了使用这里实现的更新逻辑，actor module 需要遵循以下约束
 
-                1. It must implement unpad_input before any computation and pad_input after all the computation. Remove padding is an
-                optimization that removes the padding tokens. See unpad_input and pad_input function in flash-attn
-                (https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/bert_padding.py).
+                1. 必须在任何计算之前实现 unpad_input，并在所有计算之后实现 pad_input。Remove padding 是一种
+                移除填充 token 的优化。参见 flash-attn 中的 unpad_input 和 pad_input 函数
+                (https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/bert_padding.py)。
 
-                2. Each pp stage must return the hidden state with the same shape [total_nnz, 1, hidden_size],
-                where total_nnz is the number of valid tokens in this batch. If sequence parallel is enabled, the size
-                of the hidden state is [total_nnz // tp, 1, hidden_size].
-            actor_optimizer (DistributedOptimizer): currently, we only support DistributedOptimizer in Megatron. It implements
-                zero1 optimizer that shards the optimizer state across dp ranks.
+                2. 每个 pp stage 必须返回形状相同为 [total_nnz, 1, hidden_size] 的 hidden state，
+                其中 total_nnz 是该 batch 中有效 token 的数量。如果启用了序列并行，则
+                hidden state 的大小为 [total_nnz // tp, 1, hidden_size]。
+            actor_optimizer (DistributedOptimizer): 目前，我们只支持 Megatron 中的 DistributedOptimizer。它实现了
+                zero1 优化器，将优化器状态分片到各个 dp rank 上。
 
         >>> def megatron_actor_model_provider(pre_process, post_process):
         >>>     vpp_rank = mpu.get_virtual_pipeline_model_parallel_rank()
@@ -127,22 +127,22 @@ class MegatronPPOActor(BasePPOActor):
         })
 
     def compute_log_prob(self, data: DataProto) -> torch.Tensor:
-        """Compute the log probability of the responses given input_ids, attention_mask and position_ids
+        """给定 input_ids、attention_mask 和 position_ids，计算 responses 的对数概率
 
-        Args:
-            data (DataProto): a DataProto containing keys
+        参数:
+            data (DataProto): 一个包含以下键的 DataProto
 
-                ``input_ids``: tensor of shape [batch_size, sequence_length]. torch.int64. Note that input_ids is the
-                concatenation of prompt and response. Note that ``sequence_length = prompt_length + response_length``.
+                ``input_ids``: 形状为 [batch_size, sequence_length] 的张量。torch.int64。注意 input_ids 是
+                prompt 和 response 的拼接。注意 ``sequence_length = prompt_length + response_length``。
 
-                ``attention_mask``: tensor of shape [batch_size, sequence_length]. torch.int64.
+                ``attention_mask``: 形状为 [batch_size, sequence_length] 的张量。torch.int64。
 
-                ``position_ids``: tensor of shape [batch_size, sequence_length]. torch.int64.
+                ``position_ids``: 形状为 [batch_size, sequence_length] 的张量。torch.int64。
 
-                ``responses``:  tensor of shape [batch_size, response_length]. torch.int64.
+                ``responses``:  形状为 [batch_size, response_length] 的张量。torch.int64。
 
-        Returns:
-            DataProto: torch.Tensor: the log_prob tensor
+        返回:
+            DataProto: torch.Tensor: log_prob 张量
         """
         data.batch = data.batch.contiguous()
 
@@ -154,8 +154,8 @@ class MegatronPPOActor(BasePPOActor):
             log_probs = vocab_parallel_log_probs_from_logits(logits, response)
             return {'log_probs': log_probs}
 
-        # We make recompute_old_log_prob by default here.
-        # TODO (zhangchi.usc1992): actually, this function should only return log_prob and this logic should be handled by user outside
+        # 我们在这里默认进行 recompute_old_log_prob。
+        # TODO (zhangchi.usc1992): 实际上，这个函数应该只返回 log_prob，这个逻辑应由用户在外部处理
         recompute_old_log_prob = self.config.get('recompute_old_log_prob', True)
 
         if recompute_old_log_prob or 'old_log_probs' not in data.batch.keys():
@@ -168,7 +168,7 @@ class MegatronPPOActor(BasePPOActor):
             with torch.no_grad():
                 output = self.forward_backward_batch(data, forward_only=True, post_process_fn=compute_logprobs_fn)
                 if mpu.is_pipeline_last_stage(ignore_virtual=True):
-                    # only on last rank. It should be on every tp rank
+                    # 仅在最后一个 rank 上。它应该在每个 tp rank 上
                     log_probs = torch.cat([o['log_probs'] for o in output], dim=0)  # (bs, seq_size)
                     log_probs = log_probs.to(torch.float32)
                 else:
@@ -176,37 +176,37 @@ class MegatronPPOActor(BasePPOActor):
                                             dtype=torch.float32,
                                             device=input_ids.device)
 
-                # broadcast across pp ranks
+                # 跨 pp rank 进行 broadcast
                 torch.distributed.broadcast(tensor=log_probs,
                                             src=mpu.get_pipeline_model_parallel_last_rank(),
                                             group=mpu.get_pipeline_model_parallel_group(),
                                             async_op=False)
 
-        # add empty cache after each compute
+        # 每次计算后清空缓存
         torch.cuda.empty_cache()
 
         return log_probs
 
     def make_minibatch_iterator(self, data: DataProto) -> Iterable[DataProto]:
-        """Make minibatch iterator for updating the actor
+        """构建用于更新 actor 的 minibatch 迭代器
 
-        Args:
-            data (DataProto): a DataProto containing keys
+        参数:
+            data (DataProto): 一个包含以下键的 DataProto
 
-                ``input_ids``: tensor of shape [batch_size, sequence_length]. torch.int64, where ``sequence_length = prompt_length + response_length``
+                ``input_ids``: 形状为 [batch_size, sequence_length] 的张量。torch.int64，其中 ``sequence_length = prompt_length + response_length``
 
-                ``attention_mask``: tensor of shape [batch_size, sequence_length]. torch.int64
+                ``attention_mask``: 形状为 [batch_size, sequence_length] 的张量。torch.int64
 
-                ``position_ids``: tensor of shape [batch_size, sequence_length]. torch.int64
+                ``position_ids``: 形状为 [batch_size, sequence_length] 的张量。torch.int64
 
-                ``responses``: tensor of shape [batch_size, response_length]. torch.int64. Note that responses = input_ids[:, -response_length:]
+                ``responses``: 形状为 [batch_size, response_length] 的张量。torch.int64。注意 responses = input_ids[:, -response_length:]
 
-                ``old_log_probs``: tensor of shape [batch_size, response_length]. torch.float32. The log probability of responses.
+                ``old_log_probs``: 形状为 [batch_size, response_length] 的张量。torch.float32。responses 的对数概率。
 
-                ``advantages``: tensor of shape [batch_size, response_length]. torch.float32. The advantages of responses.
-                See PPO paper for details. https://arxiv.org/abs/1707.06347
+                ``advantages``: 形状为 [batch_size, response_length] 的张量。torch.float32。responses 的优势值。
+                详情参见 PPO 论文 https://arxiv.org/abs/1707.06347
 
-        Returns:
+        返回:
 
         """
         select_keys = ['responses', 'input_ids', 'attention_mask', 'position_ids', 'old_log_probs', 'advantages']
@@ -217,16 +217,16 @@ class MegatronPPOActor(BasePPOActor):
 
     def forward_backward_batch(self, data: DataProto, forward_only=False, post_process_fn=None):
         """
-        We assume:
-        - The model takes input: (input_ids, attention_mask, position_ids). No rmpad for the input
-        - The communication shape is (total_nnz_pad_to_sp // tp_size, 1, hidden_size) if sequence parallel is enabled
+        我们假设：
+        - 模型接收输入: (input_ids, attention_mask, position_ids)。输入不做 rmpad
+        - 如果启用了序列并行，通信形状为 (total_nnz_pad_to_sp // tp_size, 1, hidden_size)
         """
-        # broadcast from last pp rank to all other pp ranks
-        # TODO: actually, we just need to control the sampling order.
+        # 从最后一个 pp rank broadcast 到所有其他 pp rank
+        # TODO: 实际上，我们只需要控制采样顺序。
         broadcast_dict_tensor(data.batch,
                               src=mpu.get_pipeline_model_parallel_last_rank(),
                               group=mpu.get_pipeline_model_parallel_group())
-        # split into micro-batches
+        # 切分为 micro-batch
         data.batch['attention_mask'] = data.batch['attention_mask'].to(bool)
 
         if data.meta_info.get('micro_batch_size', None) is not None:
@@ -234,7 +234,7 @@ class MegatronPPOActor(BasePPOActor):
         else:
             batch_size = self.config.ppo_micro_batch_size
         batches = split_dict_tensor_into_batches(data.batch, batch_size=batch_size)
-        # compute input shapes for pp stages
+        # 计算 pp stage 的输入形状
         input_shapes = compute_transformers_input_shapes(
             batches,
             meta_info={
@@ -263,7 +263,7 @@ class MegatronPPOActor(BasePPOActor):
             clip_ratio = meta_info['clip_ratio']
             entropy_coeff = meta_info['entropy_coeff']
 
-            # compute policy loss
+            # 计算 policy loss
             logits = output.logits
             logits = logits[:, -response_length - 1:-1]
             log_prob = vocab_parallel_log_probs_from_logits(logits, responses)
@@ -274,7 +274,7 @@ class MegatronPPOActor(BasePPOActor):
                                                                           cliprange=clip_ratio)
             entropy_loss = vocab_parallel_compute_entropy_loss(logits, eos_mask=response_mask)
             policy_loss = pg_loss - entropy_loss * entropy_coeff
-            # return loss and stats
+            # 返回 loss 和统计信息
             stats = {
                 'actor/entropy_loss': entropy_loss.detach().item(),
                 'actor/pg_loss': pg_loss.detach().item(),
@@ -295,21 +295,21 @@ class MegatronPPOActor(BasePPOActor):
                 meta_info = {'clip_ratio': self.config.clip_ratio, 'entropy_coeff': self.config.entropy_coeff}
             return output, partial(loss_func, data=batch, meta_info=meta_info)
 
-        # batch should be a list of batches inside micro-batches
+        # batch 应该是 micro-batch 内部的 batch 列表
         batch_generator = make_batch_generator(batches, vpp_size=len(self.actor_module))
 
-        # TODO: we may use the new schedule instead
-        # for flash-attn: (seq_len, batch_size, hidden_size) = (mbs*seq_len, 1, hidden_size)
+        # TODO: 我们可以改用新的 schedule
+        # 对于 flash-attn: (seq_len, batch_size, hidden_size) = (mbs*seq_len, 1, hidden_size)
         if mpu.get_pipeline_model_parallel_world_size() > 1:
             losses_reduced = forward_backward_func(
                 forward_step_func=forward_step,
                 data_iterator=batch_generator,
                 model=self.actor_module,
                 num_microbatches=n_micro_batch,
-                input_shapes=input_shapes,  # must set for flash-attn sequence packing
-                seq_length=batch_size * seq_len,  # no use when input_shapes was set
-                hidden_size=self.model_config.hidden_size,  # no use when input_shapes was set
-                micro_batch_size=1,  # no use when input_shapes was set
+                input_shapes=input_shapes,  # 必须为 flash-attn 序列打包进行设置
+                seq_length=batch_size * seq_len,  # 当设置了 input_shapes 时不使用
+                hidden_size=self.model_config.hidden_size,  # 当设置了 input_shapes 时不使用
+                micro_batch_size=1,  # 当设置了 input_shapes 时不使用
                 forward_only=forward_only,
             )
         else:
@@ -318,51 +318,51 @@ class MegatronPPOActor(BasePPOActor):
                 data_iterator=batch_generator,
                 model=self.actor_module,
                 num_microbatches=n_micro_batch,
-                seq_length=batch_size * seq_len,  # in use for pp = 1
-                hidden_size=self.model_config.hidden_size,  # in use for pp = 1
-                micro_batch_size=1,  # in use for pp = 1
+                seq_length=batch_size * seq_len,  # 在 pp = 1 时使用
+                hidden_size=self.model_config.hidden_size,  # 在 pp = 1 时使用
+                micro_batch_size=1,  # 在 pp = 1 时使用
                 forward_only=forward_only,
             )
-        # loss_reduces contains the stats returned from loss_func
+        # loss_reduces 包含 loss_func 返回的统计信息
         return losses_reduced
 
     def update_policy(self, dataloader: Iterable[DataProto]) -> Dict:
-        """Update the policy with an iterator of DataProto
+        """使用 DataProto 迭代器更新策略
 
-        Args:
-            dataloader (Iterable[DataProto]): an iterator over the DataProto that returns by ``make_minibatch_iterator``
-                The keys of each data batch is described in the make_minibatch_iterator.
+        参数:
+            dataloader (Iterable[DataProto]): 遍历 DataProto 的迭代器，由 ``make_minibatch_iterator`` 返回。
+                每个 data batch 的键在 make_minibatch_iterator 中有描述。
 
-        Returns:
-            Dict: a dictionary containing the statistics. Note that the statistics are only valid in the last pp stage
-            and users have to combine the output in each dp rank manually.
+        返回:
+            Dict: 包含统计信息的字典。注意这些统计信息仅在最后一个 pp stage 有效，
+            用户需要手动合并各 dp rank 上的输出。
 
         """
         metrics = {}
         for data in dataloader:
             # data = data.batch.to(self.actor_module.device)
             self.actor_optimizer.zero_grad()
-            # use use_contiguous_buffers_in_local_ddp and no overlap_dp_param_comm
+            # 使用 use_contiguous_buffers_in_local_ddp 且不使用 overlap_dp_param_comm
             for chunk in self.actor_module:
-                # if use distributed optimizer, zero grad buffer will be handled by optimizer
+                # 如果使用分布式优化器，zero grad buffer 将由优化器处理
                 chunk.zero_grad_buffer(zero_buffer=(not self.actor_optimizer_config.use_distributed_optimizer))
 
             metric_micro_batch = self.forward_backward_batch(data)
             for metric in metric_micro_batch:
-                append_to_dict(metrics, metric)  # append the metric from this micro-batch to global metrics.
+                append_to_dict(metrics, metric)  # 将该 micro-batch 的指标追加到全局 metrics 中。
 
             update_successful, grad_norm, num_zeros_in_grad = self.actor_optimizer.step(
                 self.megatron_config, self.megatron_config.timers)
             if update_successful:
-                # allgather already execute in optimizer.step in new megatron
+                # 在新版 megatron 中，allgather 已在 optimizer.step 中执行
                 pass
             else:
                 raise NotImplementedError
 
             for metric in metric_micro_batch:
-                append_to_dict(metrics, metric)  # append the metric from this micro-batch to global metrics.
+                append_to_dict(metrics, metric)  # 将该 micro-batch 的指标追加到全局 metrics 中。
 
-        # add empty cache after each compute
+        # 每次计算后清空缓存
         torch.cuda.empty_cache()
 
         return metrics

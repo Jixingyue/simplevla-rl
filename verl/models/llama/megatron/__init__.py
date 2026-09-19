@@ -13,12 +13,12 @@
 # limitations under the License.
 
 from .modeling_llama_megatron import (
-    # original model with megatron
+    # 基于 megatron 的原始模型
     ParallelLlamaModel,
     ParallelLlamaForCausalLM,
-    # rmpad with megatron
+    # 使用 megatron 的 rmpad
     ParallelLlamaForCausalLMRmPad,
     ParallelLlamaForValueRmPad,
-    # rmpad with megatron and pipeline parallelism
+    # 使用 megatron 和流水线并行的 rmpad
     ParallelLlamaForCausalLMRmPadPP,
     ParallelLlamaForValueRmPadPP)

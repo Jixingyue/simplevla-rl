@@ -5,8 +5,8 @@ import operator
 
 
 def extract_solution(solution_str):
-    """Extract the equation from the solution string."""
-    # Remove everything before the first "Assistant:"
+    """从解答字符串中提取算式。"""
+    # 移除第一个 "Assistant:" 之前的所有内容
     if "Assistant:" in solution_str:
         solution_str = solution_str.split("Assistant:", 1)[1]
     else:
@@ -24,30 +24,30 @@ def extract_solution(solution_str):
 
 
 def validate_equation(equation_str, available_numbers):
-    """Validate that equation only uses available numbers and each number once."""
+    """验证算式只使用可用数字，且每个数字只用一次。"""
     try:
-        # Extract all numbers from the equation
+        # 从算式中提取所有数字
         numbers_in_eq = [int(n) for n in re.findall(r'\d+', equation_str)]
         
-        # Check if all numbers in equation are available
+        # 检查算式中的所有数字是否都可用
         available_numbers = sorted(available_numbers)
         numbers_in_eq = sorted(numbers_in_eq)
         
-        # Each number should be used exactly once
+        # 每个数字应恰好使用一次
         return numbers_in_eq == available_numbers
     except:
         return False
 
 
 def evaluate_equation(equation_str):
-    """Safely evaluate the arithmetic equation using eval() with precautions."""
+    """在采取预防措施的前提下，使用 eval() 安全地求值算术算式。"""
     try:
-        # Define a regex pattern that only allows numbers, operators, parentheses, and whitespace
+        # 定义一个只允许数字、运算符、括号和空白的正则模式
         allowed_pattern = r'^[\d+\-*/().\s]+$'
         if not re.match(allowed_pattern, equation_str):
             raise ValueError("Invalid characters in equation.")
 
-        # Evaluate the equation with restricted globals and locals
+        # 在受限的全局和局部命名空间中求值算式
         result = eval(equation_str, {"__builtins__": None}, {})
         return result
     except Exception as e:
@@ -55,14 +55,14 @@ def evaluate_equation(equation_str):
 
 
 def compute_score(solution_str, ground_truth, method='strict', format_score=0.1, score=1.):
-    """The scoring function for countdown task.
+    """countdown 任务的打分函数。
     
-    Args:
-        solution_str: the solution text
-        ground_truth: dictionary containing target number and available numbers
-        method: the method to extract the solution
-        format_score: the score for correct format but wrong answer
-        score: the score for the correct answer
+    参数:
+        solution_str: 解答文本
+        ground_truth: 包含目标数字和可用数字的字典
+        method: 提取解答的方法
+        format_score: 格式正确但答案错误的得分
+        score: 答案正确的得分
     """
     target = ground_truth['target']
     numbers = ground_truth['numbers']
@@ -84,7 +84,7 @@ def compute_score(solution_str, ground_truth, method='strict', format_score=0.1,
         format_correctness = False
         return correctness, format_correctness
     
-    # Validate equation uses correct numbers
+    # 验证算式使用了正确的数字
     if not validate_equation(equation, numbers):
         if do_print:
             print(f"Invalid equation")
@@ -92,7 +92,7 @@ def compute_score(solution_str, ground_truth, method='strict', format_score=0.1,
         format_correctness = True
         return correctness, format_correctness
         
-    # Evaluate equation
+    # 求值算式
     try:
         result = evaluate_equation(equation)
         if result is None:
@@ -102,7 +102,7 @@ def compute_score(solution_str, ground_truth, method='strict', format_score=0.1,
             format_correctness = True
             return correctness, format_correctness
             
-        if abs(result - target) < 1e-5:  # Account for floating point precision
+        if abs(result - target) < 1e-5:  # 考虑浮点精度误差
             if do_print:
                 print(f"Correct equation: {equation} = {result}")
             correctness = True

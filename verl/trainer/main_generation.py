@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Generate responses given a dataset of prompts
+给定 prompt 数据集，生成回复
 """
 import ray
 import numpy as np
@@ -40,7 +40,7 @@ from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, Ra
 def main(config):
     from pprint import pprint
     from omegaconf import OmegaConf
-    pprint(OmegaConf.to_container(config, resolve=True))  # resolve=True will eval symbol values
+    pprint(OmegaConf.to_container(config, resolve=True))  # resolve=True 会对符号值进行求值
     OmegaConf.resolve(config)
     local_path = copy_local_path_from_hdfs(config.model.path)
     from verl.utils import hf_tokenizer
@@ -49,7 +49,7 @@ def main(config):
     if config.rollout.temperature == 0.:
         assert config.data.n_samples == 1, 'When temperature=0, n_samples must be 1.'
 
-    # read dataset. Note that the dataset should directly contain chat template format (e.g., a list of dictionary)
+    # 读取数据集。注意数据集应直接包含 chat template 格式（例如字典列表）
     dataset = pd.read_parquet(config.data.path)
     chat_lst = dataset[config.data.prompt_key].tolist()
 
@@ -102,15 +102,15 @@ def main(config):
         assert batch_size % dp_size == 0, f'batch_size {batch_size} is not divisible by dp_size {dp_size}'
 
         print(f'[{batch_idx+1}/{num_batch}] Start to generate.')
-        # START TO GENERATE FOR n_samples TIMES
+        # 开始生成，共生成 n_samples 次
         for i in range(config.data.n_samples):
             output = wg.generate_sequences(data)
-            # remove dummy data
+            # 移除 dummy 数据
             output = output[:real_batch_size]
             output_text = tokenizer.batch_decode(output.batch['input_ids'][:, -config.rollout.response_length:],
                                                  skip_special_tokens=False)
 
-            # remove the padding
+            # 移除 padding
             pad_token = tokenizer.pad_token
             output_text_unpad = []
             for text in output_text:
@@ -118,14 +118,14 @@ def main(config):
 
             output_lst[i].extend(output_text_unpad)
 
-    # convert output_lst from (n_samples, n_data) to (n_data, n_sampels)
+    # 将 output_lst 从 (n_samples, n_data) 转换为 (n_data, n_sampels)
     output_lst = np.array(output_lst, dtype=object)
     output_lst = np.transpose(output_lst, axes=(1, 0)).tolist()
 
-    # add to the data frame
+    # 添加到 DataFrame 中
     dataset[f'responses'] = output_lst
 
-    # write to a new parquet
+    # 写入新的 parquet 文件
     output_dir = os.path.dirname(config.data.output_path)
     makedirs(output_dir, exist_ok=True)
     dataset.to_parquet(config.data.output_path)

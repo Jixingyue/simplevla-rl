@@ -18,7 +18,7 @@ from typing import Dict, List, Tuple
 from types import FunctionType
 from verl.protocol import DataProtoFuture
 
-# here we add a magic number of avoid user-defined function already have this attribute
+# 这里添加一个魔数（magic number），以避免用户自定义函数已带有同名属性
 MAGIC_ATTR = 'attrs_3141562937'
 
 
@@ -73,7 +73,7 @@ def collect_all_to_all(worker_group, output):
 
 def dispatch_megatron_compute(worker_group, *args, **kwargs):
     """
-    User passes in dp data. The data is dispatched to all tp/pp ranks with the same dp
+    用户传入 dp 数据。数据会被分发到相同 dp 的所有 tp/pp rank 上
     """
     from verl.single_controller.base.megatron.worker_group import MegatronWorkerGroup
     assert isinstance(worker_group,
@@ -102,7 +102,7 @@ def dispatch_megatron_compute(worker_group, *args, **kwargs):
 
 def collect_megatron_compute(worker_group, output):
     """
-    Only collect the data from the tp=0 and pp=last and every dp ranks
+    只从 tp=0、pp=last 以及每个 dp rank 收集数据
     """
     from verl.single_controller.base.megatron.worker_group import MegatronWorkerGroup
     assert isinstance(worker_group, MegatronWorkerGroup)
@@ -117,7 +117,7 @@ def collect_megatron_compute(worker_group, output):
 
 def dispatch_megatron_compute_data_proto(worker_group, *args, **kwargs):
     """
-    All the args and kwargs must be DataProto. The batch will be chunked by dp_size and passed to each rank
+    所有 args 和 kwargs 必须是 DataProto。batch 会按 dp_size 切分后传给各个 rank
     """
     from verl.single_controller.base.megatron.worker_group import MegatronWorkerGroup
     assert isinstance(worker_group, MegatronWorkerGroup)
@@ -130,7 +130,7 @@ def _concat_data_proto_or_future(output: List):
     from verl.protocol import DataProto, DataProtoFuture
     import ray
 
-    # make sure all the elements in output has the same type
+    # 确保 output 中的所有元素类型相同
     for o in output:
         assert type(o) == type(output[0])
 
@@ -146,7 +146,7 @@ def _concat_data_proto_or_future(output: List):
 
 def collect_megatron_compute_data_proto(worker_group, output):
     """
-    Each output must be a DataProto. We concat the dim=0 of output
+    每个 output 必须是 DataProto。我们在 dim=0 上对 output 进行拼接
     """
     from verl.protocol import DataProto
     import ray
@@ -160,7 +160,7 @@ def collect_megatron_compute_data_proto(worker_group, output):
 
 def dispatch_megatron_pp_as_dp(worker_group, *args, **kwargs):
     """
-    treat pp as dp.
+    将 pp 视为 dp。
     """
     from verl.single_controller.base.megatron.worker_group import MegatronWorkerGroup
     assert isinstance(worker_group, MegatronWorkerGroup)
@@ -177,9 +177,9 @@ def dispatch_megatron_pp_as_dp(worker_group, *args, **kwargs):
         for i in range(worker_group.world_size):
             local_dp_rank = worker_group.get_megatron_rank_info(rank=i).dp_rank
             local_pp_rank = worker_group.get_megatron_rank_info(rank=i).pp_rank
-            # compute the rank in arg. Note that the order is dp then pp
-            # Also note that the outputs within a pp group will be firstly allgathered, then only the output of pp0 will be collected.
-            # For pp=2 dp=4, a batch of data "ABCDEFGH" should be dispatched and collected in below order:
+            # 计算 arg 中的 rank。注意顺序为先 dp 后 pp
+            # 另外注意，pp 组内的输出会先进行 allgather，之后只收集 pp0 的输出。
+            # 以 pp=2 dp=4 为例，一批数据 "ABCDEFGH" 应按如下顺序分发和收集：
             #    dispatch:       pp_allgther:        collect:
             #   dp 0 1 2 3      dp  0  1  2  3
             # pp +---------+  pp +-------------+
@@ -199,7 +199,7 @@ def dispatch_megatron_pp_as_dp(worker_group, *args, **kwargs):
         for i in range(worker_group.world_size):
             local_dp_rank = worker_group.get_megatron_rank_info(rank=i).dp_rank
             local_pp_rank = worker_group.get_megatron_rank_info(rank=i).pp_rank
-            # compute the rank in arg. Note that the order is dp then pp
+            # 计算 arg 中的 rank。注意顺序为先 dp 后 pp
             arg_rank = local_dp_rank * worker_group.pp_size + local_pp_rank
             transformed_v.append(v[arg_rank])
         all_kwargs[k] = transformed_v
@@ -208,7 +208,7 @@ def dispatch_megatron_pp_as_dp(worker_group, *args, **kwargs):
 
 def collect_megatron_pp_as_dp(worker_group, output):
     """
-    treat pp as dp. Only collect data on tp=0
+    将 pp 视为 dp。只在 tp=0 上收集数据
     """
     from verl.single_controller.base.megatron.worker_group import MegatronWorkerGroup
     assert isinstance(worker_group, MegatronWorkerGroup)
@@ -222,7 +222,7 @@ def collect_megatron_pp_as_dp(worker_group, output):
 
 def collect_megatron_pp_only(worker_group, output):
     """
-    Only collect output of megatron pp. This is useful when examine weight names as they are identical in tp/dp
+    只收集 megatron pp 的输出。由于权重名在 tp/dp 中相同，这在检查权重名时很有用
     """
     from verl.single_controller.base.megatron.worker_group import MegatronWorkerGroup
     assert isinstance(worker_group, MegatronWorkerGroup)
@@ -279,7 +279,7 @@ def dispatch_dp_compute_data_proto(worker_group, *args, **kwargs):
 def dispatch_dp_compute_data_proto_with_func(worker_group, *args, **kwargs):
     from verl.single_controller.base.worker_group import WorkerGroup
     assert isinstance(worker_group, WorkerGroup)
-    assert type(args[0]) == FunctionType  # NOTE: The first one args is a function!
+    assert type(args[0]) == FunctionType  # NOTE: 第一个 args 是一个函数！
 
     splitted_args, splitted_kwargs = _split_args_kwargs_data_proto(worker_group.world_size, *args[1:], **kwargs)
     splitted_args_with_func = [[args[0]] * worker_group.world_size] + splitted_args
@@ -349,8 +349,8 @@ def get_predefined_dispatch_fn(dispatch_mode):
 
 def get_predefined_execute_fn(execute_mode):
     """
-    Note that here we only asks execute_all and execute_rank_zero to be implemented
-    Leave the choice of how these two functions handle argument 'blocking' to users
+    注意这里只要求实现 execute_all 和 execute_rank_zero
+    这两个函数如何处理参数 'blocking' 由用户自行决定
     """
     predefined_execute_mode_fn = {
         Execute.ALL: {
@@ -381,7 +381,7 @@ def _materialize_futures(*args, **kwargs):
     for arg in args:
         if isinstance(arg, DataProtoFuture):
             arg = arg.get()
-        # add more type to materialize
+        # 添加更多需要物化的类型
         new_args.append(arg)
     for k, v in kwargs.items():
         if isinstance(v, DataProtoFuture):

@@ -74,7 +74,7 @@
 
 
 """
-This logic is largely copied from the Hendrycks' MATH release (math_equivalence), and borrowed from:
+此逻辑主要复制自 Hendrycks 的 MATH 发布版（math_equivalence），并借鉴自：
 - https://github.com/microsoft/ToRA/blob/main/src/eval/grader.py
 - https://github.com/microsoft/ProphetNet/tree/master/CRITIC
 - https://github.com/openai/prm800k
@@ -106,27 +106,27 @@ def is_digit(s):
 
 
 def normalize(answer, pi) -> str:
-    # checking if answer is $<number> and removing $ in that case to compare
+    # 检查答案是否为 $<数字>，若是则移除 $ 以便比较
     if isinstance(answer, str) and bool(re.match(r'\$\d+(\.\d+)?', answer)):
         return answer[1:]
 
-    # checking if answer is <number>% or <number>\\% and removing %
+    # 检查答案是否为 <数字>% 或 <数字>\\%，并移除 %
     if isinstance(answer, str) and (
         bool(re.match(r'^\d+(\.\d+)?%$', answer)) or bool(re.match(r'^\d+(\.\d+)?\\%$', answer))
     ):
         return answer.replace("\\%", "").replace("%", "")
     
-    # handle base
+    # 处理进制
     answer = handle_base(answer)
 
-    # handle pi
+    # 处理 pi
     answer = handle_pi(answer, pi)
 
     return answer
 
 def handle_base(x) -> str:
     if isinstance(x, str) and "_" in x:
-        # Due to base
+        # 由于存在进制表示
         x = x.split("_")[0]
         x = float(x)
         return int(x)
@@ -136,23 +136,23 @@ def handle_base(x) -> str:
 def handle_pi(string, pi):
 
     if isinstance(string, str) and "\pi" in string:
-        # Find the first occurrence of "\pi"
+        # 查找 "\pi" 的第一次出现
         idx = string.find("\pi")
 
-        # Iterate over the string and find all occurrences of "\pi" with a valid previous character
+        # 遍历字符串，找出 "\pi" 的所有出现位置，并检查其前一个字符是否有效
         while idx != -1:
 
             if idx > 0 and string[idx-1].isdigit():
-                # Replace "\pi" with "*math.pi" if the previous character is a digit
+                # 若前一个字符是数字，则将 "\pi" 替换为 "*math.pi"
                 string = string[:idx] + f"*{pi}" + string[idx+3:]
             else:
-                # Replace "\pi" with "1*math.pi" if the previous character is not a digit
+                # 若前一个字符不是数字，则将 "\pi" 替换为 "1*math.pi"
                 string = string[:idx] + f"1*{pi}" + string[idx+3:]
 
-            # Find the next occurrence of "\pi"
+            # 查找 "\pi" 的下一次出现
             idx = string.find("\pi", idx + 1)
 
-        # Evaluate the expression using eval() function
+        # 使用 eval() 函数对表达式求值
         try:
             string = eval(string)
         except:
@@ -169,29 +169,29 @@ def math_equal(
     pi: float = math.pi
 ) -> bool:
     """
-    Exact match of math if and only if:
-    1. numerical equal: both can convert to float and are equal
-    2. symbolic equal: both can convert to sympy expression and are equal
+    当且仅当满足以下条件时，数学上完全匹配：
+    1. 数值相等：两者都可转换为 float 且相等
+    2. 符号相等：两者都可转换为 sympy 表达式且相等
     """
 
     prediction = normalize(prediction, pi)
     reference = normalize(reference, pi)
 
-    if isinstance(prediction, str) and len(prediction) > 1000:  # handling weird corner-cases
+    if isinstance(prediction, str) and len(prediction) > 1000:  # 处理奇怪的边界情况
         prediction = prediction[:1000]
 
-    # 0. string comparison
+    # 0. 字符串比较
     if isinstance(prediction, str) and isinstance(reference, str):
         if prediction.strip().lower() == reference.strip().lower():
             return True
         if prediction.replace(" ", "") == reference.replace(" ", ""):
             return True
 
-    try:  # 1. numerical equal
+    try:  # 1. 数值相等
         if is_digit(prediction)[0] and is_digit(reference)[0]:
             prediction = is_digit(prediction)[1]
             reference = is_digit(reference)[1]
-            # number questions
+            # 数值类问题
             if include_percentage:
                 gt_result = [reference / 100, reference, reference * 100]
             else:
@@ -209,11 +209,11 @@ def math_equal(
     if not prediction and prediction not in [0, False]:
         return False
 
-    # 2. symbolic equal
+    # 2. 符号相等
     reference = str(reference).strip()
     prediction = str(prediction).strip()
 
-    ## deal with [], (), {}
+    ## 处理 []、()、{}
     prediction = format_intervals(prediction)
 
     pred_str, ref_str = prediction, reference
@@ -228,7 +228,7 @@ def math_equal(
     if pred_str == ref_str:
         return True
 
-    ## [a, b] vs. [c, d], return a==c and b==d
+    ## [a, b] 与 [c, d] 比较，返回 a==c 且 b==d
     if (
         prediction
         and reference
@@ -263,7 +263,7 @@ def math_equal(
             else:
                 return False
 
-    # if we have point == tuple of values
+    # 如果 point 等于一个值元组
     if prediction.startswith("Point") and reference[0] == "(" and reference[-1] == ")":
         pred_parts = prediction[prediction.find("(") + 1 : -1].split(",")
         ref_parts = reference[1:-1].split(",")
@@ -276,7 +276,7 @@ def math_equal(
             ):
                 return True
 
-    # if reference is a matrix
+    # 如果 reference 是矩阵
     if "\begin{pmatrix}" in reference and prediction.startswith("Matrix"):
         try:
             pred_matrix = parse_expr(prediction)
@@ -372,13 +372,13 @@ def format_intervals(prediction):
         if match:
             inner_content = match.group(1)
 
-            if key == "Interval(":  # Intarval(a, b) == [a, b]
+            if key == "Interval(":  # Intarval(a, b) 等价于 [a, b]
                 return f"[{inner_content}]"
-            elif key == "Interval.Ropen(":  # Intarval.Ropen(a, b) == [a, b)
+            elif key == "Interval.Ropen(":  # Intarval.Ropen(a, b) 等价于 [a, b)
                 return f"[{inner_content})"
-            elif key == "Interval.Lopen(":  # Intarval.Lopen(a, b) == (a, b]
+            elif key == "Interval.Lopen(":  # Intarval.Lopen(a, b) 等价于 (a, b]
                 return f"({inner_content}]"
-            elif key == "Interval.open(":  # Intarval.open(a, b) == (a, b)
+            elif key == "Interval.open(":  # Intarval.open(a, b) 等价于 (a, b)
                 return f"({inner_content})"
 
     return prediction

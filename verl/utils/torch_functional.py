@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Contain small torch utilities
+包含一些小型 torch 工具函数
 """
 
 from typing import Dict, Union, List, Optional
@@ -32,7 +32,7 @@ except ImportError:
 
 
 def gather_from_labels(data, label):
-    """Gather the label from data. The value in label should be [0, vocab_size)
+    """从 data 中收集（gather）label 对应的值。label 中的值应在 [0, vocab_size) 范围内
 
     Args:
         data: (..., vocab_size)
@@ -48,7 +48,7 @@ def gather_from_labels(data, label):
 
 def logprobs_from_logits(logits, labels):
     """
-    See: https://github.com/pytorch/pytorch/issues/563#issuecomment-330103591
+    参见: https://github.com/pytorch/pytorch/issues/563#issuecomment-330103591
     """
     if FLAH_ATTN_CROSS_ENTROPY_LOSS_AVAILABLE:
         batch_dim = logits.shape[:-1]
@@ -75,7 +75,7 @@ def logprobs_from_logits_naive(logits, labels):
 
 def logprobs_of_labels_v2(logits: torch.FloatTensor, labels):
     """
-    A memory efficient implementation of logprobs_from_logits
+    logprobs_from_logits 的省内存实现
     """
     assert logits.dtype == torch.float32, 'Using bf16 logits with logprobs_of_labels_v2 may lead to divergence'
     logprobs_labels = torch.gather(logits, dim=-1, index=labels.unsqueeze(-1))
@@ -85,7 +85,7 @@ def logprobs_of_labels_v2(logits: torch.FloatTensor, labels):
 
 def clip_by_value(x, tensor_min, tensor_max):
     """
-    Tensor extenstion to torch.clamp
+    torch.clamp 的张量扩展版本
     https://github.com/pytorch/pytorch/issues/2793#issuecomment-428784713
     """
     clipped = torch.max(torch.min(x, tensor_max), tensor_min)
@@ -93,19 +93,19 @@ def clip_by_value(x, tensor_min, tensor_max):
 
 
 def entropy_from_logits(logits: torch.Tensor):
-    """Calculate entropy from logits."""
+    """从 logits 计算熵。"""
     pd = torch.nn.functional.softmax(logits, dim=-1)
     entropy = torch.logsumexp(logits, dim=-1) - torch.sum(pd * logits, dim=-1)
     return entropy
 
 
 def masked_sum(values, mask, axis=None):
-    """Compute mean of tensor with a masked values."""
+    """计算带掩码值张量的和。"""
     return (values * mask).sum(axis=axis)
 
 
 def masked_mean(values, mask, axis=None):
-    """Compute mean of tensor with a masked values."""
+    """计算带掩码值张量的均值。"""
     if (mask == False).all():
         return (values * mask).sum(axis=axis) 
     else: 
@@ -113,7 +113,7 @@ def masked_mean(values, mask, axis=None):
 
 
 def masked_var(values, mask, unbiased=True):
-    """Compute variance of tensor with masked values."""
+    """计算带掩码值张量的方差。"""
     mean = masked_mean(values, mask)
     centered_values = values - mean
     variance = masked_mean(centered_values**2, mask)
@@ -121,8 +121,8 @@ def masked_var(values, mask, unbiased=True):
         mask_sum = mask.sum()
         if mask_sum == 0:
             raise ValueError("At least one element in the mask has to be 1.")
-        # note that if mask_sum == 1, then there is a division by zero issue
-        # to avoid it you just need to use a larger minibatch_size
+        # 注意，如果 mask_sum == 1，则会出现除以零的问题
+        # 为避免该问题，只需使用更大的 minibatch_size
         if mask_sum == 1:
             raise ValueError("The sum of the mask is one, which can cause a division by zero.")
         bessel_correction = mask_sum / (mask_sum - 1)
@@ -131,7 +131,7 @@ def masked_var(values, mask, unbiased=True):
 
 
 def masked_whiten(values, mask, shift_mean=True):
-    """Whiten values with masked values."""
+    """对带掩码值的张量做白化。"""
     mean, var = masked_mean(values, mask), masked_var(values, mask)
     whitened = (values - mean) * torch.rsqrt(var + 1e-8)
     if not shift_mean:
@@ -141,7 +141,7 @@ def masked_whiten(values, mask, shift_mean=True):
 
 def get_eos_mask(response_id: torch.Tensor, eos_token: int = 2, dtype=torch.int64):
     '''
-    e.g. end of sentence token=1
+    例如句子结束 token=1
     response_id: [0, 0, 2, 42, 3, 5, 1, 0, 0]
     eos_mask:     [1, 1, 1, 1,  1, 1, 1, 0, 0]
     '''
@@ -162,7 +162,7 @@ def compute_grad_norm(model: nn.Module):
 
 def broadcast_dict_tensor(tensors: Union[Dict[str, torch.Tensor], TensorDict], src, group):
     """
-    TODO: optimize this. Technically, we only need one broadcast
+    TODO: 优化此处。理论上我们只需要一次 broadcast
     """
 
     for key in tensors.sorted_keys:
@@ -171,9 +171,9 @@ def broadcast_dict_tensor(tensors: Union[Dict[str, torch.Tensor], TensorDict], s
 
 def allgather_dict_tensors(tensors: Union[Dict[str, torch.Tensor], TensorDict], size, group, dim=0):
     """
-    TODO: optimize this.
-    - We can use async ops
-    - We can use only one allgather
+    TODO: 优化此处。
+    - 我们可以使用异步操作
+    - 我们可以只用一次 allgather
     Args:
         tensors:
         size:
@@ -211,10 +211,10 @@ def split_dict_tensor_into_batches(tensors: TensorDict, batch_size) -> List[Tens
 
 def pad_sequence_to_length(tensors, max_seq_len, pad_token_id, left_pad=False):
     """
-    pad a 2D tensors (e.g. responses, logprobs) in the last dim to max_seq_length.
-    input shape: [bs, seq_length]
-    output shape: [bs, max_seq_length]
-    (0, max_seq_len - tensors.shape[-1]) means right pad to max_seq_length and no left pad
+    在最后一维将 2D 张量（例如 responses、logprobs）填充到 max_seq_length。
+    输入形状: [bs, seq_length]
+    输出形状: [bs, max_seq_length]
+    (0, max_seq_len - tensors.shape[-1]) 表示在右侧填充到 max_seq_length 且不做左侧填充
     """
     if tensors.shape[-1] >= max_seq_len:
         return tensors
@@ -232,7 +232,7 @@ def tokenize_and_postprocess_data(prompt: str,
                                   left_pad=True,
                                   truncation='error'):
     """
-    input_data is the output from tokenizer.
+    输入数据是 tokenizer 的输出。
     """
     assert truncation in ['left', 'right', 'error']
 
@@ -255,7 +255,7 @@ def tokenize_and_postprocess_data(prompt: str,
                                                 left_pad=left_pad)
     elif sequence_length > max_length:
         if truncation == 'left':
-            # actually, left truncation may not be reasonable
+            # 实际上，左侧截断可能并不合理
             input_ids = input_ids[:, -max_length:]
             attention_mask = attention_mask[:, -max_length:]
         elif truncation == 'right':
@@ -276,7 +276,7 @@ def postprocess_rob_data(input_ids,
                         left_pad=True,
                         truncation='error'):
     """
-    input_data is the output from tokenizer.
+    输入数据是 tokenizer 的输出。
     """
     assert truncation in ['left', 'right', 'error']
 
@@ -294,7 +294,7 @@ def postprocess_rob_data(input_ids,
                                                 left_pad=left_pad)
     elif sequence_length > max_length:
         if truncation == 'left':
-            # actually, left truncation may not be reasonable
+            # 实际上，左侧截断可能并不合理
             input_ids = input_ids[:, -max_length:]
             attention_mask = attention_mask[:, -max_length:]
         elif truncation == 'right':
@@ -309,13 +309,13 @@ def postprocess_rob_data(input_ids,
 
 
 def remove_pad_token(input_ids: torch.Tensor, attention_mask: torch.Tensor):
-    """ Remove the pad token. 
+    """ 移除 pad token。
 
     Args:
         input_ids shape: [bs, seq_length]
         attention_mask shape: [bs, seq_length]
     Returns:
-        no_padding_batch(List[List[int]]): contains the rmpad token ids per query.
+        no_padding_batch(List[List[int]]): 包含每条 query 的去 pad token id。
     """
     no_padding_batch = []
     for ids, mask in zip(input_ids, attention_mask):
@@ -324,7 +324,7 @@ def remove_pad_token(input_ids: torch.Tensor, attention_mask: torch.Tensor):
 
 
 def log_probs_from_logits_response(input_ids, logits, response_length):
-    """Compute the response log_probs from full logits. Note that logits = model(input_ids)
+    """从完整的 logits 中计算 response 部分的 log_probs。注意 logits = model(input_ids)
     
     Args:
         input_ids: [batch_size, seqlen]
@@ -340,11 +340,10 @@ def log_probs_from_logits_response(input_ids, logits, response_length):
 
 
 def log_probs_from_logits_response_rmpad(input_ids, attention_mask, logits_rmpad, response_length):
-    """Compute the log_probs from logits with rmpad logits and pad input. Note that
-    logits_rmpad = model(input_ids_rmpad). For each sentences, there is a shift between
-    logits and input_ids.
-    The reason for this function to is to compute logprobs_from_logits in rmpad mode because it is memory-intensive
-    for large vocab_size
+    """基于 rmpad 的 logits 和 pad 的输入计算 log_probs。注意
+    logits_rmpad = model(input_ids_rmpad)。对于每个句子，logits 与 input_ids 之间存在一个偏移。
+    之所以需要这个函数，是为了在 rmpad 模式下计算 logprobs_from_logits，因为当 vocab_size 很大时
+    这样做更省内存
     
     Args:
         input_ids: [batch_size, seqlen]
@@ -369,11 +368,10 @@ def log_probs_from_logits_response_rmpad(input_ids, attention_mask, logits_rmpad
 
 
 def log_probs_from_logits_all_rmpad(input_ids_rmpad, logits_rmpad, indices, batch_size, seqlen, response_length):
-    """Compute the log_probs from logits with rmpad input_ids and logits. Note that
-    logits_rmpad = model(input_ids_rmpad). For each sentences, there is a shift between
-    logits and input_ids.
-    The reason for this function to is to compute logprobs_from_logits in rmpad mode because it is memory-intensive
-    for large vocab_size
+    """基于 rmpad 的 input_ids 和 logits 计算 log_probs。注意
+    logits_rmpad = model(input_ids_rmpad)。对于每个句子，logits 与 input_ids 之间存在一个偏移。
+    之所以需要这个函数，是为了在 rmpad 模式下计算 logprobs_from_logits，因为当 vocab_size 很大时
+    这样做更省内存
     
     Args:
         input_ids_rmpad: [1, total_nnz]
@@ -384,7 +382,7 @@ def log_probs_from_logits_all_rmpad(input_ids_rmpad, logits_rmpad, indices, batc
         response_length: int
     """
     from flash_attn.bert_padding import pad_input
-    input_ids_rmpad = input_ids_rmpad.transpose(0, 1)  # transpose back to [total_nnz, 1]
+    input_ids_rmpad = input_ids_rmpad.transpose(0, 1)  # 转置回 [total_nnz, 1]
     input_ids_rmpad = input_ids_rmpad.squeeze(-1)
     input_ids_rmpad_rolled = torch.roll(input_ids_rmpad, shifts=-1, dims=0)
     full_log_probs_rmpad = logprobs_from_logits(logits=logits_rmpad, labels=input_ids_rmpad_rolled)  # (total_nnz,)
@@ -401,8 +399,8 @@ from transformers.generation.logits_process import (TemperatureLogitsWarper, Top
 
 def post_process_logits(input_ids, logits, temperature, top_k, top_p):
     if temperature != 1.:
-        logits = logits.div_(temperature)  # inplace operation to avoid OOM
-    # TODO: add them back
+        logits = logits.div_(temperature)  # 原地操作以避免 OOM
+    # TODO: 将它们加回来
     # if top_k is not None and top_k > 0:
     #     logits = TopKLogitsWarper(top_k=top_k)(input_ids, logits)
     # if top_p is not None and top_p < 1.0 and top_p > 0.0:
@@ -411,7 +409,7 @@ def post_process_logits(input_ids, logits, temperature, top_k, top_p):
 
 
 """
-Optimizer related
+与优化器相关的工具
 """
 
 from torch.optim import Optimizer
@@ -428,25 +426,23 @@ def get_cosine_schedule_with_warmup(
     last_epoch: int = -1,
 ):
     """
-    Create a schedule with a learning rate that decreases following the values of the cosine function between the
-    initial lr set in the optimizer to 0, after a warmup period during which it increases linearly between 0 and the
-    initial lr set in the optimizer.
+    创建一个学习率调度器：先经过一段 warmup 期间（期间学习率在 0 与优化器中设置的初始 lr 之间线性增长），
+    之后学习率按照余弦函数的值从优化器中设置的初始 lr 衰减到 0。
     Args:
         optimizer (:class:`~torch.optim.Optimizer`):
-            The optimizer for which to schedule the learning rate.
+            要调度学习率的优化器。
         num_warmup_steps (:obj:`int`):
-            The number of steps for the warmup phase.
+            warmup 阶段的步数。
         num_training_steps (:obj:`int`):
-            The total number of training steps.
+            训练总步数。
         min_lr_ratio (:obj:`float`, `optional`, defaults to 0.0):
-            The minimum lr ratio w.r.t the maximum.
+            相对于最大值的最小 lr 比例。
         num_cycles (:obj:`float`, `optional`, defaults to 0.5):
-            The number of waves in the cosine schedule (the defaults is to just decrease from the max value to 0
-            following a half-cosine).
+            余弦调度中的波数（默认只是按半个余弦从最大值衰减到 0）。
         last_epoch (:obj:`int`, `optional`, defaults to -1):
-            The index of the last epoch when resuming training.
+            恢复训练时上一个 epoch 的索引。
     Return:
-        :obj:`torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
+        :obj:`torch.optim.lr_scheduler.LambdaLR`，带有相应的调度。
     """
     assert min_lr_ratio >= 0 and min_lr_ratio <= 1.
     coef = (1 - min_lr_ratio) * 0.5
@@ -475,7 +471,7 @@ def get_constant_schedule_with_warmup(
 
 
 def prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds):
-    # create causal mask
+    # 创建因果掩码
     # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
     combined_attention_mask = None
     if input_shape[-1] > 1:
@@ -495,10 +491,10 @@ def prepare_decoder_attention_mask(attention_mask, input_shape, inputs_embeds):
     return combined_attention_mask
 
 
-# Copied from transformers.models.bart.modeling_bart._make_causal_mask
+# 复制自 transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: torch.device):
     """
-    Make causal mask used for bi-directional self-attention.
+    构造用于双向自注意力的因果掩码。
     """
     bsz, tgt_len = input_ids_shape
     mask = torch.full((tgt_len, tgt_len), torch.finfo(dtype).min, device=device)
@@ -508,10 +504,10 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, device: t
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len)
 
 
-# Copied from transformers.models.bart.modeling_bart._expand_mask
+# 复制自 transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    将 attention_mask 从 `[bsz, seq_len]` 扩展为 `[bsz, 1, tgt_seq_len, src_seq_len]`。
     """
     bsz, src_len = mask.size()
     tgt_len = tgt_len if tgt_len is not None else src_len

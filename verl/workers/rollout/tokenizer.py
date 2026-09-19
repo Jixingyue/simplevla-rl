@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-The base tokenizer class, required for any hybrid engine based rollout or inference with vLLM.
+基础 tokenizer 类，任何基于混合引擎的 rollout 或使用 vLLM 的推理都需要它。
 """
 from abc import ABC, abstractmethod
 from typing import Dict, List, Union
@@ -21,13 +21,13 @@ __all__ = ['HybridEngineBaseTokenizer']
 
 
 class HybridEngineBaseTokenizer(ABC):
-    """the tokenizer property and function name should align with HF's to meet vllm requirement"""
+    """tokenizer 的属性名和函数名应与 HF 保持一致，以满足 vllm 的要求"""
 
     @property
     @abstractmethod
     def vocab_size(self):
         """
-        `int`: Size of the base vocabulary (without the added tokens).
+        `int`: 基础词表的大小（不含新增 token）。
         """
         pass
 
@@ -35,7 +35,7 @@ class HybridEngineBaseTokenizer(ABC):
     @abstractmethod
     def pad_token_id(self):
         """
-        `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been set.
+        `Optional[int]`: 词表中 padding token 的 id。如果该 token 尚未设置，则返回 `None`。
         """
         pass
 
@@ -43,8 +43,7 @@ class HybridEngineBaseTokenizer(ABC):
     @abstractmethod
     def eos_token_id(self):
         """
-        `Optional[int]`: Id of the end of sentence token in the vocabulary. Returns `None` if the token has not been
-        set.
+        `Optional[int]`: 词表中句子结束 token 的 id。如果该 token 尚未设置，则返回 `None`。
         """
         pass
 
@@ -52,7 +51,7 @@ class HybridEngineBaseTokenizer(ABC):
     @abstractmethod
     def all_special_ids(self) -> List[int]:
         """
-        `List[int]`: List the ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.) mapped to class attributes.
+        `List[int]`: 列出映射到类属性的特殊 token（`'<unk>'`、`'<cls>'` 等）的 id。
         """
         pass
 
@@ -60,25 +59,25 @@ class HybridEngineBaseTokenizer(ABC):
     @abstractmethod
     def all_special_tokens(self) -> List[str]:
         """
-        `List[str]`: A list of the unique special tokens (`'<unk>'`, `'<cls>'`, ..., etc.).
+        `List[str]`: 由去重后的特殊 token（`'<unk>'`、`'<cls>'` 等）组成的列表。
 
-        Convert tokens of `tokenizers.AddedToken` type to string.
+        将 `tokenizers.AddedToken` 类型的 token 转换为字符串。
         """
         pass
 
     @abstractmethod
     def encode(self, text):
         """
-        Converts a string to a sequence of ids (integer), using the tokenizer and vocabulary.
+        使用 tokenizer 和词表将字符串转换为 id（整数）序列。
 
         Args:
             text (`str`, `List[str]` or `List[int]`):
-                The first sequence to be encoded. This can be a string, a list of strings (tokenized string using the
-                `tokenize` method) or a list of integers.
+                待编码的第一个序列。可以是字符串、字符串列表（用 `tokenize` 方法分词后的
+                字符串）或整数列表。
 
             text_pair (`str`, `List[str]` or `List[int]`, *optional*):
-                Optional second sequence to be encoded. This can be a string, a list of strings (tokenized string using
-                the `tokenize` method) or a list of integers.
+                可选的第二个待编码序列。可以是字符串、字符串列表（用 `tokenize` 方法分词后的
+                字符串）或整数列表。
         """
         pass
 
@@ -91,24 +90,24 @@ class HybridEngineBaseTokenizer(ABC):
         **kwargs,
     ) -> str:
         """
-        Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
-        tokens and clean up tokenization spaces.
+        使用 tokenizer 和词表将 id 序列转换为字符串，并可选择移除特殊
+        token 以及清理分词产生的空格。
 
-        Similar to doing `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`.
+        类似于执行 `self.convert_tokens_to_string(self.convert_ids_to_tokens(token_ids))`。
 
         Args:
             token_ids (`Union[int, List[int], np.ndarray, torch.Tensor, tf.Tensor]`):
-                List of tokenized input ids. Can be obtained using the `__call__` method.
+                已分词的输入 id 列表。可以通过 `__call__` 方法获得。
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
+                解码时是否移除特殊 token。
             clean_up_tokenization_spaces (`bool`, *optional*):
-                Whether or not to clean up the tokenization spaces. If `None`, will default to
-                `self.clean_up_tokenization_spaces`.
+                是否清理分词产生的空格。如果为 `None`，将默认使用
+                `self.clean_up_tokenization_spaces`。
             kwargs (additional keyword arguments, *optional*):
-                Will be passed to the underlying model specific decode method.
+                将传递给底层模型特定的 decode 方法。
 
         Returns:
-            `str`: The decoded sentence.
+            `str`: 解码得到的句子。
         """
         pass
 
@@ -117,43 +116,41 @@ class HybridEngineBaseTokenizer(ABC):
                               ids: Union[int, List[int]],
                               skip_special_tokens: bool = False) -> Union[str, List[str]]:
         """
-        Converts a single index or a sequence of indices in a token or a sequence of tokens, using the vocabulary and
-        added tokens.
+        使用词表和新增 token，将单个索引或索引序列转换为单个 token 或 token 序列。
 
         Args:
             ids (`int` or `List[int]`):
-                The token id (or token ids) to convert to tokens.
+                要转换为 token 的 token id（或多个 token id）。
             skip_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not to remove special tokens in the decoding.
+                解码时是否移除特殊 token。
 
         Returns:
-            `str` or `List[str]`: The decoded token(s).
+            `str` or `List[str]`: 解码得到的 token（或多个 token）。
         """
         pass
 
     @abstractmethod
     def get_added_vocab(self) -> Dict[str, int]:
         """
-        Returns the added tokens in the vocabulary as a dictionary of token to index. Results might be different from
-        the fast call because for now we always add the tokens even if they are already in the vocabulary. This is
-        something we should change.
+        以 token 到索引的字典形式返回词表中的新增 token。结果可能与快速调用有所不同，
+        因为目前即使 token 已经在词表中，我们也总是将其添加进去。这一点应当改进。
 
         Returns:
-            `Dict[str, int]`: The added tokens.
+            `Dict[str, int]`: 新增的 token。
         """
         pass
 
     @abstractmethod
     def convert_tokens_to_string(self, tokens: List[str]) -> str:
         """
-        Converts a sequence of tokens in a single string. The most simple way to do it is `" ".join(tokens)` but we
-        often want to remove sub-word tokenization artifacts at the same time.
+        将 token 序列转换为单个字符串。最简单的方式是 `" ".join(tokens)`，但通常
+        我们还希望同时去除子词分词产生的痕迹。
 
         Args:
-            tokens (`List[str]`): The token to join in a string.
+            tokens (`List[str]`): 要拼接成字符串的 token。
 
         Returns:
-            `str`: The joined tokens.
+            `str`: 拼接后的 token。
         """
         pass
 

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/engine/arg_utils.py
+# 改编自 https://github.com/vllm-project/vllm/blob/main/vllm/engine/arg_utils.py
 
 import os
 import argparse
@@ -48,9 +48,9 @@ def nullable_str(val: str):
 
 @dataclass
 class EngineArgs:
-    """Arguments for vLLM engine."""
-    model_hf_config: PretrainedConfig = None  # for verl
-    served_model_name = None  # TODO(sgm): check this
+    """vLLM 引擎的参数。"""
+    model_hf_config: PretrainedConfig = None  # 为 verl 添加
+    served_model_name = None  # TODO(sgm): 检查此项
     # tokenizer: Optional[str] = None # TODO(sgm): check this
     skip_tokenizer_init: bool = False
     tokenizer_mode: str = 'auto'
@@ -63,9 +63,8 @@ class EngineArgs:
     seed: int = 0
     max_model_len: Optional[int] = None
     worker_use_ray: bool = False
-    # Note: Specifying a custom executor backend by passing a class
-    # is intended for expert use only. The API may change without
-    # notice.
+    # 注意：通过传入类来指定自定义 executor 后端仅面向专家用户。
+    # API 可能会在未另行通知的情况下变更。
     distributed_executor_backend: Optional[Union[str, Type[ExecutorBase]]] = None
     pipeline_parallel_size: int = 1
     tensor_parallel_size: int = 1
@@ -79,7 +78,7 @@ class EngineArgs:
     gpu_memory_utilization: float = 0.90
     max_num_batched_tokens: Optional[int] = None
     max_num_seqs: int = 256
-    max_logprobs: int = 20  # Default value for OpenAI Chat Completions API
+    max_logprobs: int = 20  # OpenAI Chat Completions API 的默认值
     disable_log_stats: bool = False
     revision: Optional[str] = None
     code_revision: Optional[str] = None
@@ -92,9 +91,8 @@ class EngineArgs:
     max_seq_len_to_capture: int = 8192
     disable_custom_all_reduce: bool = False
     tokenizer_pool_size: int = 0
-    # Note: Specifying a tokenizer pool by passing a class
-    # is intended for expert use only. The API may change without
-    # notice.
+    # 注意：通过传入类来指定 tokenizer 池仅面向专家用户。
+    # API 可能会在未另行通知的情况下变更。
     tokenizer_pool_type: Union[str, Type["BaseTokenizerGroup"]] = "ray"
     tokenizer_pool_extra_config: Optional[dict] = None
     enable_lora: bool = False
@@ -120,7 +118,7 @@ class EngineArgs:
     enable_chunked_prefill: Optional[bool] = None
 
     guided_decoding_backend: str = 'outlines'
-    # Speculative decoding configuration.
+    # 投机解码配置。
     speculative_model: Optional[str] = None
     speculative_draft_tensor_parallel_size: Optional[int] = None
     num_speculative_tokens: Optional[int] = None
@@ -138,9 +136,9 @@ class EngineArgs:
 
     @staticmethod
     def add_cli_args(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
-        """Shared CLI arguments for vLLM engine."""
-        # Model arguments
-        # TODO(shengguangming): delete the unused args
+        """vLLM 引擎的共享 CLI 参数。"""
+        # 模型参数
+        # TODO(shengguangming): 删除未使用的参数
         parser.add_argument('--model',
                             type=str,
                             default='facebook/opt-125m',
@@ -202,7 +200,7 @@ class EngineArgs:
                             default=None,
                             help='model context length. If unspecified, '
                             'will be automatically derived from the model.')
-        # Parallel arguments
+        # 并行参数
         parser.add_argument('--worker-use-ray',
                             action='store_true',
                             help='use Ray for distributed serving, will be '
@@ -217,13 +215,13 @@ class EngineArgs:
                             type=int,
                             default=EngineArgs.tensor_parallel_size,
                             help='number of tensor parallel replicas')
-        # KV cache arguments
+        # KV cache 参数
         parser.add_argument('--block-size',
                             type=int,
                             default=EngineArgs.block_size,
                             choices=[8, 16, 32],
                             help='token block size')
-        # TODO(woosuk): Support fine-grained seeds (e.g., seed per request).
+        # TODO(woosuk): 支持细粒度的随机种子（例如每个请求一个 seed）。
         parser.add_argument('--seed', type=int, default=EngineArgs.seed, help='random seed')
         parser.add_argument('--swap-space',
                             type=int,
@@ -244,7 +242,7 @@ class EngineArgs:
                             default=EngineArgs.max_num_seqs,
                             help='maximum number of sequences per iteration')
         parser.add_argument('--disable-log-stats', action='store_true', help='disable logging statistics')
-        # Quantization settings.
+        # 量化设置。
         parser.add_argument('--quantization',
                             '-q',
                             type=str,
@@ -255,17 +253,17 @@ class EngineArgs:
 
     @classmethod
     def from_cli_args(cls, args: argparse.Namespace) -> 'EngineArgs':
-        # Get the list of attributes of this dataclass.
+        # 获取该 dataclass 的属性列表。
         attrs = [attr.name for attr in dataclasses.fields(cls)]
-        # Set the attributes from the parsed arguments.
+        # 根据解析出的参数设置属性。
         engine_args = cls(**{attr: getattr(args, attr) for attr in attrs})
         return engine_args
 
     def create_engine_config(
         self,
     ) -> EngineConfig:
-        # bitsandbytes quantization needs a specific model loader
-        # so we make sure the quant method and the load format are consistent
+        # bitsandbytes 量化需要特定的 model loader，
+        # 因此我们确保量化方法与加载格式保持一致
         if (self.quantization == "bitsandbytes" or
            self.qlora_adapter_name_or_path is not None) and \
            self.load_format != "bitsandbytes":
@@ -283,7 +281,7 @@ class EngineArgs:
 
         multimodal_config = MultiModalConfig()
         device_config = DeviceConfig(self.device)
-        # NOTE(sgm): we only modify ModelConfig, other configs are import from vllm
+        # NOTE(sgm): 我们只修改 ModelConfig，其他配置均从 vllm 导入
         model_config = ModelConfig(hf_config=self.model_hf_config,
                                    tokenizer_mode=self.tokenizer_mode,
                                    trust_remote_code=self.trust_remote_code,
@@ -328,7 +326,7 @@ class EngineArgs:
                                          ray_workers_use_nsight=self.ray_workers_use_nsight,
                                          distributed_executor_backend=self.distributed_executor_backend)
 
-        # NOTE[VERL]: Use the world_size set by TORCHRUN
+        # NOTE[VERL]: 使用 TORCHRUN 设置的 world_size
         world_size = int(os.getenv("WORLD_SIZE", "-1"))
         assert world_size != -1, "The world_size is set to -1, not initialized by TORCHRUN"
         parallel_config.world_size = world_size
@@ -336,9 +334,8 @@ class EngineArgs:
         max_model_len = model_config.max_model_len
         use_long_context = max_model_len > 32768
         if self.enable_chunked_prefill is None:
-            # If not explicitly set, enable chunked prefill by default for
-            # long context (> 32K) models. This is to avoid OOM errors in the
-            # initial memory profiling phase.
+            # 若未显式设置，对长上下文（> 32K）模型默认启用 chunked prefill，
+            # 以避免初始内存分析阶段出现 OOM 错误。
             if use_long_context:
                 is_gpu = device_config.device_type == "cuda"
                 use_sliding_window = (model_config.get_sliding_window() is not None)
@@ -363,7 +360,7 @@ class EngineArgs:
                 "in low performance due to small KV cache space. Consider "
                 "setting --max-model-len to a smaller value.", max_model_len)
 
-        # TODO: spec config
+        # TODO: 投机解码配置
         speculative_config = SpeculativeConfig.maybe_create_spec_config(
             target_model_config=model_config,
             target_parallel_config=parallel_config,

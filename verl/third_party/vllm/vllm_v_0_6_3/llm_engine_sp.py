@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Adapted from https://github.com/vllm-project/vllm/blob/main/vllm/engine/llm_engine.py
+# 改编自 https://github.com/vllm-project/vllm/blob/main/vllm/engine/llm_engine.py
 
 from functools import partial
 from typing import Callable, Dict, Optional, Type, Union
@@ -59,45 +59,41 @@ _LOCAL_LOGGING_INTERVAL_SEC = 5
 
 
 class LLMEngine(LLMEngine):
-    """An LLM engine that receives requests and generates texts.
+    """接收请求并生成文本的 LLM 引擎。
 
-    This is the main class for the vLLM engine. It receives requests
-    from clients and generates texts from the LLM. It includes a tokenizer, a
-    language model (possibly distributed across multiple GPUs), and GPU memory
-    space allocated for intermediate states (aka KV cache). This class utilizes
-    iteration-level scheduling and efficient memory management to maximize the
-    serving throughput.
+    这是 vLLM 引擎的主类。它接收来自客户端的请求并从 LLM 生成文本。
+    它包含一个 tokenizer、一个语言模型（可能通过张量并行分布在多个
+    GPU 上），以及为中间状态（即 KV cache）分配的 GPU 显存空间。该类
+    利用迭代级调度和高效的内存管理来最大化 serving 吞吐量。
 
-    The :class:`~vllm.LLM` class wraps this class for offline batched inference
-    and the :class:`AsyncLLMEngine` class wraps this class for online serving.
+    :class:`~vllm.LLM` 类封装该类用于离线批量推理，:class:`AsyncLLMEngine`
+    类封装该类用于在线 serving。
 
-    The config arguments are derived from :class:`~vllm.EngineArgs`. (See
-    :ref:`engine_args`)
+    配置参数派生自 :class:`~vllm.EngineArgs`。（参见
+    :ref:`engine_args`）
 
     Args:
-        model_config: The configuration related to the LLM model.
-        cache_config: The configuration related to the KV cache memory
-            management.
-        parallel_config: The configuration related to distributed execution.
-        scheduler_config: The configuration related to the request scheduler.
-        device_config: The configuration related to the device.
-        lora_config (Optional): The configuration related to serving multi-LoRA.
-        speculative_config (Optional): The configuration related to speculative
-            decoding.
-        executor_class: The model executor class for managing distributed
-            execution.
-        prompt_adapter_config (Optional): The configuration related to serving
-            prompt adapters.
-        log_stats: Whether to log statistics.
-        usage_context: Specified entry point, used for usage info collection.
+        model_config: 与 LLM 模型相关的配置。
+        cache_config: 与 KV cache 内存管理相关的配置。
+        parallel_config: 与分布式执行相关的配置。
+        scheduler_config: 与请求调度器相关的配置。
+        device_config: 与设备相关的配置。
+        lora_config (Optional): 与多 LoRA serving 相关的配置。
+        speculative_config (Optional): 与投机解码（speculative decoding）
+            相关的配置。
+        executor_class: 用于管理分布式执行的模型 executor 类。
+        prompt_adapter_config (Optional): 与 prompt adapter serving 相关
+            的配置。
+        log_stats: 是否记录统计信息。
+        usage_context: 指定的入口点，用于收集使用信息。
     """
 
     def __init__(
         self,
-        # NOTE(sgm): first two arguments are added for verl
-        model: Union[nn.Module, Dict],  # model itself or its parameter dict
+        # NOTE(sgm): 前两个参数是为 verl 添加的
+        model: Union[nn.Module, Dict],  # 模型本身或其参数字典
         tokenizer: nn.Module,
-        # NOTE(sgm): vllm original arguments
+        # NOTE(sgm): vllm 原有参数
         model_config: ModelConfig,
         cache_config: CacheConfig,
         parallel_config: ParallelConfig,
@@ -171,7 +167,7 @@ class LLMEngine(LLMEngine):
             use_cached_outputs,
             model_config.mm_processor_kwargs,
         )
-        # TODO(woosuk): Print more configs in debug mode.
+        # TODO(woosuk): 在调试模式下打印更多配置。
         self.model_config = model_config
         self.cache_config = cache_config
         self.lora_config = lora_config
@@ -195,8 +191,8 @@ class LLMEngine(LLMEngine):
             self.detokenizer = None
             tokenizer_group = None
 
-        # Ensure that the function doesn't contain a reference to self,
-        # to avoid engine GC issues
+        # 确保该函数不包含对 self 的引用，
+        # 以避免引擎的 GC 问题
         def get_tokenizer_for_seq(sequence: Sequence) -> AnyTokenizer:
             assert tokenizer_group, "tokenizer_group cannot be None, " "make sure skip_tokenizer_init is False"
             return tokenizer_group.get_lora_tokenizer(sequence.lora_request)
@@ -210,7 +206,7 @@ class LLMEngine(LLMEngine):
         self.input_processor = input_registry.create_input_processor(model_config)
 
         self.model_executor = executor_class(
-            model=model,  # add for spmd_gpu_executor
+            model=model,  # 为 spmd_gpu_executor 添加
             model_config=model_config,
             cache_config=cache_config,
             parallel_config=parallel_config,
@@ -226,7 +222,7 @@ class LLMEngine(LLMEngine):
         if not self.model_config.embedding_mode:
             self._initialize_kv_caches()
 
-        # If usage stat is enabled, collect relevant info.
+        # 若启用了使用统计，则收集相关信息。
         if is_usage_stats_enabled():
             from vllm.model_executor.model_loader import get_architecture_class_name
 
@@ -234,15 +230,15 @@ class LLMEngine(LLMEngine):
                 get_architecture_class_name(model_config),
                 usage_context,
                 extra_kvs={
-                    # Common configuration
+                    # 常规配置
                     "dtype": str(model_config.dtype),
                     "tensor_parallel_size": parallel_config.tensor_parallel_size,
                     "block_size": cache_config.block_size,
                     "gpu_memory_utilization": cache_config.gpu_memory_utilization,
-                    # Quantization
+                    # 量化
                     "quantization": model_config.quantization,
                     "kv_cache_dtype": str(cache_config.cache_dtype),
-                    # Feature flags
+                    # 功能开关
                     "enable_lora": bool(lora_config),
                     "enable_prompt_adapter": bool(prompt_adapter_config),
                     "enable_prefix_caching": cache_config.enable_prefix_caching,
@@ -252,8 +248,7 @@ class LLMEngine(LLMEngine):
             )
 
         if self.tokenizer:
-            # Ping the tokenizer to ensure liveness if it runs in a
-            # different process.
+            # 若 tokenizer 运行在不同进程中，通过 ping 确保其存活。
             self.tokenizer.ping()
 
         self.cached_scheduler_outputs = [
@@ -275,13 +270,13 @@ class LLMEngine(LLMEngine):
         else:
             self.async_callbacks = []
 
-        # Currently used by AsyncLLMEngine to ensure quick append
-        # of request outputs to asyncio queues
+        # AsyncLLMEngine 目前使用它来确保将请求输出快速追加
+        # 到 asyncio 队列中
         self.process_request_outputs_callback: Optional[Callable] = None
 
-        # Create the scheduler.
-        # NOTE: the cache_config here have been updated with the numbers of
-        # GPU and CPU blocks, which are profiled in the distributed executor.
+        # 创建调度器。
+        # NOTE: 这里的 cache_config 已更新为 GPU 和 CPU block 的数量，
+        # 它们是在分布式 executor 中分析得到的。
         self.scheduler = [
             Scheduler(
                 scheduler_config,
@@ -292,15 +287,15 @@ class LLMEngine(LLMEngine):
             ) for v_id in range(parallel_config.pipeline_parallel_size)
         ]
 
-        # Metric Logging.
+        # 指标日志记录。
         if self.log_stats:
             if stat_loggers is not None:
                 self.stat_loggers = stat_loggers
             else:
-                # Lazy import for prometheus multiprocessing.
-                # We need to set PROMETHEUS_MULTIPROC_DIR environment variable
-                # before prometheus_client is imported.
-                # See https://prometheus.github.io/client_python/multiprocess/
+                # 延迟导入 prometheus multiprocessing。
+                # 需要在导入 prometheus_client 之前设置 PROMETHEUS_MULTIPROC_DIR
+                # 环境变量。
+                # 参见 https://prometheus.github.io/client_python/multiprocess/
                 from vllm.engine.metrics import LoggingStatLogger, PrometheusStatLogger
 
                 self.stat_loggers = {
@@ -319,8 +314,7 @@ class LLMEngine(LLMEngine):
         if self.observability_config.otlp_traces_endpoint:
             self.tracer = init_tracer("vllm.llm_engine", self.observability_config.otlp_traces_endpoint)
 
-        # Create sequence output processor, e.g. for beam search or
-        # speculative decoding.
+        # 创建序列输出处理器，例如用于 beam search 或投机解码。
         self.output_processor = SequenceGroupOutputProcessor.create_output_processor(
             self.scheduler_config,
             self.detokenizer,
@@ -333,7 +327,7 @@ class LLMEngine(LLMEngine):
             ),
         )
 
-    # TODO(sgm): add for verl but we may not tokenizer in Rollout
+    # TODO(sgm): 为 verl 添加，但 Rollout 中可能不需要 tokenizer
     def _init_tokenizer(self, tokenizer, **tokenizer_init_kwargs):
         init_kwargs = dict(enable_lora=bool(self.lora_config),
                            max_num_seqs=self.scheduler_config.max_num_seqs,
@@ -342,19 +336,19 @@ class LLMEngine(LLMEngine):
         return TokenizerGroup(tokenizer, **init_kwargs)
 
     def init_cache_engine(self):
-        # TODO: check whether we should rebuild the CUDAGraph every iter when offload/load KVCache
-        # Re-capture CUDAGraph would be time-consuming
+        # TODO: 检查 offload/load KVCache 时是否应该每轮迭代都重建 CUDAGraph
+        # 重新捕获 CUDAGraph 非常耗时
         self.model_executor.init_cache_engine()
 
     def free_cache_engine(self):
         self.model_executor.free_cache_engine()
 
-    # NOTE(sgm): currently, we only support GPU executor
-    # The GPUExecutor remove the Ray dependency
+    # NOTE(sgm): 目前我们仅支持 GPU executor
+    # GPUExecutor 去除了对 Ray 的依赖
     @classmethod
     def _get_executor_cls(cls, engine_config: EngineConfig) -> Type[ExecutorBase]:
         distributed_executor_backend = engine_config.parallel_config.distributed_executor_backend
-        # Initialize the cluster and specify the executor class.]
+        # 初始化集群并指定 executor 类。]
         assert (engine_config.device_config.device_type == "cuda"
                ), "Currently, the vllm in verl only support running on GPU"
 
@@ -377,11 +371,11 @@ class LLMEngine(LLMEngine):
         usage_context: UsageContext = UsageContext.ENGINE_CONTEXT,
         stat_loggers: Optional[Dict[str, StatLoggerBase]] = None,
     ) -> "LLMEngine":
-        """Creates an LLM engine from the engine arguments."""
-        # Create the engine configs.
+        """根据引擎参数创建 LLM 引擎。"""
+        # 创建引擎配置。
         engine_config = engine_args.create_engine_config()
         executor_class = cls._get_executor_cls(engine_config)
-        # Initialize the cluster and specify the executor class.
+        # 初始化集群并指定 executor 类。
         assert (engine_config.device_config.device_type == "cuda"
                ), "Currently, the vllm in verl only support running on GPU"
 
@@ -389,7 +383,7 @@ class LLMEngine(LLMEngine):
 
         executor_class = SPMDGPUExecutor
 
-        # Create the LLM engine.
+        # 创建 LLM 引擎。
         engine = cls(
             model,
             tokenizer,

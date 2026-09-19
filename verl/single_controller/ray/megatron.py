@@ -21,11 +21,11 @@ from verl.single_controller.base.megatron.worker import DistRankInfo, DistGlobal
 from verl.single_controller.base.megatron.worker_group import MegatronWorkerGroup
 
 
-# NOTE(sgm): for opensource megatron-core
+# NOTE(sgm): 适用于开源的 megatron-core
 class NVMegatronRayWorkerGroup(RayWorkerGroup, MegatronWorkerGroup):
     """
-    MegatronWorkerGroup will query each worker of its megatron rank info and store it inside the WorkerGroup
-    so that the dispatcher can use it to dispatch data.
+    MegatronWorkerGroup 会向每个 worker 查询其 megatron rank 信息并保存在 WorkerGroup 内部，
+    以便 dispatcher 利用这些信息分发数据。
     """
 
     def __init__(self, resource_pool: RayResourcePool, ray_cls_with_init: RayClassWithInitArgs, **kwargs):
@@ -37,8 +37,8 @@ class NVMegatronRayWorkerGroup(RayWorkerGroup, MegatronWorkerGroup):
 
 class MegatronRayWorkerGroup(RayWorkerGroup, MegatronWorkerGroup):
     """
-    MegatronWorkerGroup will query each worker of its megatron rank info and store it inside the WorkerGroup
-    so that the dispatcher can use it to dispatch data.
+    MegatronWorkerGroup 会向每个 worker 查询其 megatron rank 信息并保存在 WorkerGroup 内部，
+    以便 dispatcher 利用这些信息分发数据。
     """
 
     def __init__(self,
@@ -56,7 +56,7 @@ class MegatronRayWorkerGroup(RayWorkerGroup, MegatronWorkerGroup):
             self.execute_rank_zero_async(method_name='get_megatron_global_info'))
 
     def init_megatron(self, default_megatron_kwargs: Optional[Dict] = None):
-        # after super, we will call init of each worker
+        # 在 super 之后，我们将调用每个 worker 的 init
         if not self._is_init_with_detached_workers:
-            # only init_megatron if the WorkerGroup is created from scratch
+            # 只有当 WorkerGroup 是从零创建时才调用 init_megatron
             self.execute_all_sync(method_name='init_megatron', default_megatron_kwargs=default_megatron_kwargs)

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-Utilities to create common models from huggingface
+用于从 huggingface 创建常见模型的工具函数
 """
 import os
 import warnings
@@ -137,11 +137,11 @@ def create_random_mask(input_ids: torch.Tensor,
                        max_ratio_of_valid_token: float,
                        max_ratio_of_left_padding: float,
                        min_ratio_of_valid_token: float = 0):
-    """Create a random mask given input_ids. Support left padding and right padding.
-    Process:
-    - Sample valid token length
-    - Sample left_padding length
-    - Generate padding
+    """给定 input_ids 创建随机掩码。支持左填充和右填充。
+    流程：
+    - 采样有效 token 长度
+    - 采样 left_padding 长度
+    - 生成填充
 
     Args:
         input_ids:
@@ -161,7 +161,7 @@ def create_random_mask(input_ids: torch.Tensor,
     assert max_num_valid_tokens + max_left_padding <= sequence_length
     assert max_num_valid_tokens > 0 and max_ratio_of_valid_token <= sequence_length
     masks = torch.ones_like(input_ids, dtype=torch.int64)
-    # TODO: we can make this faster
+    # TODO: 可以进一步优化这里的速度
     for i in range(batch_size):
         num_left_padding = np.random.randint(low=0, high=max_left_padding + 1, dtype=np.int64)
         num_valid = np.random.randint(low=min_num_valid_tokens, high=max_num_valid_tokens + 1, dtype=np.int64)
@@ -180,18 +180,18 @@ def compute_position_id_with_mask(mask):
 
 def normalize_pp_vpp_params(params, num_hidden_layers, layer_name='layers'):
     """
-    Normalize the pp vpp params into a complete named parameters. 
-    This is useful when gather parameters from pp ranks and passed to a model without pp
+    将 pp/vpp 参数归一化为完整的命名参数。
+    这在从 pp rank 收集参数并传递给无 pp 的模型时很有用
 
     params: List[List[Dict[str, param]]]
-        params contains a list of pp, with a list of vpp named_parameters in each vpp chunk.
+        params 包含一个 pp 列表，每个 vpp chunk 中含有一个 vpp named_parameters 列表。
     output: Dict[str, param]
 
     """
 
     def normalize_model_name(name, pp_rank, vpp_rank, pp_size, vpp_size, num_layers):
         """
-        Transform the model name in each model_chunk in each pp stage into the name in inference engine
+        将每个 pp stage 中每个 model_chunk 的模型名称转换为推理引擎中的名称
         """
         if vpp_size > 1:
             # print(f'try to bind vpp params to inference engine...')
@@ -204,19 +204,19 @@ def normalize_pp_vpp_params(params, num_hidden_layers, layer_name='layers'):
             layers_per_pp = num_layers // pp_size
             layer_offset = layers_per_pp * pp_rank
 
-        if layer_name in name:  # belong to an intermediate layer
+        if layer_name in name:  # 属于中间层
             split_name = name.split('.')
-            # find the num next to split_name
+            # 找到 split_name 后面的数字
             for i, name in enumerate(split_name):
                 if name == layer_name:
                     break
             layer_num_idx = i + 1
-            # check the name
+            # 检查名称
             assert len(split_name) >= layer_num_idx + 1, f'split_name = {split_name}'
             assert split_name[layer_num_idx].isdigit(), f'split_name = {split_name}'
-            # increment layer_num_idx by layer_offset
+            # 将 layer_num_idx 加上 layer_offset
             split_name[layer_num_idx] = str(int(split_name[layer_num_idx]) + layer_offset)
-            name = '.'.join(split_name)  # weight name in inference_tp_model
+            name = '.'.join(split_name)  # inference_tp_model 中的权重名称
         return name
 
     pp_size = len(params)
@@ -284,13 +284,13 @@ def load_megatron_model_weights(config,
                       is_value_model=is_value_model)
 
 
-# pad input_ids_rmpad, cu_seqlens and max_seqlen_in_batch to be divisible by tp
+# 将 input_ids_rmpad、cu_seqlens 和 max_seqlen_in_batch 填充至可被 tp 整除
 def pad_packed_inputs(unpad_tokens: torch.Tensor, cu_seqlens, max_seqlen_in_batch, size):
-    """pad the tokens such that the total length is a multiple of size.
-    This function is useful when applying sequence parallel and context parallel
+    """填充 token 使总长度为 size 的倍数。
+    该函数在应用序列并行和上下文并行时很有用
 
     Args:
-        unpad_tokens: (total_nnz, ...). Tokens after removing padding
+        unpad_tokens: (total_nnz, ...)。去除填充后的 token
         cu_seqlens: (total_nnz + 1,)
         max_seqlen_in_batch: int
 
@@ -306,7 +306,7 @@ def pad_packed_inputs(unpad_tokens: torch.Tensor, cu_seqlens, max_seqlen_in_batc
     else:
         pad_size = size - total_nnz % size
 
-    # we assume adding a new data in the batch with seqlen pad_size
+    # 我们假设在 batch 中添加一个 seqlen 为 pad_size 的新数据
     if pad_size > 0:
         if unpad_tokens.ndim == 1:
             unpad_tokens = F.pad(unpad_tokens, (0, pad_size))

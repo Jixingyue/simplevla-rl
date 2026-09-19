@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-The base class for Actor
+Actor 的基类
 """
 from abc import ABC, abstractmethod
 from typing import Iterable, Dict
@@ -26,25 +26,25 @@ __all__ = ['BasePPOActor']
 class BasePPOActor(ABC):
 
     def __init__(self, config):
-        """The base class for PPO actor
+        """PPO actor 的基类
 
-        Args:
-            config (DictConfig): a config passed to the PPOActor. We expect the type to be
-                DictConfig (https://omegaconf.readthedocs.io/), but it can be any namedtuple in general.
+        参数:
+            config (DictConfig): 传递给 PPOActor 的配置。我们期望其类型为
+                DictConfig（https://omegaconf.readthedocs.io/），但一般情况下也可以是任何 namedtuple。
         """
         super().__init__()
         self.config = config
 
     @abstractmethod
     def compute_log_prob(self, data: DataProto) -> torch.Tensor:
-        """Compute logits given a batch of data.
+        """根据一批数据计算 logits。
 
-        Args:
-            data (DataProto): a batch of data represented by DataProto. It must contain key ```input_ids```,
-                ```attention_mask``` and ```position_ids```.
+        参数:
+            data (DataProto): 以 DataProto 表示的一批数据。它必须包含键 ```input_ids```、
+                ```attention_mask``` 和 ```position_ids```。
 
-        Returns:
-            DataProto: a DataProto containing the key ```log_probs```
+        返回:
+            DataProto: 包含键 ```log_probs``` 的 DataProto
 
 
         """
@@ -52,15 +52,15 @@ class BasePPOActor(ABC):
 
     @abstractmethod
     def update_policy(self, data: DataProto) -> Dict:
-        """Update the policy with an iterator of DataProto
+        """使用 DataProto 迭代器更新策略
 
-        Args:
-            data (DataProto): an iterator over the DataProto that returns by
-                ```make_minibatch_iterator```
+        参数:
+            data (DataProto): 由 ```make_minibatch_iterator``` 返回的
+                DataProto 迭代器
 
-        Returns:
-            Dict: a dictionary contains anything. Typically, it contains the statistics during updating the model
-            such as ```loss```, ```grad_norm```, etc,.
+        返回:
+            Dict: 一个包含任意内容的字典。通常包含更新模型过程中的统计信息，
+            如 ```loss```、```grad_norm``` 等。
 
         """
         pass

@@ -30,9 +30,9 @@ def get_megatron_optimizer(
         scale_lr_cond=None,
         lr_mult=1.0,
         check_for_nan_in_loss_and_grad=False,
-        overlap_param_gather=False  # add for verl
+        overlap_param_gather=False  # 为 verl 添加
 ):
-    # Base optimizer.
+    # 基础优化器。
     param_groups = get_param_groups(model, no_weight_decay_cond, scale_lr_cond, lr_mult)
 
     if config.optimizer == 'adam':
@@ -46,28 +46,28 @@ def get_megatron_optimizer(
     else:
         raise Exception('{} optimizer is not supported.'.format(config.optimizer))
 
-    # Determine whether the params have main-grad field.
+    # 判断参数是否具有 main-grad 字段。
     params_have_main_grad = True
 
-    # Mixed precision optimizer.
-    # - Note: both the Float16Optimizer and the DistributedOptimizer inherit
-    #   from the MixedPrecisionOptimizer, which manages any optimizer where
-    #   the model params and main params are distinct.
+    # 混合精度优化器。
+    # - 注意：Float16Optimizer 和 DistributedOptimizer 都继承自
+    #   MixedPrecisionOptimizer，后者负责管理模型参数与主参数
+    #   相互区分的任意优化器。
     if config.fp16 or config.bf16 or config.use_distributed_optimizer:
 
-        # Grad scaler:
-        #    if loss-scale is provided, instantiate the constant scaler.
-        #    if we are using fp16 and loss-scale is not present, use a
-        #       dynamic scaler.
-        #    otherwise we are running in bf16 with no loss-scale so
-        #       leave it as None.
+        # 梯度缩放器：
+        #    如果提供了 loss-scale，则实例化常量缩放器。
+        #    如果使用 fp16 且未提供 loss-scale，则使用
+        #       动态缩放器。
+        #    否则我们是在没有 loss-scale 的情况下以 bf16 运行，
+        #       因此将其保留为 None。
         grad_scaler = None
 
-        # Constant loss scale.
+        # 常量损失缩放。
         if config.loss_scale:
             grad_scaler = ConstantGradScaler(config.loss_scale)
 
-        # Dynamic loss scale.
+        # 动态损失缩放。
         else:
             if config.fp16:
                 grad_scaler = DynamicGradScaler(initial_scale=config.initial_loss_scale,
@@ -77,7 +77,7 @@ def get_megatron_optimizer(
                                                 growth_interval=config.loss_scale_window,
                                                 hysteresis=config.hysteresis)
 
-        # Megatron optimizer.
+        # Megatron 优化器。
         if config.use_distributed_optimizer:
             return DistributedOptimizer(optimizer, config.clip_grad, config.log_num_zeros_in_grad,
                                         check_for_nan_in_loss_and_grad, params_have_main_grad, config.fp16, config.bf16,
@@ -87,6 +87,6 @@ def get_megatron_optimizer(
                                                      check_for_nan_in_loss_and_grad, params_have_main_grad, config.fp16,
                                                      config.bf16, config.params_dtype, grad_scaler, model)
 
-    # FP32.
+    # FP32。
     return FP32Optimizer(optimizer, config.clip_grad, config.log_num_zeros_in_grad, check_for_nan_in_loss_and_grad,
                          params_have_main_grad, model)

@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Pretrain utilities."""
+"""预训练相关的工具函数。"""
 from typing import Any, Dict
 import time
 from omegaconf import DictConfig
@@ -32,8 +32,8 @@ from megatron.core.enums import ModelType
 
 
 def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap_with_ddp=True):
-    """Build the model."""
-    # Build model.
+    """构建模型。"""
+    # 构建模型。
     if mpu.get_pipeline_model_parallel_world_size() > 1 and \
        mpu.get_virtual_pipeline_model_parallel_world_size() is not None:
         assert model_type != ModelType.encoder_and_decoder, \
@@ -41,7 +41,7 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
         model = []
         for i in range(mpu.get_virtual_pipeline_model_parallel_world_size()):
             mpu.set_virtual_pipeline_model_parallel_rank(i)
-            # Set pre_process and post_process only after virtual rank is set.
+            # 只有在设置虚拟 rank 之后才设置 pre_process 和 post_process。
             pre_process = mpu.is_pipeline_first_stage()
             post_process = mpu.is_pipeline_last_stage()
             this_model = model_provider_func(pre_process=pre_process, post_process=post_process)
@@ -74,15 +74,14 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
     if not isinstance(model, list):
         model = [model]
 
-    # Set tensor model parallel attributes if not set.
-    # Only parameters that are already tensor model parallel have these
-    # attributes set for them. We should make sure the default attributes
-    # are set for all params so the optimizer can use them.
+    # 如果尚未设置张量模型并行的属性，则进行设置。
+    # 只有已经是张量模型并行的参数才设置了这些属性。
+    # 我们应确保为所有参数设置默认属性，以便优化器可以使用它们。
     for model_module in model:
         for param in model_module.parameters():
             tensor_parallel.set_defaults_if_not_set_tensor_model_parallel_attributes(param)
 
-    # Print number of parameters.
+    # 打印参数数量。
     if mpu.get_data_parallel_rank() == 0:
         print(' > number of parameters on (tensor, pipeline) '
               'model parallel rank ({}, {}): {}'.format(
@@ -90,13 +89,13 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
                   sum([sum([p.nelement() for p in model_module.parameters()]) for model_module in model])),
               flush=True)
 
-    # GPU allocation.
+    # GPU 分配。
     for model_module in model:
         model_module.cuda(torch.cuda.current_device())
 
-    # Fp16 conversion.
+    # Fp16 转换。
     config = get_model_config(model[0])
-    if config.fp16 or config.bf16:  # the ModelParallelConfig in GPTModel
+    if config.fp16 or config.bf16:  # GPTModel 中的 ModelParallelConfig
         model = [Float16Module(config, model_module) for model_module in model]
 
     if wrap_with_ddp:
@@ -109,7 +108,7 @@ def get_model(model_provider_func, model_type=ModelType.encoder_or_decoder, wrap
                 use_distributed_optimizer=True,
                 disable_bucketing=(model_chunk_idx > 0)) for (model_chunk_idx, model_chunk) in enumerate(model)
         ]
-        # # Broadcast params from data parallel src rank to other data parallel ranks.
+        # # 将参数从数据并行源 rank 广播到其他数据并行 rank。
         # if args.data_parallel_random_init:
         for model_module in model:
             model_module.broadcast_params()
@@ -151,9 +150,9 @@ def convert_config(hf_config: PretrainedConfig, megatron_config) -> TransformerC
         activation_func=F.silu,
         normalization='RMSNorm',
         #    rotary_percent=False, # default,
-        gated_linear_unit=True,  # for llama
+        gated_linear_unit=True,  # 用于 llama
         use_cpu_initialization=True,
-        apply_residual_connection_post_layernorm=False,  # check what's this mean
+        apply_residual_connection_post_layernorm=False,  # 待确认该参数的含义
         add_bias_linear=False,
         tensor_model_parallel_size=mpu.get_tensor_model_parallel_world_size(),
         pipeline_model_parallel_size=mpu.get_pipeline_model_parallel_world_size(),
@@ -199,7 +198,7 @@ from megatron.core import ModelParallelConfig
 
 
 def init_model_parallel_config(config: DictConfig) -> ModelParallelConfig:
-    # TODO(sgm): check how to disable megatron timers
+    # TODO(sgm): 研究如何禁用 megatron 定时器
     timers = FakeTimers()
     return ModelParallelConfig(tensor_model_parallel_size=config.get('tensor_model_parallel_size'),
                                pipeline_model_parallel_size=config.get('pipeline_model_parallel_size'),
@@ -213,7 +212,7 @@ def init_model_parallel_config(config: DictConfig) -> ModelParallelConfig:
 
 
 class FakeTimers:
-    """Disable All Megatron Timing with FakeTimers"""
+    """使用 FakeTimers 禁用所有 Megatron 计时"""
 
     def __init__(self):
         from megatron.timers import DummyTimer
